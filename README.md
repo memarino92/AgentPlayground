@@ -16,17 +16,28 @@ AgentPlayground is a collection of projects designed to explore different aspect
 
 ```
 AgentPlayground/
-├── AgentPlayground.slnx           # Solution file
+├── AgentPlayground.slnx                   # Solution file
 ├── .github/
-│   └── copilot-instructions.md    # Copilot guidelines for this workspace
-├── README.md                       # This file
-├── MyFirstAgent/                  # Simple agent getting started example
+│   └── copilot-instructions.md            # Copilot guidelines for this workspace
+├── README.md                              # This file
+├── MyFirstAgent/                          # Simple agent getting started example
 │   ├── MyFirstAgent.csproj
 │   ├── Program.cs
 │   └── ...
-├── PersonalAgent/                 # Minimal API personal assistant agent
+├── PersonalAgent/                         # Minimal API personal assistant agent
 │   ├── PersonalAgent.csproj
 │   ├── Program.cs
+│   ├── README.md
+│   └── ...
+├── PersonalAgent.Web/                     # Blazor Server frontend
+│   ├── PersonalAgent.Web.csproj
+│   ├── Components/
+│   │   └── Pages/Chat.razor
+│   └── ...
+├── PersonalAgent.AppHost/                 # Aspire orchestration host
+│   ├── PersonalAgent.AppHost.csproj
+│   ├── Program.cs
+│   ├── README.md
 │   └── ...
 └── [Additional projects]/
 ```
@@ -46,13 +57,29 @@ A beginner-friendly example demonstrating:
 
 ### PersonalAgent
 
-A minimal API-based personal assistant agent demonstrating:
+A complete multi-service personal assistant system demonstrating:
 
-- Session-based chat endpoints
-- Microsoft Agent Framework integration in ASP.NET Core
-- API-friendly structure for future custom tools and service integrations
+- **PersonalAgent API**: Session-based chat endpoints in ASP.NET Core Minimal APIs
+- **PersonalAgent.Web**: Blazor Server frontend for interactive chat
+- **PersonalAgent.AppHost**: Aspire orchestration host for local multi-service development
 
-**Technology**: .NET 10.0, ASP.NET Core Minimal APIs, Microsoft.Agents.AI (RC 1.0), OpenAI
+**Key Features**:
+
+- Microsoft Agent Framework integration with OpenAI (gpt-4o-mini)
+- Service discovery via Aspire (automatic configuration injection)
+- Security hardening: CORS, rate limiting, internal API key validation
+- IOptions<T> pattern for clean dependency injection
+- Environment variable support for production deployment
+
+**Technology**: .NET 10.0, ASP.NET Core Minimal APIs, Blazor Server, .NET Aspire, Microsoft.Agents.AI (RC 1.0), OpenAI
+
+**Running locally**:
+
+```bash
+dotnet run --project PersonalAgent.AppHost
+```
+
+This starts both the API (port 5100) and Blazor frontend (port 7200) with automatic service discovery.
 
 ## Getting Started
 
@@ -93,10 +120,25 @@ dotnet user-secrets set "OpenApiKey" "your-api-key-here" --project PersonalAgent
 
 ### 5. Run a Project
 
+**MyFirstAgent** (standalone console app):
+
 ```bash
 dotnet run --project MyFirstAgent
+```
+
+**PersonalAgent** (API only):
+
+```bash
 dotnet run --project PersonalAgent
 ```
+
+**PersonalAgent with Aspire orchestration** (API + Blazor frontend):
+
+```bash
+dotnet run --project PersonalAgent.AppHost
+```
+
+The AppHost will start both services with automatic configuration injection and service discovery.
 
 ## Development Guidelines
 

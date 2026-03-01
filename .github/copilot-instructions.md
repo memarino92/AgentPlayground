@@ -144,6 +144,75 @@ public class MyService
 - **Production**: Set environment variables at container/deployment runtime
 - **Resolution order**: Check environment variables first, fall back to configuration files, then defaults
 
+## Logging Guidelines
+
+### Using ILogger<T> Responsibly
+
+Always inject `ILogger<T>` via constructor dependency injection. Use structured logging with named parameters for better observability and querying, even if no specialized logging pipeline is configured.
+
+**Best Practices:**
+
+```csharp
+public class AgentService
+{
+    private readonly ILogger<AgentService> _logger;
+
+    public AgentService(ILogger<AgentService> logger)
+    {
+        _logger = logger;
+    }
+
+    public async Task<string> ProcessMessage(string sessionId, string message)
+    {
+        // Use structured logging with named parameters
+        _logger.LogInformation("Processing message for session {SessionId}", sessionId);
+
+        try
+        {
+            var result = await CallAgent(message);
+            _logger.LogDebug("Agent returned {CharacterCount} characters", result.Length);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            // Log exceptions with context
+            _logger.LogError(ex, "Failed to process message for session {SessionId}", sessionId);
+            throw;
+        }
+    }
+}
+```
+
+**Log Level Guidelines:**
+
+- **LogTrace**: Internal method flow, low-level debugging (rarely used in production)
+- **LogDebug**: Diagnostic information useful during local development
+- **LogInformation**: General flow of the application (session created, request started, etc.)
+- **LogWarning**: Unexpected but recoverable situations (fallback used, retry attempted)
+- **LogError**: Failures that prevent a specific operation from completing
+- **LogCritical**: Application-wide failures requiring immediate attention
+
+**Structured Logging Best Practices:**
+
+- ✅ Use named parameters: `_logger.LogInformation("User {UserId} created session {SessionId}", userId, sessionId)`
+- ❌ Avoid string interpolation: `_logger.LogInformation($"User {userId} created session {sessionId}")`
+- ✅ Log actions and outcomes: `"Processing message"`, `"Message processed successfully"`
+- ❌ Avoid logging sensitive data: API keys, passwords, PII without redaction
+- ✅ Include correlation IDs or session IDs for tracing across operations
+- ✅ Log exceptions with the exception object as first parameter: `_logger.LogError(ex, "Message", params)`
+
+**Performance Considerations:**
+
+Use log level checks for expensive operations:
+
+```csharp
+if (_logger.IsEnabled(LogLevel.Debug))
+{
+    var diagnosticData = ExpensiveSerializationMethod(obj);
+    _logger.LogDebug("Diagnostic data: {Data}", diagnosticData);
+}
+```
+
 ## Project Management with dotnet CLI
 
 **Always prefer the `dotnet` CLI for project and solution management** over directly editing `.csproj` and `.slnx` files. This ensures consistency and reduces the risk of file corruption.
@@ -197,6 +266,50 @@ Only edit `.csproj` or `.slnx` files directly when:
 - You're modifying project metadata or build properties not exposed via CLI
 
 Always ensure changes are validated with `dotnet build` after editing.
+
+## Build Configuration and Warnings
+
+### Treat Warnings as Errors
+
+This workspace uses `TreatWarningsAsErrors` in `Directory.Build.props` to enforce code quality. All compiler and package warnings must be resolved—they cannot be ignored.
+
+### Warning Suppression Policy
+
+**CRITICAL**: Never add warning codes to the `<NoWarn>` list without explicit user approval.
+
+When encountering a warning:
+
+1. **First priority**: Fix the underlying issue (remove unnecessary packages, correct code, etc.)
+2. **If the warning cannot be resolved**: Explain the warning to the user and ask whether to:
+   - Fix it another way
+   - Suppress it with justification
+   - Leave it as a build error until proper resolution
+
+**Example dialogue:**
+
+```
+"Build warning NU1510: PackageReference 'X' can be removed.
+Should I:
+1. Remove the package reference (recommended)
+2. Add NU1510 to NoWarn list
+3. Investigate further"
+```
+
+**Never** assume a warning should be suppressed. The user decides the trade-offs.
+
+### Central Package Management
+
+Package versions are managed in `Directory.Packages.props`. Individual projects reference packages without version attributes:
+
+```xml
+<!-- Directory.Packages.props -->
+<PackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-rc1" />
+
+<!-- Project.csproj -->
+<PackageReference Include="Microsoft.Agents.AI" />
+```
+
+This ensures consistent versions across all projects and simplifies dependency updates.
 
 ## Building and Running
 

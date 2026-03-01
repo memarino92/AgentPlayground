@@ -9,8 +9,6 @@ internal static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddPersonalAgentServices(this IServiceCollection services, IConfiguration configuration)
     {
-        var securityOptions = configuration.GetSection("Security").Get<SecurityOptions>() ?? new SecurityOptions();
-
         services.AddOptions<ApiKeyOptions>()
             .Configure(opts =>
             {
@@ -21,10 +19,28 @@ internal static class ServiceCollectionExtensions
                     ?? configuration["Security:InternalApiKey"]
                     ?? string.Empty;
             });
+
         services.AddOptions<SecurityOptions>()
-            .Bind(configuration.GetSection("Security"));
+            .Configure(opts =>
+            {
+                // Start with configuration file values
+                var configSection = configuration.GetSection("Security");
+                configSection.Bind(opts);
+
+                // Override with environment variable if present (comma-separated)
+                var envOrigins = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS");
+                if (!string.IsNullOrWhiteSpace(envOrigins))
+                {
+                    opts.AllowedOrigins = envOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                }
+            });
         services.AddSingleton<AgentService>();
         services.AddEndpointsApiExplorer();
+
+        // Configure CORS using resolved SecurityOptions
+        var serviceProvider = services.BuildServiceProvider();
+        var securityOptions = serviceProvider.GetRequiredService<IOptions<SecurityOptions>>().Value;
+
         services.AddCors(options =>
         {
             options.AddPolicy(PersonalAgentConstants.ApiCorsPolicy, policy =>
@@ -33,6 +49,7 @@ internal static class ServiceCollectionExtensions
                 policy.WithOrigins(securityOptions.AllowedOrigins).AllowAnyMethod().AllowAnyHeader();
             });
         });
+
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;

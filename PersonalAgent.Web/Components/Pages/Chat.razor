@@ -1,0 +1,108 @@
+@page "/"
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@rendermode InteractiveServer
+@inject PersonalAgentClient ApiClient
+
+<PageTitle>PersonalAgent - Chat</PageTitle>
+
+<h1>PersonalAgent Chat</h1>
+
+@if (sessionId == null)
+{
+    <button @onclick="CreateSession" disabled="@isLoading">Start New Chat</button>
+    @if (isLoading)
+    {
+        <p>Creating session...</p>
+    }
+}
+else
+{
+    <div>
+        <h2>Session: @sessionId</h2>
+        
+        <div>
+            @foreach (var msg in messages)
+            {
+                <div>
+                    <strong>@msg.Role:</strong> @msg.Content
+                </div>
+            }
+            
+            @if (isLoading)
+            {
+                <div>
+                    <strong>assistant:</strong> <em>Thinking...</em>
+                </div>
+            }
+        </div>
+        
+        <div>
+            <input type="text" @bind="currentMessage" @bind:event="oninput" @onkeydown="HandleKeyDown" disabled="@isLoading" placeholder="Type a message..." />
+            <button @onclick="SendMessage" disabled="@(isLoading || string.IsNullOrWhiteSpace(currentMessage))">Send</button>
+            <button @onclick="ResetChat" disabled="@isLoading">New Chat</button>
+        </div>
+    </div>
+}
+
+@code {
+    private string? sessionId;
+    private List<ConversationMessage> messages = new();
+    private string currentMessage = string.Empty;
+    private bool isLoading;
+
+    private async Task CreateSession()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await ApiClient.CreateSessionAsync();
+            if (response != null)
+            {
+                sessionId = response.SessionId;
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(currentMessage) || sessionId == null) return;
+
+        var userMessage = currentMessage;
+        currentMessage = string.Empty;
+        
+        messages.Add(new ConversationMessage("user", userMessage));
+        
+        isLoading = true;
+        try
+        {
+            var response = await ApiClient.SendMessageAsync(sessionId, userMessage);
+            if (response != null)
+            {
+                messages.Add(new ConversationMessage("assistant", response.Response));
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ResetChat()
+    {
+        sessionId = null;
+        messages.Clear();
+        currentMessage = string.Empty;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !isLoading && !string.IsNullOrWhiteSpace(currentMessage))
+        {
+            await SendMessage();
+        }
+    }
+}

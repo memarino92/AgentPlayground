@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Microsoft Agents Framework -->
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-rc1" />
+    <PackageVersion Include="Microsoft.Agents.AI.Abstractions" Version="1.0.0-rc1" />
+    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-rc1" />
+
+    <!-- ASP.NET Core -->
+    <PackageVersion Include="Microsoft.AspNetCore.Components.QuickGrid" Version="10.0.0" />
+  </ItemGroup>
+</Project>
