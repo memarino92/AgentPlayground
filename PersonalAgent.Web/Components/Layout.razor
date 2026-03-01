@@ -1,15 +1,43 @@
 @inherits LayoutComponentBase
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <div class="page">
     <header class="navbar">
         <div class="container">
-            <h1>PersonalAgent</h1>
-            <p>Your personal AI assistant</p>
+            <div class="navbar-header">
+                <h1>PersonalAgent</h1>
+                <p>Your personal AI assistant</p>
+            </div>
+            <div class="navbar-auth">
+                <AuthorizeView>
+                    <Authorized>
+                        <span class="user-info">
+                            Logged in as @context.User.FindFirst(ClaimTypes.Name)?.Value
+                        </span>
+                        <a href="login?returnUrl=/" class="btn btn-logout">Logout</a>
+                    </Authorized>
+                    <NotAuthorized>
+                        <a href="login" class="btn btn-login">Login with GitHub</a>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
         </div>
     </header>
     <main class="main">
         <article class="content">
-            @Body
+            <AuthorizeView>
+                <Authorized>
+                    @Body
+                </Authorized>
+                <NotAuthorized>
+                    <div class="login-prompt">
+                        <h2>Please log in to continue</h2>
+                        <p>Use your GitHub account to access PersonalAgent.</p>
+                        <a href="login" class="btn btn-primary">Login with GitHub</a>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
         </article>
     </main>
 </div>

@@ -141,79 +141,97 @@ Returns stored transcript for a session.
 
 ## Configuration
 
-### Overview
+### Environment Variables Overview
 
-Configuration is managed via `IOptions<T>` pattern with dependency injection. All sensitive credentials (API keys) resolve in a predictable order:
+#### Required for Deployment
 
-1. **Environment variables** (used in production)
-2. **User secrets or config files** (used in development)
-3. **Default/empty values** (fallback)
+- **`OPENAI_API_KEY`** - OpenAI API key for chat model access (required)
+  - Get from: https://platform.openai.com/account/api-keys
+  - Model used: `gpt-4o-mini`
+  - Never commit this to version control
 
-### API Key Setup
+#### Optional Configuration
+
+- **`ASPNETCORE_ENVIRONMENT`** - Runtime environment (Development/Production)
+  - Defaults to `Production` in deployed containers
+  - Set to `Development` for local development with verbose logging
+
+- **`ASPNETCORE_URLS`** - Server listening address
+  - Defaults to `http://+:5000`
+
+- **`Security__InternalApiKey`** - Protect `/api/*` endpoints with an internal API key
+  - If set, clients must include `X-Internal-Api-Key` header on all API requests
+  - Leave empty/unset to disable this protection
+
+- **`Security__AllowedOrigins`** - CORS allowlist (comma-separated domains)
+  - Example: `https://personalagent.com,https://app.personalagent.com`
+  - If set, restricts CORS to these origins; leave empty for no CORS restrictions
+
+- **`Security__RateLimit__PermitLimit`** - Max requests per window (default: 60)
+
+- **`Security__RateLimit__WindowSeconds`** - Time window in seconds (default: 60)
+
+### Development Setup
 
 #### OpenAI API Key
 
-**Development**: Store in user secrets (never commit to version control).
+Store in user secrets (never commit to version control):
 
 ```bash
-dotnet user-secrets set OpenApiKey "your-openai-key" --project PersonalAgent
+cd PersonalAgent
+dotnet user-secrets init
+dotnet user-secrets set OpenApiKey "your-openai-api-key"
 ```
 
-**Production** (Railway/Docker): Set environment variable at container runtime.
-
+Verify setup:
 ```bash
-OPENAI_API_KEY="your-openai-key" dotnet run --project PersonalAgent
+dotnet user-secrets list
 ```
 
-The API reads and resolves the key using the `IOptions<ApiKeyOptions>` pattern:
-
-- Checks `OPENAI_API_KEY` environment variable first
-- Falls back to `OpenApiKey` from configuration (user secrets in dev)
-- Throws `InvalidOperationException` if neither is set
-
-#### Internal API Key (Optional)
-
-If you want to protect the `/api/*` endpoints behind an internal API key:
-
-**Development**: Store in user secrets.
+#### Optional: Internal API Key and Security Settings
 
 ```bash
-dotnet user-secrets set Security:InternalApiKey "your-internal-key" --project PersonalAgent
+dotnet user-secrets set "Security:InternalApiKey" "your-secret-key"
 ```
 
-**Production**: Set environment variable.
+### Production Deployment
+
+#### Docker Deployment
 
 ```bash
-INTERNAL_API_KEY="your-internal-key"
-```
-
-When set, clients must include the `X-Internal-Api-Key` header in all `/api/*` requests.
-
-## Docker / Container Deployment
-
-A `Dockerfile` is provided for containerized deployments (Railway, Docker Compose, Kubernetes, etc.).
-
-### Build the image locally:
-
-```bash
-cd <root-directory>
+# Build image
 docker build -t personalagent:latest -f PersonalAgent/Dockerfile .
+
+# Run with required environment variables
+docker run -d \
+  -p 5000:5000 \
+  -e OPENAI_API_KEY="your-openai-api-key" \
+  -e ASPNETCORE_ENVIRONMENT="Production" \
+  -e Security__InternalApiKey="your-secret-key" \
+  -e Security__AllowedOrigins="https://your-frontend-domain.com" \
+  personalagent:latest
 ```
 
-### Run the container:
+#### Railway Deployment
 
-```bash
-docker run -e OPENAI_API_KEY="your-key" -p 5000:5000 personalagent:latest
-```
+1. Push your repository to GitHub
+2. Connect repo to Railway
+3. Set **Project Variables** in Railway dashboard:
+   - `OPENAI_API_KEY` = your OpenAI API key (required)
+   - `Security__InternalApiKey` = your internal API key (optional)
+   - `Security__AllowedOrigins` = comma-separated allowed origins (optional)
+4. Deploy
 
-### Railway deployment:
+Railway auto-detects the Dockerfile and deploys. The service exposes port 5000.
 
-1. Push your repository to GitHub.
-2. Connect the repo to Railway.
-3. Set the `OPENAI_API_KEY` environment variable in the Railway dashboard.
-4. Railway auto-detects the Dockerfile and deploys.
+### Configuration Resolution
 
-The container exposes port 5000 and runs in Production mode (`ASPNETCORE_ENVIRONMENT=Production`).
+Configuration is managed via `IOptions<T>` pattern with dependency injection. Values resolve in this order:
+
+1. **Environment variables** (used in production)
+2. **User secrets** (used in development)
+3. **appsettings.json** (fallback defaults)
+4. **Throws exception** if required values are missing
 
 ## Current Behavior and Constraints
 

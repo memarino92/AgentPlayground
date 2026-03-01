@@ -36,9 +36,33 @@
 
 ### Environment Variables
 
-- **`services:personalagent-api:http:0`** - URL to the PersonalAgent API (defaults to `http://localhost:5100`)
-- **`ASPNETCORE_ENVIRONMENT`** - Runtime environment (Development/Production)
-- **`ASPNETCORE_URLS`** - Server listening address (defaults to `http://+:5000`)
+#### Required for Deployment
+
+- **`ASPNETCORE_Authentication__Schemes__GitHub__ClientId`** - GitHub OAuth Client ID (required)
+  - Create at: https://github.com/settings/developers
+  - See [GitHub Auth Setup](./GITHUB_AUTH_SETUP.md) for detailed instructions
+
+- **`ASPNETCORE_Authentication__Schemes__GitHub__ClientSecret`** - GitHub OAuth Client Secret (required)
+  - Generate in GitHub OAuth app settings
+  - Never commit this to version control
+
+- **`services:personalagent-api:http:0`** - URL to the PersonalAgent API
+  - Defaults to `http://localhost:5100` if not set
+  - Update this for containerized/remote deployments
+
+#### Optional Configuration
+
+- **`ASPNETCORE_Authentication__Schemes__GitHub__AllowedUsers`** - Restrict access to specific GitHub usernames (comma-separated)
+  - Example: `michael,alice,bob`
+  - If not set or empty, all GitHub users can log in
+  - Case-insensitive
+
+- **`ASPNETCORE_Environment`** - Runtime environment (Development/Production)
+  - Defaults to `Production` in deployed containers
+  - Set to `Development` for local development with verbose logging
+
+- **`ASPNETCORE_URLS`** - Server listening address
+  - Defaults to `http://+:5000`
 
 ### Service Discovery
 
@@ -81,12 +105,23 @@ dotnet publish PersonalAgent.Web -c Release
 # Build Docker image
 docker build -f PersonalAgent.Web/Dockerfile -t personalagent-web .
 
-# Run container
+# Run container with required environment variables
 docker run -d \
   -p 5000:5000 \
+  -e ASPNETCORE_Authentication__Schemes__GitHub__ClientId="your-github-client-id" \
+  -e ASPNETCORE_Authentication__Schemes__GitHub__ClientSecret="your-github-client-secret" \
+  -e ASPNETCORE_Authentication__Schemes__GitHub__AllowedUsers="your-github-username" \
   -e services__personalagent-api__http__0=http://personalagent-api:5100 \
   personalagent-web
 ```
+
+**Required variables:**
+- `ASPNETCORE_Authentication__Schemes__GitHub__ClientId`
+- `ASPNETCORE_Authentication__Schemes__GitHub__ClientSecret`
+
+**Optional variables:**
+- `ASPNETCORE_Authentication__Schemes__GitHub__AllowedUsers` - Restrict access to specific users
+- `services__personalagent-api__http__0` - API endpoint (defaults to localhost:5100)
 
 ### Railway Deployment
 
@@ -95,15 +130,20 @@ The included `Dockerfile` is optimized for Railway deployment:
 1. Multi-stage build reduces final image size
 2. Exposes port 5000 for Railway's port binding
 3. Sets `ASPNETCORE_ENVIRONMENT=Production` automatically
-4. Configurable API endpoint via environment variables
+4. Configurable via environment variables
 
 **Deployment steps:**
 
 1. Connect your GitHub repository to Railway
 2. Create a new service and select this repository
-3. Set environment variable:
-   - `services__personalagent-api__http__0` = (PersonalAgent API URL on Railway)
+3. Set **Project Variables** in Railway dashboard:
+   - `ASPNETCORE_Authentication__Schemes__GitHub__ClientId` = your GitHub OAuth Client ID
+   - `ASPNETCORE_Authentication__Schemes__GitHub__ClientSecret` = your GitHub OAuth Client Secret
+   - `ASPNETCORE_Authentication__Schemes__GitHub__AllowedUsers` = your GitHub username (optional, restrict access)
+   - `services__personalagent-api__http__0` = PersonalAgent API URL on Railway (e.g., `http://personalagent-api:5100`)
 4. Deploy
+
+See [GitHub Auth Setup](./GITHUB_AUTH_SETUP.md) for detailed GitHub OAuth app creation instructions.
 
 ## User Interface
 
