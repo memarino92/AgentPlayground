@@ -24,6 +24,10 @@ AgentPlayground/
 │   ├── MyFirstAgent.csproj
 │   ├── Program.cs
 │   └── ...
+├── PersonalAgent/                 # Minimal API personal assistant agent
+│   ├── PersonalAgent.csproj
+│   ├── Program.cs
+│   └── ...
 └── [Additional projects]/
 ```
 
@@ -39,6 +43,16 @@ A beginner-friendly example demonstrating:
 - Following modern C# style guidelines
 
 **Technology**: .NET 10.0, Microsoft.Agents.AI (RC 1.0), OpenAI
+
+### PersonalAgent
+
+A minimal API-based personal assistant agent demonstrating:
+
+- Session-based chat endpoints
+- Microsoft Agent Framework integration in ASP.NET Core
+- API-friendly structure for future custom tools and service integrations
+
+**Technology**: .NET 10.0, ASP.NET Core Minimal APIs, Microsoft.Agents.AI (RC 1.0), OpenAI
 
 ## Getting Started
 
@@ -71,10 +85,17 @@ dotnet user-secrets init --project MyFirstAgent
 dotnet user-secrets set "OpenApiKey" "your-api-key-here" --project MyFirstAgent
 ```
 
+For PersonalAgent:
+
+```bash
+dotnet user-secrets set "OpenApiKey" "your-api-key-here" --project PersonalAgent
+```
+
 ### 5. Run a Project
 
 ```bash
 dotnet run --project MyFirstAgent
+dotnet run --project PersonalAgent
 ```
 
 ## Development Guidelines

@@ -22,6 +22,8 @@ When writing C# code in this workspace, follow these modern, functional-informed
 - Favor **early returns** to avoid deeply nested if statements
 - Leverage **switch expressions** instead of traditional switch statements
 - Utilize **collection expressions** for cleaner list/array initialization
+- Favor **immutable data structures**, especially `record` and `record struct` for domain/data contracts
+- Prefer creating modified copies with the **`with` expression** instead of mutating existing instances
 - Adopt an **expressive, modern style** rather than historical procedural patterns
 - Maintain **visual appeal** and readability as a priority
 
@@ -65,6 +67,7 @@ var result = input switch
 
 - **Solution Root**: `AgentPlayground.slnx`
 - **Projects**: Each project resides in its own directory with a `.csproj` file
+- **Current Projects**: `MyFirstAgent` (console sample), `PersonalAgent` (minimal API personal assistant)
 - **Build Output**: Standard `bin/` and `obj/` directories per project
 - **NuGet Dependencies**: Managed via project file references and package files
 
@@ -101,6 +104,46 @@ Update these documentation files when:
 5. **Significantly shifting architectural patterns** or approach
 6. **Changing how the solution is structured or organized**
 
+## Configuration & Dependency Injection Patterns
+
+### IOptions<T> for Configuration
+
+When binding configuration to C# objects, prefer the `IOptions<T>` pattern with explicit property control:
+
+```csharp
+// Configuration record with mutable properties (required for DI binding)
+internal record ApiKeyOptions
+{
+    public string OpenAiKey { get; set; } = string.Empty;  // {get;set;} for DI Configure() binding
+}
+
+// Service registration
+services.AddOptions<ApiKeyOptions>()
+    .Configure(opts =>
+    {
+        opts.OpenAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+            ?? configuration["OpenApiKey"]
+            ?? string.Empty;
+    });
+
+// Injection into classes
+public class MyService
+{
+    public MyService(IOptions<ApiKeyOptions> options)
+    {
+        var key = options.Value.OpenAiKey;
+    }
+}
+```
+
+**Important Note**: Use `{get;set;}` properties (not `{get;init;}`) on records when they will be bound via DI's `Configure()` method, since that pattern assigns values post-construction. For models used only as immutable data transfer objects, `{get;init;}` is appropriate.
+
+### Environment Variable Resolution Strategy
+
+- **Development**: Use `dotnet user-secrets` for sensitive keys (not persisted in version control)
+- **Production**: Set environment variables at container/deployment runtime
+- **Resolution order**: Check environment variables first, fall back to configuration files, then defaults
+
 ## Project Management with dotnet CLI
 
 **Always prefer the `dotnet` CLI for project and solution management** over directly editing `.csproj` and `.slnx` files. This ensures consistency and reduces the risk of file corruption.
@@ -129,6 +172,13 @@ dotnet remove <ProjectPath> package <PackageName>
 
 ```bash
 dotnet new console -n <ProjectName> -f net10.0
+dotnet sln add <ProjectPath>
+```
+
+For API-style agents, use:
+
+```bash
+dotnet new web -n <ProjectName> -f net10.0
 dotnet sln add <ProjectPath>
 ```
 
