@@ -14,6 +14,8 @@ internal static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddPersonalAgentServices(this IServiceCollection services, IConfiguration configuration)
     {
+        var securityOptions = BuildSecurityOptions(configuration);
+
         services.AddMessagingOptions(configuration);
         services.AddOptions<SqlTransportOptions>()
             .Configure<IOptions<MessagingOptions>>((sqlOptions, messagingOptions) =>
@@ -42,19 +44,7 @@ internal static class ServiceCollectionExtensions
             });
 
         services.AddOptions<SecurityOptions>()
-            .Configure(opts =>
-            {
-                // Start with configuration file values
-                var configSection = configuration.GetSection("Security");
-                configSection.Bind(opts);
-
-                // Override with environment variable if present (comma-separated)
-                var envOrigins = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS");
-                if (!string.IsNullOrWhiteSpace(envOrigins))
-                {
-                    opts.AllowedOrigins = envOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                }
-            });
+            .Configure(opts => CopySecurityOptions(securityOptions, opts));
         services.AddSingleton<AgentService>();
         services.AddMassTransit(x =>
         {
@@ -64,10 +54,6 @@ internal static class ServiceCollectionExtensions
             x.ConfigureSharedPostgresTransport();
         });
         services.AddEndpointsApiExplorer();
-
-        // Configure CORS using resolved SecurityOptions
-        var serviceProvider = services.BuildServiceProvider();
-        var securityOptions = serviceProvider.GetRequiredService<IOptions<SecurityOptions>>().Value;
 
         services.AddCors(options =>
         {
@@ -90,5 +76,24 @@ internal static class ServiceCollectionExtensions
         });
 
         return services;
+    }
+
+    private static SecurityOptions BuildSecurityOptions(IConfiguration configuration)
+    {
+        var options = new SecurityOptions();
+        configuration.GetSection("Security").Bind(options);
+
+        var envOrigins = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS");
+        if (!string.IsNullOrWhiteSpace(envOrigins))
+            options.AllowedOrigins = envOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return options;
+    }
+
+    private static void CopySecurityOptions(SecurityOptions source, SecurityOptions destination)
+    {
+        destination.AllowedOrigins = [.. source.AllowedOrigins];
+        destination.InternalApiKey = source.InternalApiKey;
+        destination.RateLimit = source.RateLimit with { };
     }
 }

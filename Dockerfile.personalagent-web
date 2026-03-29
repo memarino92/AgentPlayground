@@ -1,0 +1,20 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY ["Directory.Build.props", "."]
+COPY ["Directory.Packages.props", "."]
+COPY ["AgentPlayground.Contracts/AgentPlayground.Contracts.csproj", "AgentPlayground.Contracts/"]
+COPY ["PersonalAgent.Web/PersonalAgent.Web.csproj", "PersonalAgent.Web/"]
+
+RUN dotnet restore "PersonalAgent.Web/PersonalAgent.Web.csproj"
+
+COPY . .
+RUN dotnet publish "PersonalAgent.Web/PersonalAgent.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+COPY --from=build /app/publish .
+
+ENTRYPOINT ["dotnet", "PersonalAgent.Web.dll"]

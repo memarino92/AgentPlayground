@@ -1,16 +1,35 @@
 using AgentPlayground.Contracts.Messaging;
 using PersonalAgent.Web.Components;
+using PersonalAgent.Web.Configuration;
+using PersonalAgent.Web.Extensions;
 using PersonalAgent.Web.Services;
 using PersonalAgent.Web.Endpoints;
 using PersonalAgent.Web.Messaging;
 using MassTransit;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
+using Microsoft.AspNetCore.HttpOverrides;
 using System.Security.Claims;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.ConfigurePlatformHosting();
+
+builder.Services.AddOptions<PersonalAgentApiOptions>()
+    .Configure(opts =>
+    {
+        builder.Configuration.GetSection(PersonalAgentApiOptions.SectionName).Bind(opts);
+
+        opts.BaseUrl = Environment.GetEnvironmentVariable("PERSONAL_AGENT_API_BASE_URL")
+            ?? builder.Configuration["services:personalagent-api:http:0"]
+            ?? opts.BaseUrl;
+        opts.InternalApiKey = Environment.GetEnvironmentVariable("PERSONAL_AGENT_INTERNAL_API_KEY")
+            ?? opts.InternalApiKey;
+    })
+    .Validate(opts => Uri.TryCreate(opts.BaseUrl, UriKind.Absolute, out _), $"{PersonalAgentApiOptions.SectionName}:BaseUrl must be an absolute URI")
+    .ValidateOnStart();
 
 // Authentication
 builder.Services.AddAuthentication(options =>
@@ -22,20 +41,24 @@ builder.Services.AddAuthentication(options =>
 .AddOAuth("GitHub", options =>
 {
     var authConfig = builder.Configuration.GetSection("Authentication:Schemes:GitHub");
+    var githubClientId = Environment.GetEnvironmentVariable("GITHUB_CLIENT_ID") ?? authConfig["ClientId"];
+    var githubClientSecret = Environment.GetEnvironmentVariable("GITHUB_CLIENT_SECRET") ?? authConfig["ClientSecret"];
+    var callbackPath = Environment.GetEnvironmentVariable("GITHUB_CALLBACK_PATH") ?? authConfig["CallbackPath"] ?? "/signin-github";
+    var allowedUsersString = Environment.GetEnvironmentVariable("GITHUB_ALLOWED_USERS") ?? authConfig["AllowedUsers"] ?? "";
 
-    options.ClientId = authConfig["ClientId"] ?? throw new InvalidOperationException("Missing GITHUB_CLIENT_ID");
-    options.ClientSecret = authConfig["ClientSecret"] ?? throw new InvalidOperationException("Missing GITHUB_CLIENT_SECRET");
+    options.ClientId = githubClientId ?? throw new InvalidOperationException("Missing GITHUB_CLIENT_ID or Authentication:Schemes:GitHub:ClientId");
+    options.ClientSecret = githubClientSecret ?? throw new InvalidOperationException("Missing GITHUB_CLIENT_SECRET or Authentication:Schemes:GitHub:ClientSecret");
 
     options.AuthorizationEndpoint = "https://github.com/login/oauth/authorize";
     options.TokenEndpoint = "https://github.com/login/oauth/access_token";
     options.UserInformationEndpoint = "https://api.github.com/user";
 
     options.Scope.Add("user:email");
-    options.CallbackPath = authConfig["CallbackPath"] ?? "/signin-github";
+    options.CallbackPath = callbackPath;
     options.SaveTokens = true;
+    options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+    options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
 
-    // Get allowed users from config (comma-separated)
-    var allowedUsersString = authConfig["AllowedUsers"] ?? "";
     var allowedUsers = allowedUsersString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     options.Events = new OAuthEvents
@@ -95,6 +118,11 @@ builder.Services.AddAuthentication(options =>
         }
     };
 });
+builder.Services.Configure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+{
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+});
 
 builder.Services.AddAuthorization();
 builder.Services.AddMessagingOptions(builder.Configuration);
@@ -118,18 +146,28 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddMassTransit(x => x.ConfigureSharedPostgresTransport());
 builder.Services.AddScoped<TestEventPublisher>();
-
-// Service discovery for PersonalAgent API
-var personalAgentApiUri = builder.Configuration["services:personalagent-api:http:0"]
-    ?? "http://localhost:5100";
-
-builder.Services.AddHttpClient<PersonalAgentClient>(client =>
+builder.Services.AddHttpClient<PersonalAgentClient>((serviceProvider, client) =>
 {
-    client.BaseAddress = new Uri(personalAgentApiUri);
+    var personalAgentApiOptions = serviceProvider.GetRequiredService<IOptions<PersonalAgentApiOptions>>().Value;
+
+    client.BaseAddress = new Uri(personalAgentApiOptions.BaseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
+
+    if (!string.IsNullOrWhiteSpace(personalAgentApiOptions.InternalApiKey))
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", personalAgentApiOptions.InternalApiKey);
 });
 
 var app = builder.Build();
+
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto
+};
+
+forwardedHeadersOptions.KnownIPNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 if (!app.Environment.IsDevelopment())
 {

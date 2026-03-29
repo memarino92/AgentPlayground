@@ -48,19 +48,19 @@ dotnet user-secrets set "Authentication:Schemes:GitHub:AllowedUsers" "username1,
 Set these environment variables in your deployment environment:
 
 ```bash
-ASPNETCORE_Authentication__Schemes__GitHub__ClientId=your-github-client-id
-ASPNETCORE_Authentication__Schemes__GitHub__ClientSecret=your-github-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
 # Optional: restrict access to specific GitHub usernames
-ASPNETCORE_Authentication__Schemes__GitHub__AllowedUsers=username1,username2
+GITHUB_ALLOWED_USERS=username1,username2
 ```
 
 Or if using Docker, set them as environment variables:
 
 ```dockerfile
-ENV ASPNETCORE_Authentication__Schemes__GitHub__ClientId="your-github-client-id"
-ENV ASPNETCORE_Authentication__Schemes__GitHub__ClientSecret="your-github-client-secret"
+ENV GITHUB_CLIENT_ID="your-github-client-id"
+ENV GITHUB_CLIENT_SECRET="your-github-client-secret"
 # Optional: restrict access to specific GitHub usernames
-ENV ASPNETCORE_Authentication__Schemes__GitHub__AllowedUsers="username1,username2"
+ENV GITHUB_ALLOWED_USERS="username1,username2"
 ```
 
 ### 3. Run the Application

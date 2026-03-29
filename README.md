@@ -151,6 +151,8 @@ dotnet user-secrets set "Messaging:ConnectionString" "Host=localhost;Port=5432;D
 dotnet user-secrets set "Messaging:ConnectionString" "Host=localhost;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground" --project .\PersonalAgent.Worker
 ```
 
+For cloud deployments, the apps also accept `MESSAGING_CONNECTION_STRING`. If Railway gives you a PostgreSQL URL such as `postgresql://...`, the apps normalize that URL into the Npgsql-style connection string expected by MassTransit.
+
 ### Messaging Gotchas
 
 - MassTransit SQL transport for PostgreSQL needs `AddPostgresMigrationHostedService(...)` to create the schema and transport infrastructure. Creating the schema manually is not enough.
@@ -158,6 +160,110 @@ dotnet user-secrets set "Messaging:ConnectionString" "Host=localhost;Port=5432;D
 - PostgreSQL SQL transport uses explicit topic subscriptions. Published events that should fan out to multiple consumers need SQL endpoint subscriptions, not just `IConsumer<T>` registrations.
 - If you change SQL transport topology or subscriptions, recreate the Postgres container to avoid stale infrastructure state during local development.
 - `IPublishEndpoint` is scoped. Long-lived agent services that hold in-memory session state should depend on `IBus` instead of capturing scoped `IPublishEndpoint`.
+
+## Railway Deployment
+
+Deploy this solution as four Railway services: one PostgreSQL service plus three app services.
+
+### One-Command Bootstrap
+
+If you want to minimize dashboard work, use the included bootstrap script. It creates or reuses the Railway project, creates the three app services, configures their Dockerfile paths and watch patterns, provisions a Railway domain for the web app, wires shared variables, and points the web app at the API over Railway private networking.
+
+Copy [.env.railway.example](/C:/Users/Michael/projects/AgentPlayground/.env.railway.example) to `.env.railway`, fill in the values, then run:
+
+```powershell
+Copy-Item .env.railway.example .env.railway
+pwsh -NoProfile -File .\scripts\set-internal-api-key.ps1
+pwsh -NoProfile -File .\scripts\check-railway-env.ps1
+pwsh -NoProfile -File .\scripts\setup-railway.ps1 -CreatePostgres
+```
+
+The script reads `.env.railway` automatically. You can still override anything with explicit script parameters or process-level environment variables.
+
+Deployment secrets can also be sourced from local user secrets automatically. The Railway scripts currently fall back to:
+
+- `PersonalAgent` user secrets for `OpenApiKey` and `Security:InternalApiKey`
+- `PersonalAgent.Web` user secrets for `Authentication:Schemes:GitHub:ClientId`, `ClientSecret`, `AllowedUsers`, and `CallbackPath`
+
+If you have not created an internal API key yet, run [`set-internal-api-key.ps1`](/C:/Users/Michael/projects/AgentPlayground/scripts/set-internal-api-key.ps1). It generates a strong key, stores it in `PersonalAgent` user secrets, and writes the same value to `.env.railway`.
+
+What still remains after that:
+
+- If `-CreatePostgres` cannot provision PostgreSQL automatically with your installed Railway CLI, create one Railway PostgreSQL service in the same project/environment, name it `Postgres`, and rerun the setup script
+- Ensure Railway has access to the GitHub repository if you use `-RepoSlug`
+- Create or update your GitHub OAuth app to use the printed callback URL
+- Push to the configured branch, or use [`deploy-railway.ps1`](/C:/Users/Michael/projects/AgentPlayground/scripts/deploy-railway.ps1) if you created empty services instead of repo-backed ones
+
+To redeploy later with the same local file:
+
+```powershell
+pwsh -NoProfile -File .\scripts\check-railway-env.ps1
+pwsh -NoProfile -File .\scripts\deploy-railway.ps1
+```
+
+### Service Layout
+
+1. `personalagent-api`
+   - Dockerfile path: `Dockerfile.personalagent-api`
+   - Private-only service by default
+2. `personalagent-web`
+   - Dockerfile path: `Dockerfile.personalagent-web`
+3. `personalagent-worker`
+    - Dockerfile path: `Dockerfile.personalagent-worker`
+4. `postgres`
+   - Use Railway PostgreSQL
+
+### Shared Variables
+
+Set these on all three app services:
+
+```text
+MESSAGING_CONNECTION_STRING=${{Postgres.DATABASE_URL}}
+MESSAGING_SCHEMA=transport
+```
+
+### API Variables
+
+Set these on `personalagent-api`:
+
+```text
+OPENAI_API_KEY=...
+ALLOWED_ORIGINS=https://your-web-service.up.railway.app
+INTERNAL_API_KEY=generate-a-long-random-value
+```
+
+`PORT` is provided automatically by Railway and the API now binds to it without extra setup.
+
+### Web Variables
+
+Set these on `personalagent-web`:
+
+```text
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+GITHUB_ALLOWED_USERS=your-github-login
+PERSONAL_AGENT_API_BASE_URL=http://${{personalagent-api.RAILWAY_PRIVATE_DOMAIN}}:${{personalagent-api.PORT}}
+PERSONAL_AGENT_INTERNAL_API_KEY=same-value-as-api-internal-key
+```
+
+GitHub OAuth should use these URLs:
+
+```text
+Homepage URL: https://your-web-service.up.railway.app
+Authorization callback URL: https://your-web-service.up.railway.app/signin-github
+```
+
+The web app now trusts forwarded host/protocol headers so GitHub callback URLs are generated correctly behind Railway's proxy. It also talks to the API over Railway private networking, so the API does not need a public domain.
+
+### Worker Variables
+
+`personalagent-worker` only needs the shared messaging variables.
+
+### Notes
+
+- Keep each app as a single instance unless you replace the API's in-memory session storage.
+- The web app and API both bind Railway's `PORT` automatically.
+- If you enable `INTERNAL_API_KEY` on the API, set the same value as `PERSONAL_AGENT_INTERNAL_API_KEY` on the web service.
 
 ### Agent Event Tool Pattern
 

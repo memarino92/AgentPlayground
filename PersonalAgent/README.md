@@ -218,12 +218,13 @@ docker run -d \
 1. Push your repository to GitHub
 2. Connect repo to Railway
 3. Set **Project Variables** in Railway dashboard:
-   - `OPENAI_API_KEY` = your OpenAI API key (required)
-   - `Security__InternalApiKey` = your internal API key (optional)
-   - `Security__AllowedOrigins` = comma-separated allowed origins (optional)
+    - `OPENAI_API_KEY` = your OpenAI API key (required)
+    - `MESSAGING_CONNECTION_STRING` = `${{Postgres.DATABASE_URL}}`
+    - `Security__InternalApiKey` = your internal API key (optional)
+    - `Security__AllowedOrigins` = comma-separated allowed origins (optional)
 4. Deploy
 
-Railway auto-detects the Dockerfile and deploys. The service exposes port 5000.
+Use `Dockerfile.personalagent-api` for the Railway service. The API now binds Railway's `PORT` automatically and trusts forwarded proxy headers for HTTPS redirection.
 
 ### Configuration Resolution
 

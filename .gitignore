@@ -5,6 +5,8 @@
 
 # dotenv files
 .env
+.env.*
+!.env.railway.example
 
 # User-specific files
 *.rsuser
