@@ -10,6 +10,7 @@ This is an exploration workspace for creating agents with the **Microsoft Agent 
 - **.NET Version**: Latest stable and pre-release versions (currently targeting .NET 10.0 and later)
 - **Language**: C# with modern language features
 - **Input**: User-driven exploration—accept user input on project capabilities and AI agent implementations
+- **Messaging**: MassTransit 8.5 with PostgreSQL SQL transport
 
 ## Code Style Guidelines
 
@@ -67,7 +68,7 @@ var result = input switch
 
 - **Solution Root**: `AgentPlayground.slnx`
 - **Projects**: Each project resides in its own directory with a `.csproj` file
-- **Current Projects**: `MyFirstAgent` (console sample), `PersonalAgent` (minimal API personal assistant)
+- **Current Projects**: `MyFirstAgent` (console sample), `AgentPlayground.Contracts`, `PersonalAgent`, `PersonalAgent.Web`, `PersonalAgent.Worker`
 - **Build Output**: Standard `bin/` and `obj/` directories per project
 - **NuGet Dependencies**: Managed via project file references and package files
 
@@ -144,6 +145,13 @@ public class MyService
 - **Production**: Set environment variables at container/deployment runtime
 - **Resolution order**: Check environment variables first, fall back to configuration files, then defaults
 
+### Messaging Configuration Pattern
+
+- The PostgreSQL transport connection string must not be checked into `appsettings.json`.
+- Store `Messaging:ConnectionString` in user secrets for `PersonalAgent`, `PersonalAgent.Web`, and `PersonalAgent.Worker`.
+- Keep transport schema and migration flags in normal configuration, but keep secrets out of the repo.
+- If a service uses `AddPostgresMigrationHostedService(...)`, also bind `SqlTransportOptions.ConnectionString` explicitly from your app's messaging options.
+
 ## Logging Guidelines
 
 ### Using ILogger<T> Responsibly
@@ -212,6 +220,21 @@ if (_logger.IsEnabled(LogLevel.Debug))
     _logger.LogDebug("Diagnostic data: {Data}", diagnosticData);
 }
 ```
+
+## MassTransit PostgreSQL SQL Transport Notes
+
+- SQL transport topology is not identical to broker transports like RabbitMQ. Do not assume event fan-out happens automatically for all published messages.
+- If a published event must be delivered to multiple consumers on different queues, add explicit SQL subscriptions using `AddSqlConfigureEndpointCallback(... cfg.Subscribe<T>(...))` on the endpoint registration.
+- Use `AddPostgresMigrationHostedService(...)` so the transport can create its schema and required database functions. Creating the schema manually is insufficient.
+- If SQL transport topology changes locally and behavior becomes inconsistent, recreate the Postgres container instead of trying to patch the transport objects manually.
+
+## Agent Tool-Driven Event Publishing Pattern
+
+- For agent-initiated bus events, add the contract in `AgentPlayground.Contracts` first.
+- Register a MassTransit consumer in `PersonalAgent` that receives the triggering event and calls the agent service.
+- In `AgentService`, expose a tool using `AIFunctionFactory.Create(...)` and have that tool publish the follow-up event with `IBus.Publish(...)`.
+- If `AgentService` is singleton because it maintains session state, do not inject scoped `IPublishEndpoint`; use `IBus` instead.
+- Keep prompts deterministic for event workflows. Instruct the agent to call the publishing tool exactly once when handling a bus-triggered action.
 
 ## Project Management with dotnet CLI
 

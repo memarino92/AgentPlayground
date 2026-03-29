@@ -10,5 +10,8 @@
     <!-- ASP.NET Core -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.3" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.QuickGrid" Version="10.0.0" />
+    <!-- Messaging -->
+    <PackageVersion Include="MassTransit" Version="8.5.8" />
+    <PackageVersion Include="MassTransit.SqlTransport.PostgreSQL" Version="8.5.8" />
   </ItemGroup>
 </Project>

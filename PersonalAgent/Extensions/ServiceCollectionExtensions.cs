@@ -1,6 +1,11 @@
+using AgentPlayground.Contracts.Messaging;
+using AgentPlayground.Contracts.Messaging.Events;
+using MassTransit;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
+using PersonalAgent.Consumers;
 using PersonalAgent.Configuration;
+using PersonalAgent.Messaging;
 using PersonalAgent.Services;
 
 namespace PersonalAgent.Extensions;
@@ -9,6 +14,22 @@ internal static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddPersonalAgentServices(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddMessagingOptions(configuration);
+        services.AddOptions<SqlTransportOptions>()
+            .Configure<IOptions<MessagingOptions>>((sqlOptions, messagingOptions) =>
+            {
+                sqlOptions.ConnectionString = messagingOptions.Value.ConnectionString;
+            })
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.ConnectionString), "SqlTransportOptions:ConnectionString is required")
+            .ValidateOnStart();
+
+        services.AddPostgresMigrationHostedService(options =>
+        {
+            options.CreateDatabase = false;
+            options.CreateSchema = true;
+            options.CreateInfrastructure = true;
+        });
+
         services.AddOptions<ApiKeyOptions>()
             .Configure(opts =>
             {
@@ -35,6 +56,13 @@ internal static class ServiceCollectionExtensions
                 }
             });
         services.AddSingleton<AgentService>();
+        services.AddMassTransit(x =>
+        {
+            x.AddConsumer<TestEventRequestedConsumer>()
+                .Endpoint(e => e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<TestEventRequested>(_ => { })));
+
+            x.ConfigureSharedPostgresTransport();
+        });
         services.AddEndpointsApiExplorer();
 
         // Configure CORS using resolved SecurityOptions

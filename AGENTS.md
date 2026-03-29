@@ -136,9 +136,11 @@ AgentPlayground/
 ├── AgentPlayground.slnx           # Solution file
 ├── Directory.Build.props           # TreatWarningsAsErrors=true
 ├── Directory.Packages.props        # Central package versioning
+├── AgentPlayground.Contracts/      # Shared event contracts and messaging options
 ├── PersonalAgent/                  # Minimal API agent
 ├── PersonalAgent.Web/              # Blazor Server frontend
-└── PersonalAgent.AppHost/          # Aspire orchestration
+├── PersonalAgent.Worker/           # Background worker
+└── scripts/                        # Windows PowerShell infra scripts
 ```
 
 ## Important Settings
@@ -147,3 +149,20 @@ AgentPlayground/
 - Package versions are **centrally managed** in `Directory.Packages.props`
 - **.NET**: 10.0
 - **Framework**: Microsoft Agent Framework (RC 1.0)
+
+## Messaging Notes
+
+- MassTransit is configured with PostgreSQL SQL transport, not RabbitMQ or Azure Service Bus.
+- Local PostgreSQL is started with [`scripts/start-postgres.ps1`](/C:/Users/Michael/projects/AgentPlayground/scripts/start-postgres.ps1), which is intended for Windows PowerShell and Docker Desktop.
+- The shared PostgreSQL connection string must come from user secrets via `Messaging:ConnectionString` for `PersonalAgent`, `PersonalAgent.Web`, and `PersonalAgent.Worker`.
+- `AddPostgresMigrationHostedService(...)` is required so SQL transport can create the schema and infrastructure. Creating only the schema is insufficient.
+- `SqlTransportOptions.ConnectionString` must be bound explicitly from `MessagingOptions`; the migration hosted service does not infer custom config bindings.
+- SQL transport event fan-out requires explicit topic subscriptions on receive endpoints. If a published event should be consumed by more than one queue, add `AddSqlConfigureEndpointCallback(... cfg.Subscribe<T>(...))` on the endpoint registration.
+- When local topology gets into a bad state, recreate the PostgreSQL container rather than trying to patch the transport schema manually.
+
+## Agent Tool Calling Pattern
+
+- Keep long-lived agent orchestration services singleton only if they need in-memory session state.
+- Do not inject scoped `IPublishEndpoint` into singleton services. Use `IBus` for singleton-safe publishing.
+- When the agent needs to publish a bus event, expose a tool with `AIFunctionFactory.Create(...)` and call `IBus.Publish(...)` inside that tool implementation.
+- Keep the consumer thin: log receipt, call the agent service, and let the agent publish through the tool rather than publishing directly inside the consumer.

@@ -1,11 +1,22 @@
 @page "/"
 @using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using System.Security.Claims
 @rendermode InteractiveServer
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PersonalAgentClient ApiClient
+@inject TestEventPublisher TestEventPublisher
 
 <PageTitle>PersonalAgent - Chat</PageTitle>
 
 <h1>PersonalAgent Chat</h1>
+
+<div>
+    <button @onclick="PublishTestEvent" disabled="@isPublishingTestEvent">Fire Test Event</button>
+    @if (!string.IsNullOrWhiteSpace(testEventStatus))
+    {
+        <p>@testEventStatus</p>
+    }
+</div>
 
 @if (sessionId == null)
 {
@@ -49,6 +60,29 @@ else
     private List<ConversationMessage> messages = new();
     private string currentMessage = string.Empty;
     private bool isLoading;
+    private bool isPublishingTestEvent;
+    private string? testEventStatus;
+
+    private async Task PublishTestEvent()
+    {
+        isPublishingTestEvent = true;
+        testEventStatus = null;
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var requestedBy = authState.User.FindFirst("urn:github:login")?.Value
+                ?? authState.User.FindFirst(ClaimTypes.Name)?.Value
+                ?? "anonymous";
+
+            var correlationId = await TestEventPublisher.PublishAsync(requestedBy);
+            testEventStatus = $"Published test event {correlationId}";
+        }
+        finally
+        {
+            isPublishingTestEvent = false;
+        }
+    }
 
     private async Task CreateSession()
     {

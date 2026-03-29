@@ -1,6 +1,10 @@
+using AgentPlayground.Contracts.Messaging;
 using PersonalAgent.Web.Components;
 using PersonalAgent.Web.Services;
 using PersonalAgent.Web.Endpoints;
+using PersonalAgent.Web.Messaging;
+using MassTransit;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using System.Security.Claims;
@@ -93,9 +97,27 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+builder.Services.AddMessagingOptions(builder.Configuration);
+builder.Services.AddOptions<SqlTransportOptions>()
+    .Configure<IOptions<MessagingOptions>>((sqlOptions, messagingOptions) =>
+    {
+        sqlOptions.ConnectionString = messagingOptions.Value.ConnectionString;
+    })
+    .Validate(opts => !string.IsNullOrWhiteSpace(opts.ConnectionString), "SqlTransportOptions:ConnectionString is required")
+    .ValidateOnStart();
+
+builder.Services.AddPostgresMigrationHostedService(options =>
+{
+    options.CreateDatabase = false;
+    options.CreateSchema = true;
+    options.CreateInfrastructure = true;
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddMassTransit(x => x.ConfigureSharedPostgresTransport());
+builder.Services.AddScoped<TestEventPublisher>();
 
 // Service discovery for PersonalAgent API
 var personalAgentApiUri = builder.Configuration["services:personalagent-api:http:0"]
