@@ -184,6 +184,7 @@ dotnet user-secrets set OpenApiKey "your-openai-api-key"
 ```
 
 Verify setup:
+
 ```bash
 dotnet user-secrets list
 ```

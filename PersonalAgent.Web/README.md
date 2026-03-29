@@ -116,10 +116,12 @@ docker run -d \
 ```
 
 **Required variables:**
+
 - `ASPNETCORE_Authentication__Schemes__GitHub__ClientId`
 - `ASPNETCORE_Authentication__Schemes__GitHub__ClientSecret`
 
 **Optional variables:**
+
 - `ASPNETCORE_Authentication__Schemes__GitHub__AllowedUsers` - Restrict access to specific users
 - `services__personalagent-api__http__0` - API endpoint (defaults to localhost:5100)
 
