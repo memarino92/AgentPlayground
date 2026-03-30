@@ -20,13 +20,20 @@ internal static class PersonalAgentEndpoints
 
         apiGroup.AddEndpointFilter(new InternalApiKeyFilter(apiKeyOptions));
 
-        apiGroup.MapPost("/sessions", async (CreateSessionRequest request, AgentService agentService) =>
+        apiGroup.MapGet("/models", (ChatModelCatalog chatModelCatalog) =>
+            Results.Ok(new { models = chatModelCatalog.GetModels() }));
+
+        apiGroup.MapPost("/sessions", async (CreateSessionRequest request, AgentService agentService, ChatModelCatalog chatModelCatalog) =>
         {
             if (string.IsNullOrWhiteSpace(request.ProfileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
 
-            var sessionId = await agentService.CreateSessionAsync(request.ProfileId);
-            return Results.Ok(new { sessionId, message = "Session created successfully" });
+            var selectedModel = chatModelCatalog.FindModel(request.ModelId);
+            if (selectedModel is null)
+                return Results.BadRequest(new { error = $"Model '{request.ModelId}' is not available" });
+
+            var created = await agentService.CreateSessionAsync(request.ProfileId, selectedModel.Id);
+            return Results.Ok(new { sessionId = created.SessionId, modelId = created.ModelId, message = "Session created successfully" });
         });
 
         apiGroup.MapGet("/sessions", async (string profileId, int? pageSize, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, AgentService agentService) =>
@@ -61,9 +68,9 @@ internal static class PersonalAgentEndpoints
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
 
-            var messages = await agentService.GetSessionMessagesAsync(sessionId, profileId);
-            return messages is not null
-                ? Results.Ok(new { sessionId, messages })
+            var conversation = await agentService.GetSessionMessagesAsync(sessionId, profileId);
+            return conversation is not null
+                ? Results.Ok(new { sessionId = conversation.SessionId, modelId = conversation.ModelId, messages = conversation.Messages })
                 : Results.NotFound(new { error = "Session not found" });
         });
 

@@ -1,3 +1,3 @@
 namespace PersonalAgent.Models;
 
-internal record CreateSessionRequest(string ProfileId);
+internal record CreateSessionRequest(string ProfileId, string? ModelId);

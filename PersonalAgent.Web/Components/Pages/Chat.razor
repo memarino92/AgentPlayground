@@ -17,8 +17,17 @@
             <p class="chat-page__subtitle">Continue any prior conversation or start a new one.</p>
         </div>
         <div class="chat-page__actions">
+            <label>
+                Model
+                <select @bind="selectedModelId" disabled="@(isBusy || availableModels.Count == 0)">
+                    @foreach (var model in availableModels)
+                    {
+                        <option value="@model.Id">@model.DisplayName</option>
+                    }
+                </select>
+            </label>
             <button class="btn btn-secondary" @onclick="PublishTestEvent" disabled="@isPublishingTestEvent">Fire Test Event</button>
-            <button class="btn btn-primary" @onclick="CreateSession" disabled="@isBusy">Start New Chat</button>
+            <button class="btn btn-primary" @onclick="CreateSession" disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">Start New Chat</button>
         </div>
     </div>
 
@@ -84,6 +93,10 @@
                     <div>
                         <h2>Session</h2>
                         <p class="chat-panel__session-id">@sessionId</p>
+                        @if (!string.IsNullOrWhiteSpace(activeModelDisplayName))
+                        {
+                            <p class="chat-panel__session-id">Model: @activeModelDisplayName</p>
+                        }
                     </div>
                     <button class="btn btn-secondary" @onclick="ResetSelectionAsync" disabled="@isBusy">Clear Selection</button>
                 </div>
@@ -127,8 +140,11 @@
     private const int SessionPageSize = 20;
     private string? sessionId;
     private string? profileId;
+    private string? selectedModelId;
+    private string? activeModelId;
     private List<SessionListItem> sessions = new();
     private List<ConversationMessage> messages = new();
+    private List<AvailableChatModelResponse> availableModels = new();
     private string currentMessage = string.Empty;
     private bool isLoadingHistory;
     private bool isSendingMessage;
@@ -143,6 +159,7 @@
     private bool hasMoreSessions;
 
     private bool isBusy => isLoadingHistory || isSendingMessage || isCreatingSession;
+    private string? activeModelDisplayName => availableModels.FirstOrDefault(model => model.Id == activeModelId)?.DisplayName ?? activeModelId;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -166,6 +183,7 @@
             }
 
             profileId = resolvedProfileId;
+            await LoadModelsAsync();
             await LoadSessionsAsync();
             await RestoreSessionAsync();
         }
@@ -211,9 +229,11 @@
 
             profileId = resolvedProfileId;
 
-            var response = await ApiClient.CreateSessionAsync(resolvedProfileId);
+            var response = await ApiClient.CreateSessionAsync(resolvedProfileId, selectedModelId);
             if (response != null)
             {
+                activeModelId = response.ModelId;
+                selectedModelId = response.ModelId;
                 await SelectSessionAsync(response.SessionId, []);
                 await SetStoredProfileIdAsync(resolvedProfileId);
                 await LoadSessionsAsync();
@@ -264,6 +284,7 @@
     private async Task ResetSelectionAsync()
     {
         sessionId = null;
+        activeModelId = null;
         messages.Clear();
         currentMessage = string.Empty;
         errorMessage = null;
@@ -306,6 +327,8 @@
             }
 
             sessionId = history.SessionId;
+            activeModelId = history.ModelId;
+            selectedModelId = history.ModelId;
             messages = [.. history.Messages];
         }
         catch (HttpRequestException ex) when (ex.Message.Contains("404"))
@@ -395,6 +418,13 @@
         {
             isLoadingSessions = false;
         }
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        var response = await ApiClient.GetModelsAsync();
+        availableModels = response?.Models ?? [];
+        selectedModelId ??= availableModels.FirstOrDefault(model => model.IsDefault)?.Id ?? availableModels.FirstOrDefault()?.Id;
     }
 
     private async Task LoadMoreSessionsAsync()

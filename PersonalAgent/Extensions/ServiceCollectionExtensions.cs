@@ -44,9 +44,13 @@ internal static class ServiceCollectionExtensions
                     ?? string.Empty;
             });
 
+        services.AddOptions<ChatModelCatalogOptions>()
+            .Bind(configuration.GetSection(ChatModelCatalogOptions.SectionName));
+
         services.AddOptions<SecurityOptions>()
             .Configure(opts => CopySecurityOptions(securityOptions, opts));
         services.AddHostedService<AgentMemorySchemaInitializer>();
+        services.AddSingleton<ChatModelCatalog>();
         services.AddSingleton<IAgentSessionStore, PostgresAgentSessionStore>();
         services.AddSingleton<IAgentSemanticMemoryStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         services.AddSingleton<IAgentEmbeddingService, OpenAiAgentEmbeddingService>();

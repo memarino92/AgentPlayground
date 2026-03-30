@@ -13,14 +13,24 @@ internal class PersonalAgentClient(HttpClient httpClient)
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public async Task<SessionResponse?> CreateSessionAsync(string profileId)
+    public async Task<SessionResponse?> CreateSessionAsync(string profileId, string? modelId = null)
     {
-        var response = await httpClient.PostAsJsonAsync("/api/sessions", new { profileId });
+        var response = await httpClient.PostAsJsonAsync("/api/sessions", new { profileId, modelId });
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("create session", response);
 
         var content = await response.Content.ReadAsStreamAsync();
         return await JsonSerializer.DeserializeAsync<SessionResponse>(content, JsonOptions);
+    }
+
+    public async Task<ModelCatalogResponse?> GetModelsAsync()
+    {
+        var response = await httpClient.GetAsync("/api/models");
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("load models", response);
+
+        var content = await response.Content.ReadAsStreamAsync();
+        return await JsonSerializer.DeserializeAsync<ModelCatalogResponse>(content, JsonOptions);
     }
 
     public async Task<MessageResponse?> SendMessageAsync(string sessionId, string profileId, string message)
@@ -74,9 +84,11 @@ internal class PersonalAgentClient(HttpClient httpClient)
     }
 }
 
-internal record SessionResponse(string SessionId, string Message);
+internal record SessionResponse(string SessionId, string ModelId, string Message);
+internal record ModelCatalogResponse(List<AvailableChatModelResponse> Models);
 internal record MessageResponse(string SessionId, string Response);
-internal record HistoryResponse(string SessionId, List<ConversationMessage> Messages);
+internal record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages);
 internal record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
 internal record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
 internal record ConversationMessage(string Role, string Content);
+internal record AvailableChatModelResponse(string Id, string DisplayName, bool IsDefault);
