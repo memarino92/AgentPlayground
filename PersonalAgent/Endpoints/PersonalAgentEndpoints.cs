@@ -20,9 +20,12 @@ internal static class PersonalAgentEndpoints
 
         apiGroup.AddEndpointFilter(new InternalApiKeyFilter(apiKeyOptions));
 
-        apiGroup.MapPost("/sessions", async (AgentService agentService) =>
+        apiGroup.MapPost("/sessions", async (CreateSessionRequest request, AgentService agentService) =>
         {
-            var sessionId = await agentService.CreateSessionAsync();
+            if (string.IsNullOrWhiteSpace(request.ProfileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+
+            var sessionId = await agentService.CreateSessionAsync(request.ProfileId);
             return Results.Ok(new { sessionId, message = "Session created successfully" });
         });
 

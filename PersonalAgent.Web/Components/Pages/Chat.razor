@@ -64,7 +64,9 @@ else
 
 @code {
     private const string SessionStorageKey = "personal-agent-session-id";
+    private const string ProfileStorageKey = "personal-agent-profile-id";
     private string? sessionId;
+    private string? profileId;
     private List<ConversationMessage> messages = new();
     private string currentMessage = string.Empty;
     private bool isLoading;
@@ -109,12 +111,22 @@ else
         errorMessage = null;
         try
         {
-            var response = await ApiClient.CreateSessionAsync();
+            var resolvedProfileId = await ResolveProfileIdAsync();
+            if (string.IsNullOrWhiteSpace(resolvedProfileId))
+            {
+                errorMessage = "Unable to determine your GitHub profile id for chat memory.";
+                return;
+            }
+
+            profileId = resolvedProfileId;
+
+            var response = await ApiClient.CreateSessionAsync(resolvedProfileId);
             if (response != null)
             {
                 sessionId = response.SessionId;
                 messages.Clear();
                 await SetStoredSessionIdAsync(sessionId);
+                await SetStoredProfileIdAsync(resolvedProfileId);
             }
         }
         catch (Exception ex)
@@ -161,10 +173,12 @@ else
     private async Task ResetChatAsync()
     {
         sessionId = null;
+        profileId = null;
         messages.Clear();
         currentMessage = string.Empty;
         errorMessage = null;
         await ClearStoredSessionIdAsync();
+        await ClearStoredProfileIdAsync();
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -179,8 +193,24 @@ else
     {
         try
         {
+            var storedProfile = await SessionStorage.GetAsync<string>(ProfileStorageKey);
             var storedSession = await SessionStorage.GetAsync<string>(SessionStorageKey);
             if (!storedSession.Success || string.IsNullOrWhiteSpace(storedSession.Value)) return;
+
+            var resolvedProfileId = await ResolveProfileIdAsync();
+            if (string.IsNullOrWhiteSpace(resolvedProfileId))
+            {
+                await ClearStoredProfileIdAsync();
+                await ClearStoredSessionIdAsync();
+                return;
+            }
+
+            if (storedProfile.Success && !string.IsNullOrWhiteSpace(storedProfile.Value) && !string.Equals(storedProfile.Value, resolvedProfileId, StringComparison.OrdinalIgnoreCase))
+            {
+                await ClearStoredProfileIdAsync();
+                await ClearStoredSessionIdAsync();
+                return;
+            }
 
             isLoading = true;
             errorMessage = null;
@@ -188,15 +218,18 @@ else
             var history = await ApiClient.GetHistoryAsync(storedSession.Value);
             if (history is null)
             {
+                await ClearStoredProfileIdAsync();
                 await ClearStoredSessionIdAsync();
                 return;
             }
 
             sessionId = history.SessionId;
+            profileId = resolvedProfileId;
             messages = [.. history.Messages];
         }
         catch (HttpRequestException ex) when (ex.Message.Contains("404"))
         {
+            await ClearStoredProfileIdAsync();
             await ClearStoredSessionIdAsync();
         }
         catch (Exception ex)
@@ -214,8 +247,24 @@ else
         await SessionStorage.SetAsync(SessionStorageKey, value);
     }
 
+    private async Task SetStoredProfileIdAsync(string value)
+    {
+        await SessionStorage.SetAsync(ProfileStorageKey, value);
+    }
+
     private async Task ClearStoredSessionIdAsync()
     {
         await SessionStorage.DeleteAsync(SessionStorageKey);
+    }
+
+    private async Task ClearStoredProfileIdAsync()
+    {
+        await SessionStorage.DeleteAsync(ProfileStorageKey);
+    }
+
+    private async Task<string?> ResolveProfileIdAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.FindFirst("urn:github:login")?.Value;
     }
 }

@@ -1,3 +1,3 @@
 namespace PersonalAgent.Services;
 
-internal record PersistedAgentSession(Guid SessionId, string SessionStateJson, long LastMessageSequence);
+internal record PersistedAgentSession(Guid SessionId, string ProfileId, string SessionStateJson, long LastMessageSequence);

@@ -66,10 +66,13 @@ internal class AgentService
                 services: serviceProvider);
     }
 
-    public async Task<string> CreateSessionAsync()
+    public async Task<string> CreateSessionAsync(string profileId)
     {
+        if (string.IsNullOrWhiteSpace(profileId))
+            throw new InvalidOperationException("Profile id is required to create a chat session.");
+
         var sessionId = Guid.NewGuid();
-        await _sessionStore.CreateSessionAsync(sessionId, "{}");
+        await _sessionStore.CreateSessionAsync(sessionId, profileId, "{}");
         return sessionId.ToString();
     }
 
@@ -88,7 +91,7 @@ internal class AgentService
 
             var session = await _agent.CreateSessionAsync();
             var transcript = await _sessionStore.GetSessionMessagesAsync(parsedSessionId) ?? [];
-            var recalledMemories = await _semanticMemoryService.RecallMemoriesAsync(parsedSessionId, message);
+            var recalledMemories = await _semanticMemoryService.RecallMemoriesAsync(persistedSession.ProfileId, message);
             var messages = transcript
                 .Select(ToChatMessage)
                 .ToList();
@@ -103,7 +106,7 @@ internal class AgentService
             var wasSaved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, responseText, persistedSession.SessionStateJson);
 
             if (wasSaved)
-                await _semanticMemoryService.StoreConversationMemoriesAsync(parsedSessionId, message, responseText);
+                await _semanticMemoryService.StoreConversationMemoriesAsync(parsedSessionId, persistedSession.ProfileId, message, responseText);
 
             return wasSaved ? responseText : null;
         }
@@ -165,5 +168,6 @@ internal class AgentService
     }, message.Content);
 
     private static string BuildMemoryPrompt(IEnumerable<string> recalledMemories) =>
-        "Relevant prior context from this conversation:\n" + string.Join("\n", recalledMemories.Select((memory, index) => $"{index + 1}. {memory}"));
+        "Use these remembered user facts if they are relevant to the current request. Treat them as higher-priority personal memory unless the user corrects them:\n"
+        + string.Join("\n", recalledMemories.Select((memory, index) => $"{index + 1}. {memory}"));
 }

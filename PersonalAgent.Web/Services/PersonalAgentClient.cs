@@ -11,9 +11,9 @@ internal class PersonalAgentClient(HttpClient httpClient)
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public async Task<SessionResponse?> CreateSessionAsync()
+    public async Task<SessionResponse?> CreateSessionAsync(string profileId)
     {
-        var response = await httpClient.PostAsJsonAsync("/api/sessions", new { });
+        var response = await httpClient.PostAsJsonAsync("/api/sessions", new { profileId });
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("create session", response);
 

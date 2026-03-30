@@ -14,7 +14,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
     private readonly AgentMemoryOptions _options = options.Value;
     private NpgsqlDataSource? _dataSource;
 
-    public async Task CreateSessionAsync(Guid sessionId, string sessionStateJson, CancellationToken cancellationToken = default)
+    public async Task CreateSessionAsync(Guid sessionId, string profileId, string sessionStateJson, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -24,6 +24,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
             INSERT INTO {SessionsTable}
             (
                 session_id,
+                profile_id,
                 session_state,
                 session_state_version,
                 last_message_seq,
@@ -34,6 +35,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
             VALUES
             (
                 @sessionId,
+                @profileId,
                 @sessionState::jsonb,
                 @sessionStateVersion,
                 0,
@@ -43,6 +45,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
             );
             """;
         command.Parameters.AddWithValue("sessionId", sessionId);
+        command.Parameters.AddWithValue("profileId", profileId);
         command.Parameters.AddWithValue("sessionState", sessionStateJson);
         command.Parameters.AddWithValue("sessionStateVersion", SessionStateVersion);
         command.Parameters.AddWithValue("createdAt", now);
@@ -55,7 +58,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT session_state, last_message_seq
+            SELECT profile_id, session_state, last_message_seq
             FROM {SessionsTable}
             WHERE session_id = @sessionId;
             """;
@@ -64,7 +67,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
 
-        return new PersistedAgentSession(sessionId, reader.GetString(0), reader.GetInt64(1));
+        return new PersistedAgentSession(sessionId, reader.GetString(0), reader.GetString(1), reader.GetInt64(2));
     }
 
     public async Task<bool> SessionExistsAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -151,7 +154,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
         return messages;
     }
 
-    public async Task AddMemoryAsync(Guid sessionId, string memoryKind, string content, ReadOnlyMemory<float> embedding, CancellationToken cancellationToken = default)
+    public async Task AddMemoryAsync(Guid sessionId, string profileId, string memoryKind, string content, ReadOnlyMemory<float> embedding, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -161,6 +164,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
             INSERT INTO {MemoryRecordsTable}
             (
                 session_id,
+                profile_id,
                 source_message_id,
                 memory_kind,
                 content,
@@ -173,6 +177,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
             VALUES
             (
                 @sessionId,
+                @profileId,
                 NULL,
                 @memoryKind,
                 @content,
@@ -184,6 +189,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
             );
             """;
         command.Parameters.AddWithValue("sessionId", sessionId);
+        command.Parameters.AddWithValue("profileId", profileId);
         command.Parameters.AddWithValue("memoryKind", memoryKind);
         command.Parameters.AddWithValue("content", content);
         command.Parameters.Add(new NpgsqlParameter("metadata", NpgsqlDbType.Jsonb) { Value = DBNull.Value });
@@ -194,19 +200,20 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<List<MemoryRecord>> SearchMemoriesAsync(Guid sessionId, ReadOnlyMemory<float> embedding, int limit, CancellationToken cancellationToken = default)
+    public async Task<List<MemoryRecord>> SearchMemoriesAsync(string profileId, ReadOnlyMemory<float> embedding, int limit, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT memory_id, content, embedding <=> @embedding AS distance
             FROM {MemoryRecordsTable}
-            WHERE session_id = @sessionId
+            WHERE profile_id = @profileId
+              AND memory_kind = 'user'
               AND embedding IS NOT NULL
             ORDER BY embedding <=> @embedding ASC, created_at DESC
             LIMIT @limit;
             """;
-        command.Parameters.AddWithValue("sessionId", sessionId);
+        command.Parameters.AddWithValue("profileId", profileId);
         command.Parameters.AddWithValue("embedding", new Vector(embedding.ToArray()));
         command.Parameters.AddWithValue("limit", limit);
 
