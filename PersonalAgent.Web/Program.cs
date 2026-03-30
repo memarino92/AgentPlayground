@@ -10,25 +10,33 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
+using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Security.Claims;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.ConfigurePlatformHosting();
+if (builder.Environment.IsDevelopment()) builder.Configuration.AddUserSecrets<Program>();
 
 builder.Services.AddOptions<PersonalAgentApiOptions>()
     .Configure(opts =>
     {
         builder.Configuration.GetSection(PersonalAgentApiOptions.SectionName).Bind(opts);
 
-        opts.BaseUrl = Environment.GetEnvironmentVariable("PERSONAL_AGENT_API_BASE_URL")
-            ?? builder.Configuration["services:personalagent-api:http:0"]
-            ?? opts.BaseUrl;
-        opts.InternalApiKey = Environment.GetEnvironmentVariable("PERSONAL_AGENT_INTERNAL_API_KEY")
-            ?? opts.InternalApiKey;
+        opts.BaseUrl = FirstNonEmpty(
+            Environment.GetEnvironmentVariable("PERSONAL_AGENT_API_BASE_URL"),
+            builder.Configuration["services:personalagent-api:http:0"],
+            opts.BaseUrl);
+
+        opts.InternalApiKey = FirstNonEmpty(
+            Environment.GetEnvironmentVariable("PERSONAL_AGENT_INTERNAL_API_KEY"),
+            builder.Configuration[$"{PersonalAgentApiOptions.SectionName}:InternalApiKey"],
+            builder.Configuration["Security:InternalApiKey"],
+            opts.InternalApiKey);
     })
     .Validate(opts => Uri.TryCreate(opts.BaseUrl, UriKind.Absolute, out _), $"{PersonalAgentApiOptions.SectionName}:BaseUrl must be an absolute URI")
+    .Validate(opts => !string.IsNullOrWhiteSpace(opts.InternalApiKey), $"{PersonalAgentApiOptions.SectionName}:InternalApiKey is required")
     .ValidateOnStart();
 
 // Authentication
@@ -138,12 +146,13 @@ builder.Services.AddPostgresMigrationHostedService(options =>
 {
     options.CreateDatabase = false;
     options.CreateSchema = true;
-    options.CreateInfrastructure = true;
+    options.CreateInfrastructure = false;
 });
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddScoped<ProtectedSessionStorage>();
 builder.Services.AddMassTransit(x => x.ConfigureSharedPostgresTransport());
 builder.Services.AddScoped<TestEventPublisher>();
 builder.Services.AddHttpClient<PersonalAgentClient>((serviceProvider, client) =>
@@ -188,3 +197,6 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+static string FirstNonEmpty(params string?[] values) =>
+    values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;

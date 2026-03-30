@@ -91,10 +91,12 @@ dotnet run --project PersonalAgent.Web
 ```
 
 This starts the shared PostgreSQL transport plus the API, worker, and Blazor frontend.
+The local PostgreSQL container now defaults to `pgvector/pgvector:0.8.2-pg18-trixie` so local development can support semantic memory.
 
 ### Startup Steps
 
 1. Ensure Docker Desktop is running so [`start-postgres.ps1`](/C:/Users/Michael/projects/AgentPlayground/scripts/start-postgres.ps1) can start the shared PostgreSQL container.
+   The script uses a pgvector-enabled Postgres 18 image for local parity with semantic-memory development.
 2. Configure your OpenAI key for [`PersonalAgent`](/C:/Users/Michael/projects/AgentPlayground/PersonalAgent/PersonalAgent.csproj):
 
 ```powershell
@@ -114,6 +116,7 @@ dotnet run --project PersonalAgent
 ```
 
 The agent requires both `OpenApiKey` and `Messaging:ConnectionString` in user secrets.
+If you are enabling semantic memory, recreate the local container after pulling the new image so the `vector` extension is available.
 
 5. Start the worker:
 
@@ -337,6 +340,14 @@ dotnet run --project PersonalAgent.Web
 ```
 
 Open the web app, click `Fire Test Event`, and verify the worker logs both the initial test event and the agent-generated follow-up event.
+
+If you previously created the local database container with the plain `postgres` image, remove and recreate it before enabling semantic memory:
+
+```powershell
+pwsh -NoProfile -File .\scripts\stop-postgres.ps1
+docker rm agentplayground-postgres
+pwsh -NoProfile -File .\scripts\start-postgres.ps1
+```
 
 ## Development Guidelines
 

@@ -14,13 +14,15 @@ namespace PersonalAgent.Services;
 
 internal class AgentService
 {
-    private readonly AIAgent _agent;
+    private readonly ChatClientAgent _agent;
+    private readonly ChatClientAgent _eventAgent;
     private readonly IBus _bus;
     private readonly ILogger<AgentService> _logger;
-    private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
-    private readonly ConcurrentDictionary<string, List<ConversationMessage>> _messageHistory = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
+    private readonly IAgentSessionStore _sessionStore;
+    private readonly SemanticMemoryService _semanticMemoryService;
 
-    public AgentService(IOptions<ApiKeyOptions> apiKeyOptions, IBus bus, ILogger<AgentService> logger, IServiceProvider serviceProvider)
+    public AgentService(IOptions<ApiKeyOptions> apiKeyOptions, IBus bus, ILogger<AgentService> logger, IServiceProvider serviceProvider, IAgentSessionStore sessionStore, SemanticMemoryService semanticMemoryService)
     {
         var apiKey = apiKeyOptions.Value.OpenAiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -28,52 +30,98 @@ internal class AgentService
 
         _bus = bus;
         _logger = logger;
+        _sessionStore = sessionStore;
+        _semanticMemoryService = semanticMemoryService;
 
         var publishTool = AIFunctionFactory.Create(PublishGeneratedMessageAsync, "publish_generated_test_message",
             "Publish a generated test message to the shared MassTransit bus.");
 
-        _agent = new OpenAIClient(apiKey)
-            .GetChatClient("gpt-4o-mini")
+        var chatClient = new OpenAIClient(apiKey)
+            .GetChatClient("gpt-4o-mini");
+
+        _agent = chatClient
             .AsIChatClient()
             .AsBuilder()
             .UseFunctionInvocation()
             .BuildAIAgent(
-                instructions: "You are a helpful personal assistant. When asked to respond to a bus test event, you must call the publish_generated_test_message tool exactly once with a concise generated message describing that you received the event.",
+                instructions: """
+                You are a helpful personal assistant.
+                When asked to respond to a bus test event, you must call the publish_generated_test_message tool exactly once with a concise generated message describing that you received the event.
+                This does not mean that you should respond to every user message with a bus event follow-up, only when you are specifically asked to generate a follow-up message for a bus event.
+                """,
                 name: "PersonalAgent",
                 description: "Personal agent that can publish follow-up messages to the shared event bus.",
                 tools: [publishTool],
                 loggerFactory: logger is ILoggerFactory loggerFactory ? loggerFactory : null,
                 services: serviceProvider);
+
+        _eventAgent = chatClient
+            .AsIChatClient()
+            .AsBuilder()
+            .BuildAIAgent(
+                instructions: "You generate concise follow-up messages for bus events.",
+                name: "PersonalAgentEventGenerator",
+                description: "Generates deterministic follow-up text for bus events.",
+                loggerFactory: logger is ILoggerFactory eventLoggerFactory ? eventLoggerFactory : null,
+                services: serviceProvider);
     }
 
     public async Task<string> CreateSessionAsync()
     {
-        var sessionId = Guid.NewGuid().ToString();
-        var session = await _agent.CreateSessionAsync();
-        _sessions[sessionId] = session;
-        _messageHistory[sessionId] = [];
-        return sessionId;
+        var sessionId = Guid.NewGuid();
+        await _sessionStore.CreateSessionAsync(sessionId, "{}");
+        return sessionId.ToString();
     }
 
     public async Task<string?> SendMessageAsync(string sessionId, string message)
     {
-        if (!_sessions.TryGetValue(sessionId, out var session))
+        if (!Guid.TryParse(sessionId, out var parsedSessionId))
             return null;
 
-        _messageHistory[sessionId].Add(new ConversationMessage("user", message));
-        var response = await _agent.RunAsync(message, session);
-        var responseText = response.ToString();
-        _messageHistory[sessionId].Add(new ConversationMessage("assistant", responseText));
+        var sessionLock = _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+        await sessionLock.WaitAsync();
 
-        return responseText;
+        try
+        {
+            var persistedSession = await _sessionStore.GetSessionAsync(parsedSessionId);
+            if (persistedSession is null) return null;
+
+            var session = await _agent.CreateSessionAsync();
+            var transcript = await _sessionStore.GetSessionMessagesAsync(parsedSessionId) ?? [];
+            var recalledMemories = await _semanticMemoryService.RecallMemoriesAsync(parsedSessionId, message);
+            var messages = transcript
+                .Select(ToChatMessage)
+                .ToList();
+
+            if (recalledMemories.Count > 0)
+                messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.System, BuildMemoryPrompt(recalledMemories)));
+
+            messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, message));
+
+            var response = await _agent.RunAsync(messages, session, options: null, cancellationToken: default);
+            var responseText = response.ToString();
+            var wasSaved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, responseText, persistedSession.SessionStateJson);
+
+            if (wasSaved)
+                await _semanticMemoryService.StoreConversationMemoriesAsync(parsedSessionId, message, responseText);
+
+            return wasSaved ? responseText : null;
+        }
+        finally
+        {
+            sessionLock.Release();
+        }
     }
 
-    public List<ConversationMessage>? GetSessionMessages(string sessionId) =>
-        _messageHistory.TryGetValue(sessionId, out var messages) ? messages : null;
+    public async Task<List<ConversationMessage>?> GetSessionMessagesAsync(string sessionId)
+    {
+        if (!Guid.TryParse(sessionId, out var parsedSessionId)) return null;
+        return await _sessionStore.GetSessionMessagesAsync(parsedSessionId);
+    }
 
     public async Task GenerateAndPublishTestMessageAsync(TestEventRequested request, CancellationToken cancellationToken)
     {
-        var session = await _agent.CreateSessionAsync(cancellationToken);
+        var session = await _eventAgent.CreateSessionAsync(cancellationToken);
         var prompt = $"""
             A bus event was received.
             CorrelationId: {request.CorrelationId}
@@ -81,12 +129,17 @@ internal class AgentService
             Source: {request.Source}
             Original message: {request.Message}
 
-            Use the publish_generated_test_message tool exactly once.
-            The generated message should be a short sentence confirming the agent consumed the event.
+            Generate a short sentence confirming that the agent consumed the event.
+            Do not mention tools, function calls, or internal implementation details.
             """;
 
         _logger.LogInformation("Agent generating follow-up message for correlation {CorrelationId}", request.CorrelationId);
-        await _agent.RunAsync(prompt, session, cancellationToken: cancellationToken);
+        var response = await _eventAgent.RunAsync(prompt, session, cancellationToken: cancellationToken);
+        await PublishGeneratedMessageAsync(
+            request.CorrelationId,
+            promptSummary: "Bus test event received",
+            message: response.ToString(),
+            cancellationToken);
     }
 
     public async Task<string> PublishGeneratedMessageAsync(Guid correlationId, string promptSummary, string message, CancellationToken cancellationToken = default)
@@ -104,4 +157,13 @@ internal class AgentService
         _logger.LogInformation("Agent published generated test message for correlation {CorrelationId}", correlationId);
         return $"Published generated test message for {correlationId}";
     }
+
+    private static Microsoft.Extensions.AI.ChatMessage ToChatMessage(ConversationMessage message) => new(message.Role switch
+    {
+        "assistant" => ChatRole.Assistant,
+        _ => ChatRole.User
+    }, message.Content);
+
+    private static string BuildMemoryPrompt(IEnumerable<string> recalledMemories) =>
+        "Relevant prior context from this conversation:\n" + string.Join("\n", recalledMemories.Select((memory, index) => $"{index + 1}. {memory}"));
 }

@@ -14,7 +14,8 @@ internal class PersonalAgentClient(HttpClient httpClient)
     public async Task<SessionResponse?> CreateSessionAsync()
     {
         var response = await httpClient.PostAsJsonAsync("/api/sessions", new { });
-        if (!response.IsSuccessStatusCode) return null;
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("create session", response);
 
         var content = await response.Content.ReadAsStreamAsync();
         return await JsonSerializer.DeserializeAsync<SessionResponse>(content, JsonOptions);
@@ -24,7 +25,8 @@ internal class PersonalAgentClient(HttpClient httpClient)
     {
         var request = new { message };
         var response = await httpClient.PostAsJsonAsync($"/api/sessions/{sessionId}/messages", request);
-        if (!response.IsSuccessStatusCode) return null;
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("send message", response);
 
         var content = await response.Content.ReadAsStreamAsync();
         return await JsonSerializer.DeserializeAsync<MessageResponse>(content, JsonOptions);
@@ -33,10 +35,18 @@ internal class PersonalAgentClient(HttpClient httpClient)
     public async Task<HistoryResponse?> GetHistoryAsync(string sessionId)
     {
         var response = await httpClient.GetAsync($"/api/sessions/{sessionId}/messages");
-        if (!response.IsSuccessStatusCode) return null;
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("load chat history", response);
 
         var content = await response.Content.ReadAsStreamAsync();
         return await JsonSerializer.DeserializeAsync<HistoryResponse>(content, JsonOptions);
+    }
+
+    private static async Task<HttpRequestException> CreateRequestExceptionAsync(string operation, HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        var detail = string.IsNullOrWhiteSpace(body) ? string.Empty : $": {body}";
+        return new HttpRequestException($"Failed to {operation}. API returned {(int)response.StatusCode} {response.ReasonPhrase}{detail}");
     }
 }
 

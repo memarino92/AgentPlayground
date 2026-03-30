@@ -17,6 +17,7 @@ internal static class ServiceCollectionExtensions
         var securityOptions = BuildSecurityOptions(configuration);
 
         services.AddMessagingOptions(configuration);
+        services.AddAgentMemoryOptions(configuration);
         services.AddOptions<SqlTransportOptions>()
             .Configure<IOptions<MessagingOptions>>((sqlOptions, messagingOptions) =>
             {
@@ -45,11 +46,20 @@ internal static class ServiceCollectionExtensions
 
         services.AddOptions<SecurityOptions>()
             .Configure(opts => CopySecurityOptions(securityOptions, opts));
+        services.AddHostedService<AgentMemorySchemaInitializer>();
+        services.AddSingleton<IAgentSessionStore, PostgresAgentSessionStore>();
+        services.AddSingleton<IAgentSemanticMemoryStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
+        services.AddSingleton<IAgentEmbeddingService, OpenAiAgentEmbeddingService>();
+        services.AddSingleton<SemanticMemoryService>();
         services.AddSingleton<AgentService>();
         services.AddMassTransit(x =>
         {
             x.AddConsumer<TestEventRequestedConsumer>()
-                .Endpoint(e => e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<TestEventRequested>(_ => { })));
+                .Endpoint(e =>
+                {
+                    e.Name = "personal-agent-test-event-requested";
+                    e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<TestEventRequested>(_ => { }));
+                });
 
             x.ConfigureSharedPostgresTransport();
         });

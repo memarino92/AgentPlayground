@@ -153,7 +153,7 @@ AgentPlayground/
 ## Messaging Notes
 
 - MassTransit is configured with PostgreSQL SQL transport, not RabbitMQ or Azure Service Bus.
-- Local PostgreSQL is started with [`scripts/start-postgres.ps1`](/C:/Users/Michael/projects/AgentPlayground/scripts/start-postgres.ps1), which is intended for Windows PowerShell and Docker Desktop.
+- Local PostgreSQL is started with [`scripts/start-postgres.ps1`](/C:/Users/Michael/projects/AgentPlayground/scripts/start-postgres.ps1), which is intended for Windows PowerShell and Docker Desktop and now defaults to a pgvector-enabled Postgres 18 image for local semantic-memory development.
 - The shared PostgreSQL connection string must come from user secrets via `Messaging:ConnectionString` for `PersonalAgent`, `PersonalAgent.Web`, and `PersonalAgent.Worker`.
 - `AddPostgresMigrationHostedService(...)` is required so SQL transport can create the schema and infrastructure. Creating only the schema is insufficient.
 - `SqlTransportOptions.ConnectionString` must be bound explicitly from `MessagingOptions`; the migration hosted service does not infer custom config bindings.

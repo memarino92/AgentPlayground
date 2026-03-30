@@ -3,7 +3,8 @@ param(
     [string]$Database = "agentplayground",
     [string]$Username = "agentplayground",
     [string]$Password = "agentplayground",
-    [int]$Port = 5432
+    [int]$Port = 5432,
+    [string]$Image = "pgvector/pgvector:0.8.2-pg18-trixie"
 )
 
 Set-StrictMode -Version Latest
@@ -33,7 +34,7 @@ if ($existing -eq $ContainerName)
 }
 else
 {
-    & $dockerCommand.Source run -d --name $ContainerName -e POSTGRES_DB=$Database -e POSTGRES_USER=$Username -e POSTGRES_PASSWORD=$Password -p "${Port}:5432" postgres:18 | Out-Null
+    & $dockerCommand.Source run -d --name $ContainerName -e POSTGRES_DB=$Database -e POSTGRES_USER=$Username -e POSTGRES_PASSWORD=$Password -p "${Port}:5432" $Image | Out-Null
 
     if ($LASTEXITCODE -ne 0)
     {
@@ -42,4 +43,5 @@ else
 }
 
 Write-Host "PostgreSQL container '$ContainerName' is running on port $Port."
+Write-Host "Image: $Image"
 Write-Host "Connection string: Host=localhost;Port=$Port;Database=$Database;Username=$Username;Password=$Password"

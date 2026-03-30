@@ -20,14 +20,22 @@ builder.Services.AddPostgresMigrationHostedService(options =>
 {
     options.CreateDatabase = false;
     options.CreateSchema = true;
-    options.CreateInfrastructure = true;
+    options.CreateInfrastructure = false;
 });
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<TestEventRequestedConsumer>()
-        .Endpoint(e => e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<TestEventRequested>(_ => { })));
+        .Endpoint(e =>
+        {
+            e.Name = "personal-agent-worker-test-event-requested";
+            e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<TestEventRequested>(_ => { }));
+        });
     x.AddConsumer<AgentGeneratedTestMessageConsumer>()
-        .Endpoint(e => e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<AgentGeneratedTestMessage>(_ => { })));
+        .Endpoint(e =>
+        {
+            e.Name = "personal-agent-worker-agent-generated-test-message";
+            e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<AgentGeneratedTestMessage>(_ => { }));
+        });
 
     x.ConfigureSharedPostgresTransport();
 });

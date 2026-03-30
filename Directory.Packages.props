@@ -13,5 +13,7 @@
     <!-- Messaging -->
     <PackageVersion Include="MassTransit" Version="8.5.8" />
     <PackageVersion Include="MassTransit.SqlTransport.PostgreSQL" Version="8.5.8" />
+    <PackageVersion Include="Npgsql" Version="8.0.7" />
+    <PackageVersion Include="Pgvector" Version="0.3.2" />
   </ItemGroup>
 </Project>

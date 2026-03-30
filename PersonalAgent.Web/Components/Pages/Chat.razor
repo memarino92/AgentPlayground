@@ -1,8 +1,10 @@
 @page "/"
 @using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @using System.Security.Claims
 @rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ProtectedSessionStorage SessionStorage
 @inject PersonalAgentClient ApiClient
 @inject TestEventPublisher TestEventPublisher
 
@@ -17,6 +19,11 @@
         <p>@testEventStatus</p>
     }
 </div>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <p>@errorMessage</p>
+}
 
 @if (sessionId == null)
 {
@@ -50,18 +57,30 @@ else
         <div>
             <input type="text" @bind="currentMessage" @bind:event="oninput" @onkeydown="HandleKeyDown" disabled="@isLoading" placeholder="Type a message..." />
             <button @onclick="SendMessage" disabled="@(isLoading || string.IsNullOrWhiteSpace(currentMessage))">Send</button>
-            <button @onclick="ResetChat" disabled="@isLoading">New Chat</button>
+            <button @onclick="ResetChatAsync" disabled="@isLoading">New Chat</button>
         </div>
     </div>
 }
 
 @code {
+    private const string SessionStorageKey = "personal-agent-session-id";
     private string? sessionId;
     private List<ConversationMessage> messages = new();
     private string currentMessage = string.Empty;
     private bool isLoading;
     private bool isPublishingTestEvent;
     private string? testEventStatus;
+    private string? errorMessage;
+    private bool hasAttemptedRestore;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || hasAttemptedRestore) return;
+
+        hasAttemptedRestore = true;
+        await RestoreSessionAsync();
+        StateHasChanged();
+    }
 
     private async Task PublishTestEvent()
     {
@@ -87,13 +106,20 @@ else
     private async Task CreateSession()
     {
         isLoading = true;
+        errorMessage = null;
         try
         {
             var response = await ApiClient.CreateSessionAsync();
             if (response != null)
             {
                 sessionId = response.SessionId;
+                messages.Clear();
+                await SetStoredSessionIdAsync(sessionId);
             }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
         }
         finally
         {
@@ -105,6 +131,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(currentMessage) || sessionId == null) return;
 
+        errorMessage = null;
         var userMessage = currentMessage;
         currentMessage = string.Empty;
         
@@ -119,17 +146,25 @@ else
                 messages.Add(new ConversationMessage("assistant", response.Response));
             }
         }
+        catch (Exception ex)
+        {
+            messages.RemoveAt(messages.Count - 1);
+            currentMessage = userMessage;
+            errorMessage = ex.Message;
+        }
         finally
         {
             isLoading = false;
         }
     }
 
-    private void ResetChat()
+    private async Task ResetChatAsync()
     {
         sessionId = null;
         messages.Clear();
         currentMessage = string.Empty;
+        errorMessage = null;
+        await ClearStoredSessionIdAsync();
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -138,5 +173,49 @@ else
         {
             await SendMessage();
         }
+    }
+
+    private async Task RestoreSessionAsync()
+    {
+        try
+        {
+            var storedSession = await SessionStorage.GetAsync<string>(SessionStorageKey);
+            if (!storedSession.Success || string.IsNullOrWhiteSpace(storedSession.Value)) return;
+
+            isLoading = true;
+            errorMessage = null;
+
+            var history = await ApiClient.GetHistoryAsync(storedSession.Value);
+            if (history is null)
+            {
+                await ClearStoredSessionIdAsync();
+                return;
+            }
+
+            sessionId = history.SessionId;
+            messages = [.. history.Messages];
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("404"))
+        {
+            await ClearStoredSessionIdAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SetStoredSessionIdAsync(string value)
+    {
+        await SessionStorage.SetAsync(SessionStorageKey, value);
+    }
+
+    private async Task ClearStoredSessionIdAsync()
+    {
+        await SessionStorage.DeleteAsync(SessionStorageKey);
     }
 }

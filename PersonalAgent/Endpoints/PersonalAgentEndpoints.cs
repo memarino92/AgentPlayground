@@ -38,9 +38,9 @@ internal static class PersonalAgentEndpoints
                 : Results.NotFound(new { error = "Session not found" });
         });
 
-        apiGroup.MapGet("/sessions/{sessionId}/messages", (string sessionId, AgentService agentService) =>
+        apiGroup.MapGet("/sessions/{sessionId}/messages", async (string sessionId, AgentService agentService) =>
         {
-            var messages = agentService.GetSessionMessages(sessionId);
+            var messages = await agentService.GetSessionMessagesAsync(sessionId);
             return messages is not null
                 ? Results.Ok(new { sessionId, messages })
                 : Results.NotFound(new { error = "Session not found" });
