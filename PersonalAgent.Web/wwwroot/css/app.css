@@ -245,48 +245,26 @@ body {
   gap: 1rem;
 }
 
-.session-list {
+.session-picker {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
   margin-top: 1rem;
-  max-height: 34rem;
-  overflow-y: auto;
 }
 
-.session-list__item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.35rem;
+.session-picker__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.session-picker__select {
   width: 100%;
   padding: 0.875rem;
   border: 1px solid var(--border-color);
   border-radius: 0.875rem;
   background-color: #f8fafc;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
-}
-
-.session-list__item:hover {
-  border-color: #93c5fd;
-  background-color: #eff6ff;
-  transform: translateY(-1px);
-}
-
-.session-list__item--active {
-  border-color: #60a5fa;
-  background-color: #dbeafe;
-}
-
-.session-list__snippet {
-  font-weight: 600;
   color: var(--text-primary);
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .session-panel__more {

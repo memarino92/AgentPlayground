@@ -57,17 +57,19 @@
             }
             else
             {
-                <div class="session-list" role="list">
-                    @foreach (var session in sessions)
-                    {
-                        <button class="session-list__item @(session.SessionId == sessionId ? "session-list__item--active" : null)"
-                                @onclick="() => SelectSessionAsync(session.SessionId)"
-                                disabled="@isBusy"
-                                role="listitem">
-                            <span class="session-list__snippet">@session.Snippet</span>
-                            <span class="session-list__meta">@FormatTimestamp(session.LastActivityAt)</span>
-                        </button>
-                    }
+                <div class="session-picker">
+                    <label class="session-picker__label" for="session-select">Previous Sessions</label>
+                    <select id="session-select"
+                            class="session-picker__select"
+                            value="@GetSelectedSessionOption()"
+                            @onchange="HandleSessionSelectionChanged"
+                            disabled="@(isBusy || sessions.Count == 0)">
+                        <option value="">Select a prior session</option>
+                        @foreach (var session in sessions)
+                        {
+                            <option value="@session.SessionId">@FormatSessionOption(session)</option>
+                        }
+                    </select>
                 </div>
 
                 @if (hasMoreSessions)
@@ -309,6 +311,19 @@
         await LoadSelectedSessionHistoryAsync(selectedSessionId);
     }
 
+    private async Task HandleSessionSelectionChanged(ChangeEventArgs e)
+    {
+        var selectedSessionId = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(selectedSessionId))
+        {
+            await ResetSelectionAsync();
+            return;
+        }
+
+        if (selectedSessionId == sessionId) return;
+        await SelectSessionAsync(selectedSessionId);
+    }
+
     private async Task LoadSelectedSessionHistoryAsync(string selectedSessionId)
     {
         if (profileId is null) return;
@@ -445,6 +460,10 @@
 
         sessions.Insert(0, updated);
     }
+
+    private string GetSelectedSessionOption() => sessionId ?? string.Empty;
+
+    private static string FormatSessionOption(SessionListItem session) => $"{session.Snippet} ({FormatTimestamp(session.LastActivityAt)})";
 
     private static string CreateSnippet(string message)
     {
