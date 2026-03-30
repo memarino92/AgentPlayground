@@ -10,78 +10,169 @@
 
 <PageTitle>PersonalAgent - Chat</PageTitle>
 
-<h1>PersonalAgent Chat</h1>
-
-<div>
-    <button @onclick="PublishTestEvent" disabled="@isPublishingTestEvent">Fire Test Event</button>
-    @if (!string.IsNullOrWhiteSpace(testEventStatus))
-    {
-        <p>@testEventStatus</p>
-    }
-</div>
-
-@if (!string.IsNullOrWhiteSpace(errorMessage))
-{
-    <p>@errorMessage</p>
-}
-
-@if (sessionId == null)
-{
-    <button @onclick="CreateSession" disabled="@isLoading">Start New Chat</button>
-    @if (isLoading)
-    {
-        <p>Creating session...</p>
-    }
-}
-else
-{
-    <div>
-        <h2>Session: @sessionId</h2>
-        
+<div class="chat-page">
+    <div class="chat-page__header">
         <div>
-            @foreach (var msg in messages)
-            {
-                <div>
-                    <strong>@msg.Role:</strong> @msg.Content
-                </div>
-            }
-            
-            @if (isLoading)
-            {
-                <div>
-                    <strong>assistant:</strong> <em>Thinking...</em>
-                </div>
-            }
+            <h1>PersonalAgent Chat</h1>
+            <p class="chat-page__subtitle">Continue any prior conversation or start a new one.</p>
         </div>
-        
-        <div>
-            <input type="text" @bind="currentMessage" @bind:event="oninput" @onkeydown="HandleKeyDown" disabled="@isLoading" placeholder="Type a message..." />
-            <button @onclick="SendMessage" disabled="@(isLoading || string.IsNullOrWhiteSpace(currentMessage))">Send</button>
-            <button @onclick="ResetChatAsync" disabled="@isLoading">New Chat</button>
+        <div class="chat-page__actions">
+            <button class="btn btn-secondary" @onclick="PublishTestEvent" disabled="@isPublishingTestEvent">Fire Test Event</button>
+            <button class="btn btn-primary" @onclick="CreateSession" disabled="@isBusy">Start New Chat</button>
         </div>
     </div>
-}
+
+    @if (!string.IsNullOrWhiteSpace(testEventStatus))
+    {
+        <p class="status-message">@testEventStatus</p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <p class="error-message">@errorMessage</p>
+    }
+
+    <div class="chat-layout">
+        <aside class="session-panel">
+            <div class="session-panel__header">
+                <h2>Past Sessions</h2>
+                @if (isLoadingSessions)
+                {
+                    <span class="session-panel__status">Loading...</span>
+                }
+            </div>
+
+            @if (sessions.Count == 0 && !isLoadingSessions)
+            {
+                <p class="session-panel__empty">No chats yet.</p>
+            }
+            else
+            {
+                <div class="session-list" role="list">
+                    @foreach (var session in sessions)
+                    {
+                        <button class="session-list__item @(session.SessionId == sessionId ? "session-list__item--active" : null)"
+                                @onclick="() => SelectSessionAsync(session.SessionId)"
+                                disabled="@isBusy"
+                                role="listitem">
+                            <span class="session-list__snippet">@session.Snippet</span>
+                            <span class="session-list__meta">@FormatTimestamp(session.LastActivityAt)</span>
+                        </button>
+                    }
+                </div>
+
+                @if (hasMoreSessions)
+                {
+                    <button class="btn btn-secondary session-panel__more" @onclick="LoadMoreSessionsAsync" disabled="@(isBusy || isLoadingSessions)">
+                        Load More
+                    </button>
+                }
+            }
+        </aside>
+
+        <section class="chat-panel">
+            @if (sessionId is null)
+            {
+                <div class="chat-panel__empty">
+                    <h2>No Session Selected</h2>
+                    <p>Select a prior session or start a new chat.</p>
+                </div>
+            }
+            else
+            {
+                <div class="chat-panel__header">
+                    <div>
+                        <h2>Session</h2>
+                        <p class="chat-panel__session-id">@sessionId</p>
+                    </div>
+                    <button class="btn btn-secondary" @onclick="ResetSelectionAsync" disabled="@isBusy">Clear Selection</button>
+                </div>
+
+                <div class="message-list">
+                    @foreach (var msg in messages)
+                    {
+                        <div class="message-list__item message-list__item--@msg.Role">
+                            <strong>@msg.Role</strong>
+                            <p>@msg.Content</p>
+                        </div>
+                    }
+
+                    @if (isSendingMessage)
+                    {
+                        <div class="message-list__item message-list__item--assistant">
+                            <strong>assistant</strong>
+                            <p><em>Thinking...</em></p>
+                        </div>
+                    }
+                </div>
+
+                <div class="composer">
+                    <input class="composer__input"
+                           type="text"
+                           @bind="currentMessage"
+                           @bind:event="oninput"
+                           @onkeydown="HandleKeyDown"
+                           disabled="@isBusy"
+                           placeholder="Type a message..." />
+                    <button class="btn btn-primary" @onclick="SendMessage" disabled="@(isBusy || string.IsNullOrWhiteSpace(currentMessage))">Send</button>
+                </div>
+            }
+        </section>
+    </div>
+</div>
 
 @code {
     private const string SessionStorageKey = "personal-agent-session-id";
     private const string ProfileStorageKey = "personal-agent-profile-id";
+    private const int SessionPageSize = 20;
     private string? sessionId;
     private string? profileId;
+    private List<SessionListItem> sessions = new();
     private List<ConversationMessage> messages = new();
     private string currentMessage = string.Empty;
-    private bool isLoading;
+    private bool isLoadingHistory;
+    private bool isSendingMessage;
+    private bool isCreatingSession;
+    private bool isLoadingSessions;
     private bool isPublishingTestEvent;
     private string? testEventStatus;
     private string? errorMessage;
     private bool hasAttemptedRestore;
+    private DateTimeOffset? nextBeforeActivityAt;
+    private Guid? nextBeforeSessionId;
+    private bool hasMoreSessions;
+
+    private bool isBusy => isLoadingHistory || isSendingMessage || isCreatingSession;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender || hasAttemptedRestore) return;
 
         hasAttemptedRestore = true;
-        await RestoreSessionAsync();
+        await InitializeAsync();
         StateHasChanged();
+    }
+
+    private async Task InitializeAsync()
+    {
+        try
+        {
+            var resolvedProfileId = await ResolveProfileIdAsync();
+            if (string.IsNullOrWhiteSpace(resolvedProfileId))
+            {
+                await ClearStoredProfileIdAsync();
+                await ClearStoredSessionIdAsync();
+                return;
+            }
+
+            profileId = resolvedProfileId;
+            await LoadSessionsAsync();
+            await RestoreSessionAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
     }
 
     private async Task PublishTestEvent()
@@ -107,7 +198,7 @@ else
 
     private async Task CreateSession()
     {
-        isLoading = true;
+        isCreatingSession = true;
         errorMessage = null;
         try
         {
@@ -123,10 +214,9 @@ else
             var response = await ApiClient.CreateSessionAsync(resolvedProfileId);
             if (response != null)
             {
-                sessionId = response.SessionId;
-                messages.Clear();
-                await SetStoredSessionIdAsync(sessionId);
+                await SelectSessionAsync(response.SessionId, []);
                 await SetStoredProfileIdAsync(resolvedProfileId);
+                await LoadSessionsAsync();
             }
         }
         catch (Exception ex)
@@ -135,13 +225,13 @@ else
         }
         finally
         {
-            isLoading = false;
+            isCreatingSession = false;
         }
     }
 
     private async Task SendMessage()
     {
-        if (string.IsNullOrWhiteSpace(currentMessage) || sessionId == null) return;
+        if (string.IsNullOrWhiteSpace(currentMessage) || sessionId == null || profileId == null) return;
 
         errorMessage = null;
         var userMessage = currentMessage;
@@ -149,13 +239,14 @@ else
         
         messages.Add(new ConversationMessage("user", userMessage));
         
-        isLoading = true;
+        isSendingMessage = true;
         try
         {
-            var response = await ApiClient.SendMessageAsync(sessionId, userMessage);
+            var response = await ApiClient.SendMessageAsync(sessionId, profileId, userMessage);
             if (response != null)
             {
                 messages.Add(new ConversationMessage("assistant", response.Response));
+                UpdateSessionSummary(sessionId, userMessage, DateTimeOffset.UtcNow);
             }
         }
         catch (Exception ex)
@@ -166,24 +257,77 @@ else
         }
         finally
         {
-            isLoading = false;
+            isSendingMessage = false;
         }
     }
 
-    private async Task ResetChatAsync()
+    private async Task ResetSelectionAsync()
     {
         sessionId = null;
-        profileId = null;
         messages.Clear();
         currentMessage = string.Empty;
         errorMessage = null;
         await ClearStoredSessionIdAsync();
-        await ClearStoredProfileIdAsync();
+    }
+
+    private async Task SelectSessionAsync(string selectedSessionId, List<ConversationMessage>? knownMessages = null)
+    {
+        if (profileId is null) return;
+
+        sessionId = selectedSessionId;
+        currentMessage = string.Empty;
+        errorMessage = null;
+        await SetStoredSessionIdAsync(selectedSessionId);
+
+        if (knownMessages is not null)
+        {
+            messages = [.. knownMessages];
+            return;
+        }
+
+        await LoadSelectedSessionHistoryAsync(selectedSessionId);
+    }
+
+    private async Task LoadSelectedSessionHistoryAsync(string selectedSessionId)
+    {
+        if (profileId is null) return;
+
+        isLoadingHistory = true;
+        try
+        {
+            var history = await ApiClient.GetHistoryAsync(selectedSessionId, profileId);
+            if (history is null)
+            {
+                if (sessionId == selectedSessionId)
+                    await ResetSelectionAsync();
+
+                sessions.RemoveAll(session => session.SessionId == selectedSessionId);
+                return;
+            }
+
+            sessionId = history.SessionId;
+            messages = [.. history.Messages];
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("404"))
+        {
+            if (sessionId == selectedSessionId)
+                await ResetSelectionAsync();
+
+            sessions.RemoveAll(session => session.SessionId == selectedSessionId);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter" && !isLoading && !string.IsNullOrWhiteSpace(currentMessage))
+        if (e.Key == "Enter" && !isBusy && !string.IsNullOrWhiteSpace(currentMessage))
         {
             await SendMessage();
         }
@@ -191,41 +335,23 @@ else
 
     private async Task RestoreSessionAsync()
     {
+        if (profileId is null) return;
+
         try
         {
             var storedProfile = await SessionStorage.GetAsync<string>(ProfileStorageKey);
             var storedSession = await SessionStorage.GetAsync<string>(SessionStorageKey);
             if (!storedSession.Success || string.IsNullOrWhiteSpace(storedSession.Value)) return;
 
-            var resolvedProfileId = await ResolveProfileIdAsync();
-            if (string.IsNullOrWhiteSpace(resolvedProfileId))
+            if (storedProfile.Success && !string.IsNullOrWhiteSpace(storedProfile.Value) && !string.Equals(storedProfile.Value, profileId, StringComparison.OrdinalIgnoreCase))
             {
                 await ClearStoredProfileIdAsync();
                 await ClearStoredSessionIdAsync();
                 return;
             }
 
-            if (storedProfile.Success && !string.IsNullOrWhiteSpace(storedProfile.Value) && !string.Equals(storedProfile.Value, resolvedProfileId, StringComparison.OrdinalIgnoreCase))
-            {
-                await ClearStoredProfileIdAsync();
-                await ClearStoredSessionIdAsync();
-                return;
-            }
-
-            isLoading = true;
-            errorMessage = null;
-
-            var history = await ApiClient.GetHistoryAsync(storedSession.Value);
-            if (history is null)
-            {
-                await ClearStoredProfileIdAsync();
-                await ClearStoredSessionIdAsync();
-                return;
-            }
-
-            sessionId = history.SessionId;
-            profileId = resolvedProfileId;
-            messages = [.. history.Messages];
+            await SetStoredProfileIdAsync(profileId);
+            await SelectSessionAsync(storedSession.Value);
         }
         catch (HttpRequestException ex) when (ex.Message.Contains("404"))
         {
@@ -236,11 +362,68 @@ else
         {
             errorMessage = ex.Message;
         }
+    }
+
+    private async Task LoadSessionsAsync(bool append = false)
+    {
+        if (profileId is null) return;
+
+        isLoadingSessions = true;
+        errorMessage = null;
+
+        try
+        {
+            var page = await ApiClient.GetSessionsAsync(profileId, append ? nextBeforeActivityAt : null, append ? nextBeforeSessionId : null, SessionPageSize);
+            if (page is null) return;
+
+            if (!append)
+                sessions.Clear();
+
+            sessions = append
+                ? [.. sessions, .. page.Sessions.Where(candidate => sessions.All(existing => existing.SessionId != candidate.SessionId))]
+                : [.. page.Sessions];
+
+            hasMoreSessions = page.HasMore;
+            nextBeforeActivityAt = page.NextBeforeActivityAt;
+            nextBeforeSessionId = page.NextBeforeSessionId;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
         finally
         {
-            isLoading = false;
+            isLoadingSessions = false;
         }
     }
+
+    private async Task LoadMoreSessionsAsync()
+    {
+        if (!hasMoreSessions) return;
+        await LoadSessionsAsync(append: true);
+    }
+
+    private void UpdateSessionSummary(string selectedSessionId, string snippet, DateTimeOffset lastActivityAt)
+    {
+        var trimmedSnippet = CreateSnippet(snippet);
+        var existingIndex = sessions.FindIndex(session => session.SessionId == selectedSessionId);
+        var createdAt = existingIndex >= 0 ? sessions[existingIndex].CreatedAt : lastActivityAt;
+        var updated = new SessionListItem(selectedSessionId, trimmedSnippet, lastActivityAt, createdAt);
+
+        if (existingIndex >= 0)
+            sessions.RemoveAt(existingIndex);
+
+        sessions.Insert(0, updated);
+    }
+
+    private static string CreateSnippet(string message)
+    {
+        var normalized = message.Trim();
+        if (normalized.Length <= 72) return normalized;
+        return normalized[..69] + "...";
+    }
+
+    private static string FormatTimestamp(DateTimeOffset timestamp) => timestamp.ToLocalTime().ToString("g");
 
     private async Task SetStoredSessionIdAsync(string value)
     {

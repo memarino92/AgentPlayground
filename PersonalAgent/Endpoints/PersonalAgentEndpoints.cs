@@ -29,21 +29,39 @@ internal static class PersonalAgentEndpoints
             return Results.Ok(new { sessionId, message = "Session created successfully" });
         });
 
-        apiGroup.MapPost("/sessions/{sessionId}/messages", async (string sessionId, MessageRequest request, AgentService agentService) =>
+        apiGroup.MapGet("/sessions", async (string profileId, int? pageSize, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, AgentService agentService) =>
         {
+            if (string.IsNullOrWhiteSpace(profileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+
+            if (beforeActivityAt is null != beforeSessionId is null)
+                return Results.BadRequest(new { error = "BeforeActivityAt and BeforeSessionId must be provided together" });
+
+            var page = await agentService.GetSessionsAsync(profileId, beforeActivityAt, beforeSessionId, pageSize ?? 20);
+            return Results.Ok(page);
+        });
+
+        apiGroup.MapPost("/sessions/{sessionId}/messages", async (string sessionId, SendMessageRequest request, AgentService agentService) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.ProfileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+
             if (string.IsNullOrWhiteSpace(request.Message)) return Results.BadRequest(new { error = "Message is required" });
             if (request.Message.Length > PersonalAgentConstants.MaxMessageLength)
                 return Results.BadRequest(new { error = $"Message length exceeds {PersonalAgentConstants.MaxMessageLength} characters" });
 
-            var response = await agentService.SendMessageAsync(sessionId, request.Message);
+            var response = await agentService.SendMessageAsync(sessionId, request.ProfileId, request.Message);
             return response is not null
                 ? Results.Ok(new { sessionId, response })
                 : Results.NotFound(new { error = "Session not found" });
         });
 
-        apiGroup.MapGet("/sessions/{sessionId}/messages", async (string sessionId, AgentService agentService) =>
+        apiGroup.MapGet("/sessions/{sessionId}/messages", async (string sessionId, string profileId, AgentService agentService) =>
         {
-            var messages = await agentService.GetSessionMessagesAsync(sessionId);
+            if (string.IsNullOrWhiteSpace(profileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+
+            var messages = await agentService.GetSessionMessagesAsync(sessionId, profileId);
             return messages is not null
                 ? Results.Ok(new { sessionId, messages })
                 : Results.NotFound(new { error = "Session not found" });

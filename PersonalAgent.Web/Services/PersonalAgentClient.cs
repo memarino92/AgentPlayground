@@ -5,6 +5,8 @@ namespace PersonalAgent.Web.Services;
 
 internal class PersonalAgentClient(HttpClient httpClient)
 {
+    private const int DefaultPageSize = 20;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -21,9 +23,9 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<SessionResponse>(content, JsonOptions);
     }
 
-    public async Task<MessageResponse?> SendMessageAsync(string sessionId, string message)
+    public async Task<MessageResponse?> SendMessageAsync(string sessionId, string profileId, string message)
     {
-        var request = new { message };
+        var request = new { profileId, message };
         var response = await httpClient.PostAsJsonAsync($"/api/sessions/{sessionId}/messages", request);
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("send message", response);
@@ -32,14 +34,36 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<MessageResponse>(content, JsonOptions);
     }
 
-    public async Task<HistoryResponse?> GetHistoryAsync(string sessionId)
+    public async Task<HistoryResponse?> GetHistoryAsync(string sessionId, string profileId)
     {
-        var response = await httpClient.GetAsync($"/api/sessions/{sessionId}/messages");
+        var response = await httpClient.GetAsync($"/api/sessions/{sessionId}/messages?profileId={Uri.EscapeDataString(profileId)}");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load chat history", response);
 
         var content = await response.Content.ReadAsStreamAsync();
         return await JsonSerializer.DeserializeAsync<HistoryResponse>(content, JsonOptions);
+    }
+
+    public async Task<SessionPageResponse?> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt = null, Guid? beforeSessionId = null, int pageSize = DefaultPageSize)
+    {
+        var query = new List<string>
+        {
+            $"profileId={Uri.EscapeDataString(profileId)}",
+            $"pageSize={pageSize}"
+        };
+
+        if (beforeActivityAt is not null)
+            query.Add($"beforeActivityAt={Uri.EscapeDataString(beforeActivityAt.Value.ToString("O"))}");
+
+        if (beforeSessionId is not null)
+            query.Add($"beforeSessionId={beforeSessionId}");
+
+        var response = await httpClient.GetAsync($"/api/sessions?{string.Join("&", query)}");
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("load sessions", response);
+
+        var content = await response.Content.ReadAsStreamAsync();
+        return await JsonSerializer.DeserializeAsync<SessionPageResponse>(content, JsonOptions);
     }
 
     private static async Task<HttpRequestException> CreateRequestExceptionAsync(string operation, HttpResponseMessage response)
@@ -53,4 +77,6 @@ internal class PersonalAgentClient(HttpClient httpClient)
 internal record SessionResponse(string SessionId, string Message);
 internal record MessageResponse(string SessionId, string Response);
 internal record HistoryResponse(string SessionId, List<ConversationMessage> Messages);
+internal record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
+internal record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
 internal record ConversationMessage(string Role, string Content);

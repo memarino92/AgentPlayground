@@ -76,7 +76,25 @@ internal class AgentService
         return sessionId.ToString();
     }
 
-    public async Task<string?> SendMessageAsync(string sessionId, string message)
+    public async Task<SessionSummaryPage> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize)
+    {
+        if (string.IsNullOrWhiteSpace(profileId))
+            throw new InvalidOperationException("Profile id is required to load chat sessions.");
+
+        var normalizedPageSize = Math.Clamp(pageSize, 1, 50);
+        var sessions = await _sessionStore.GetSessionsAsync(profileId, beforeActivityAt, beforeSessionId, normalizedPageSize + 1);
+        var pageItems = sessions.Take(normalizedPageSize).ToList();
+        var hasMore = sessions.Count > normalizedPageSize;
+        var nextCursor = hasMore ? pageItems[^1] : null;
+
+        return new SessionSummaryPage(
+            pageItems.Select(session => new SessionSummary(session.SessionId, session.Snippet, session.LastActivityAt, session.CreatedAt)).ToList(),
+            hasMore ? nextCursor?.LastActivityAt : null,
+            hasMore ? nextCursor?.SessionId : null,
+            hasMore);
+    }
+
+    public async Task<string?> SendMessageAsync(string sessionId, string profileId, string message)
     {
         if (!Guid.TryParse(sessionId, out var parsedSessionId))
             return null;
@@ -87,7 +105,7 @@ internal class AgentService
         try
         {
             var persistedSession = await _sessionStore.GetSessionAsync(parsedSessionId);
-            if (persistedSession is null) return null;
+            if (persistedSession is null || !string.Equals(persistedSession.ProfileId, profileId, StringComparison.OrdinalIgnoreCase)) return null;
 
             var session = await _agent.CreateSessionAsync();
             var transcript = await _sessionStore.GetSessionMessagesAsync(parsedSessionId) ?? [];
@@ -116,9 +134,13 @@ internal class AgentService
         }
     }
 
-    public async Task<List<ConversationMessage>?> GetSessionMessagesAsync(string sessionId)
+    public async Task<List<ConversationMessage>?> GetSessionMessagesAsync(string sessionId, string profileId)
     {
         if (!Guid.TryParse(sessionId, out var parsedSessionId)) return null;
+
+        var persistedSession = await _sessionStore.GetSessionAsync(parsedSessionId);
+        if (persistedSession is null || !string.Equals(persistedSession.ProfileId, profileId, StringComparison.OrdinalIgnoreCase)) return null;
+
         return await _sessionStore.GetSessionMessagesAsync(parsedSessionId);
     }
 

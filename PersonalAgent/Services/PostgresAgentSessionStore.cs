@@ -70,6 +70,54 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
         return new PersistedAgentSession(sessionId, reader.GetString(0), reader.GetString(1), reader.GetInt64(2));
     }
 
+    public async Task<IReadOnlyList<PersistedAgentSessionSummary>> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT s.session_id,
+                   COALESCE(first_user_message.content, 'New chat') AS snippet,
+                   COALESCE(s.last_message_at, s.created_at) AS last_activity_at,
+                   s.created_at
+            FROM {SessionsTable} s
+            LEFT JOIN LATERAL
+            (
+                SELECT tm.content
+                FROM {TranscriptMessagesTable} tm
+                WHERE tm.session_id = s.session_id
+                  AND tm.role = 'user'
+                ORDER BY tm.message_seq ASC
+                LIMIT 1
+            ) AS first_user_message ON TRUE
+            WHERE s.profile_id = @profileId
+              AND (
+                    @beforeActivityAt IS NULL
+                 OR @beforeSessionId IS NULL
+                 OR COALESCE(s.last_message_at, s.created_at) < @beforeActivityAt
+                 OR (COALESCE(s.last_message_at, s.created_at) = @beforeActivityAt AND s.session_id < @beforeSessionId)
+              )
+            ORDER BY COALESCE(s.last_message_at, s.created_at) DESC, s.session_id DESC
+            LIMIT @limit;
+            """;
+        command.Parameters.AddWithValue("profileId", profileId);
+        command.Parameters.Add(new NpgsqlParameter("beforeActivityAt", NpgsqlDbType.TimestampTz)
+        {
+            Value = beforeActivityAt ?? (object)DBNull.Value
+        });
+        command.Parameters.Add(new NpgsqlParameter("beforeSessionId", NpgsqlDbType.Uuid)
+        {
+            Value = beforeSessionId ?? (object)DBNull.Value
+        });
+        command.Parameters.AddWithValue("limit", pageSize);
+
+        var sessions = new List<PersistedAgentSessionSummary>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            sessions.Add(new PersistedAgentSessionSummary(reader.GetGuid(0), reader.GetString(1), reader.GetFieldValue<DateTimeOffset>(2), reader.GetFieldValue<DateTimeOffset>(3)));
+
+        return sessions;
+    }
+
     public async Task<bool> SessionExistsAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
