@@ -1,6 +1,10 @@
 <Solution>
   <Project Path="AgentPlayground.Contracts/AgentPlayground.Contracts.csproj" />
+  <Project Path="AgentPlayground.Contracts.Tests/AgentPlayground.Contracts.Tests.csproj" />
   <Project Path="PersonalAgent.Web/PersonalAgent.Web.csproj" />
+  <Project Path="PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj" />
   <Project Path="PersonalAgent.Worker/PersonalAgent.Worker.csproj" />
+  <Project Path="PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj" />
   <Project Path="PersonalAgent/PersonalAgent.csproj" />
+  <Project Path="PersonalAgent.Tests/PersonalAgent.Tests.csproj" />
 </Solution>

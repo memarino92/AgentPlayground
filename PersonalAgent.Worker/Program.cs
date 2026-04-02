@@ -3,7 +3,6 @@ using AgentPlayground.Contracts.Messaging.Events;
 using MassTransit;
 using Microsoft.Extensions.Options;
 using PersonalAgent.Worker.Consumers;
-using PersonalAgent.Worker.Messaging;
 
 var builder = Host.CreateApplicationBuilder(args);
 

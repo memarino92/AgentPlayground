@@ -11,6 +11,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="MassTransit" />
+    <PackageReference Include="MassTransit.SqlTransport.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="artifacts\**\*.cs" />
     <EmbeddedResource Remove="artifacts\**\*" />
     <None Remove="artifacts\**\*" />

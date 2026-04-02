@@ -1,6 +1,9 @@
-namespace PersonalAgent.Web.Extensions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 
-internal static class HostingExtensions
+namespace AgentPlayground.Contracts.Hosting;
+
+public static class PlatformHostingExtensions
 {
     public static WebApplicationBuilder ConfigurePlatformHosting(this WebApplicationBuilder builder)
     {

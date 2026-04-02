@@ -1,3 +1,4 @@
+using AgentPlayground.Contracts.Hosting;
 using PersonalAgent.Endpoints;
 using PersonalAgent.Extensions;
 

@@ -1,10 +1,10 @@
-using AgentPlayground.Contracts.Messaging;
 using MassTransit;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace PersonalAgent.Web.Messaging;
+namespace AgentPlayground.Contracts.Messaging;
 
-internal static class MassTransitRegistrationExtensions
+public static class MassTransitPostgresTransportExtensions
 {
     public static void ConfigureSharedPostgresTransport(this IBusRegistrationConfigurator configurator)
     {
