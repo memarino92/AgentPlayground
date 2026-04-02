@@ -95,4 +95,19 @@ internal class AgentEventService
         _logger.LogInformation("Published generated bus follow-up message");
         return $"Published generated test message for {correlationId}";
     }
+
+    public async Task<string> PublishGeneratedMessageToolAsync(string correlationId, string promptSummary, string message, CancellationToken cancellationToken = default)
+    {
+        var parsedCorrelationId = Guid.TryParse(correlationId, out var value)
+            ? value
+            : Guid.NewGuid();
+
+        if (parsedCorrelationId == Guid.Empty)
+            parsedCorrelationId = Guid.NewGuid();
+
+        if (!string.Equals(correlationId, parsedCorrelationId.ToString(), StringComparison.OrdinalIgnoreCase))
+            _logger.LogWarning("Tool supplied invalid correlation id '{CorrelationId}', generated fallback id {FallbackCorrelationId}", correlationId, parsedCorrelationId);
+
+        return await PublishGeneratedMessageAsync(parsedCorrelationId, promptSummary, message, cancellationToken);
+    }
 }

@@ -177,7 +177,7 @@ internal class AgentChatService
 
     private ChatClientAgent CreateSessionAgent(string modelId)
     {
-        var publishTool = AIFunctionFactory.Create(_eventService.PublishGeneratedMessageAsync, "publish_generated_test_message",
+        var publishTool = AIFunctionFactory.Create(_eventService.PublishGeneratedMessageToolAsync, "publish_generated_test_message",
             "Publish a generated test message to the shared MassTransit bus.");
 
         return _openAiClient
@@ -189,6 +189,7 @@ internal class AgentChatService
                 instructions: """
                     You are a helpful personal assistant.
                     When asked to respond to a bus test event, you must call the publish_generated_test_message tool exactly once with a concise generated message describing that you received the event.
+                    The tool arguments must include a valid correlationId GUID string copied from context.
                     This does not mean that you should respond to every user message with a bus event follow-up, only when you are specifically asked to generate a follow-up message for a bus event.
                     """,
                 name: "PersonalAgent",
