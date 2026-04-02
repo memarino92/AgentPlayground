@@ -144,6 +144,48 @@ The web app requires `Messaging:ConnectionString` in user secrets.
 pwsh -NoProfile -File .\scripts\stop-postgres.ps1
 ```
 
+### Docker Compose (One Command)
+
+You can run the full stack (Postgres + API + Worker + Web) with Docker Compose.
+
+1. Copy and fill the compose env file:
+
+```bash
+cp .env.compose.example .env.compose
+```
+
+Set at least:
+
+- `OPENAI_API_KEY`
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+
+Optional:
+
+- `INTERNAL_API_KEY` (defaults to `dev-internal-api-key` for local compose)
+
+2. Start everything:
+
+```bash
+docker compose up --build
+```
+
+3. Open the app at `http://localhost:5000`.
+
+4. Stop and remove containers:
+
+```bash
+docker compose down
+```
+
+5. Stop and also remove Postgres data volume:
+
+```bash
+docker compose down -v
+```
+
+If you previously used an older compose/Postgres layout, run `docker compose down -v` once before the first start to reset the volume for Postgres 18.
+
 ### Messaging Secrets
 
 The shared PostgreSQL transport connection string is intentionally not stored in `appsettings.json`. Set it in user secrets for all three projects:
