@@ -143,6 +143,20 @@ Returns stored transcript for a session.
 
 ### Environment Variables Overview
 
+### Configuration Keys (Single Source of Truth)
+
+Use this mapping consistently:
+
+```text
+OPENAI_API_KEY      -> OpenAI:ApiKey
+INTERNAL_API_KEY    -> Security:InternalApiKey
+ALLOWED_ORIGINS     -> Security:AllowedOrigins
+MESSAGING_CONNECTION_STRING -> Messaging:ConnectionString
+MESSAGING_SCHEMA    -> Messaging:Schema
+```
+
+Environment variables override user secrets and appsettings values.
+
 #### Required for Deployment
 
 - **`OPENAI_API_KEY`** - OpenAI API key for chat model access (required)
@@ -159,11 +173,11 @@ Returns stored transcript for a session.
 - **`ASPNETCORE_URLS`** - Server listening address
   - Defaults to `http://+:5000`
 
-- **`Security__InternalApiKey`** - Protect `/api/*` endpoints with an internal API key
+- **`INTERNAL_API_KEY`** - Protect `/api/*` endpoints with an internal API key
   - If set, clients must include `X-Internal-Api-Key` header on all API requests
   - Leave empty/unset to disable this protection
 
-- **`Security__AllowedOrigins`** - CORS allowlist (comma-separated domains)
+- **`ALLOWED_ORIGINS`** - CORS allowlist (comma-separated domains)
   - Example: `https://personalagent.com,https://app.personalagent.com`
   - If set, restricts CORS to these origins; leave empty for no CORS restrictions
 
@@ -208,8 +222,8 @@ docker run -d \
   -p 5000:5000 \
   -e OPENAI_API_KEY="your-openai-api-key" \
   -e ASPNETCORE_ENVIRONMENT="Production" \
-  -e Security__InternalApiKey="your-secret-key" \
-  -e Security__AllowedOrigins="https://your-frontend-domain.com" \
+  -e INTERNAL_API_KEY="your-secret-key" \
+  -e ALLOWED_ORIGINS="https://your-frontend-domain.com" \
   personalagent:latest
 ```
 
@@ -220,8 +234,8 @@ docker run -d \
 3. Set **Project Variables** in Railway dashboard:
     - `OPENAI_API_KEY` = your OpenAI API key (required)
     - `MESSAGING_CONNECTION_STRING` = `${{Postgres.DATABASE_URL}}`
-    - `Security__InternalApiKey` = your internal API key (optional)
-    - `Security__AllowedOrigins` = comma-separated allowed origins (optional)
+    - `INTERNAL_API_KEY` = your internal API key (optional)
+    - `ALLOWED_ORIGINS` = comma-separated allowed origins (optional)
 4. Deploy
 
 Use `Dockerfile.personalagent-api` for the Railway service. The API now binds Railway's `PORT` automatically and trusts forwarded proxy headers for HTTPS redirection.

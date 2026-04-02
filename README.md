@@ -225,6 +225,24 @@ MESSAGING_CONNECTION_STRING=${{Postgres.DATABASE_URL}}
 MESSAGING_SCHEMA=transport
 ```
 
+### Config Key Standard
+
+Use these names as the single source of truth across API, Web, Worker, scripts, and docs:
+
+```text
+OPENAI_API_KEY            -> OpenAI:ApiKey
+INTERNAL_API_KEY          -> Security:InternalApiKey (API), PersonalAgentApi:InternalApiKey (Web)
+MESSAGING_CONNECTION_STRING -> Messaging:ConnectionString
+MESSAGING_SCHEMA          -> Messaging:Schema
+PERSONAL_AGENT_API_BASE_URL -> PersonalAgentApi:BaseUrl
+```
+
+Notes:
+
+- Environment variables take precedence over config files and user secrets.
+- `DATABASE_URL` is still accepted only as a PostgreSQL URL fallback for connection-string normalization.
+- Legacy key `OpenApiKey` is no longer the canonical key; use `OpenAI:ApiKey`.
+
 ### API Variables
 
 Set these on `personalagent-api`:

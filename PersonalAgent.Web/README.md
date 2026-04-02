@@ -36,6 +36,21 @@
 
 ### Environment Variables
 
+### Configuration Keys (Single Source of Truth)
+
+Use this mapping consistently:
+
+```text
+PERSONAL_AGENT_API_BASE_URL -> PersonalAgentApi:BaseUrl
+INTERNAL_API_KEY            -> PersonalAgentApi:InternalApiKey
+GITHUB_CLIENT_ID            -> Authentication:Schemes:GitHub:ClientId
+GITHUB_CLIENT_SECRET        -> Authentication:Schemes:GitHub:ClientSecret
+GITHUB_ALLOWED_USERS        -> Authentication:Schemes:GitHub:AllowedUsers
+GITHUB_CALLBACK_PATH        -> Authentication:Schemes:GitHub:CallbackPath
+```
+
+Environment variables override appsettings and user secrets.
+
 #### Required for Deployment
 
 - **`GITHUB_CLIENT_ID`** - GitHub OAuth Client ID (required)
