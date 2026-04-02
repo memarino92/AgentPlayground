@@ -7,11 +7,15 @@ internal class TestEventRequestedConsumer(ILogger<TestEventRequestedConsumer> lo
 {
     public Task Consume(ConsumeContext<TestEventRequested> context)
     {
+        using var scope = logger.BeginScope(new Dictionary<string, object>
+        {
+            ["CorrelationId"] = context.Message.CorrelationId,
+            ["RequestedBy"] = context.Message.RequestedBy,
+            ["Source"] = context.Message.Source
+        });
+
         logger.LogInformation(
-            "Worker consumed test event {CorrelationId} from {Source} by {RequestedBy}: {Message}",
-            context.Message.CorrelationId,
-            context.Message.Source,
-            context.Message.RequestedBy,
+            "Worker consumed requested test event with message: {Message}",
             context.Message.Message);
 
         return Task.CompletedTask;

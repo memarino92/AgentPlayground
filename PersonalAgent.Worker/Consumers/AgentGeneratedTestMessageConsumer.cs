@@ -7,10 +7,14 @@ internal class AgentGeneratedTestMessageConsumer(ILogger<AgentGeneratedTestMessa
 {
     public Task Consume(ConsumeContext<AgentGeneratedTestMessage> context)
     {
+        using var scope = logger.BeginScope(new Dictionary<string, object>
+        {
+            ["CorrelationId"] = context.Message.CorrelationId,
+            ["GeneratedBy"] = context.Message.GeneratedBy
+        });
+
         logger.LogInformation(
-            "Worker consumed agent-generated message {CorrelationId} from {GeneratedBy}: {Message}",
-            context.Message.CorrelationId,
-            context.Message.GeneratedBy,
+            "Worker consumed agent-generated follow-up message: {Message}",
             context.Message.Message);
 
         return Task.CompletedTask;

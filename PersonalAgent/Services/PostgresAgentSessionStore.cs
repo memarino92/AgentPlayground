@@ -5,10 +5,11 @@ using PersonalAgent.Configuration;
 using PersonalAgent.Models;
 using Pgvector;
 using Pgvector.Npgsql;
+using Microsoft.Extensions.Logging;
 
 namespace PersonalAgent.Services;
 
-internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) : IAgentSessionStore, IAgentSemanticMemoryStore
+internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, ILogger<PostgresAgentSessionStore> logger) : IAgentSessionStore, IAgentSemanticMemoryStore
 {
     private const int SessionStateVersion = 1;
     private readonly AgentMemoryOptions _options = options.Value;
@@ -183,8 +184,6 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
 
-        if (!await SessionExistsAsync(sessionId, cancellationToken)) return null;
-
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT role, content
@@ -198,6 +197,21 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options) :
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             messages.Add(new ConversationMessage(reader.GetString(0), reader.GetString(1)));
+
+        if (messages.Count > 0) return messages;
+
+        await reader.DisposeAsync();
+
+        await using var existsCommand = connection.CreateCommand();
+        existsCommand.CommandText = $"SELECT 1 FROM {SessionsTable} WHERE session_id = @sessionId;";
+        existsCommand.Parameters.AddWithValue("sessionId", sessionId);
+        var exists = await existsCommand.ExecuteScalarAsync(cancellationToken) is not null;
+
+        if (!exists)
+        {
+            logger.LogDebug("Session {SessionId} not found while loading transcript", sessionId);
+            return null;
+        }
 
         return messages;
     }

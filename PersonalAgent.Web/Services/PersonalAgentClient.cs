@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -76,12 +77,21 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<SessionPageResponse>(content, JsonOptions);
     }
 
-    private static async Task<HttpRequestException> CreateRequestExceptionAsync(string operation, HttpResponseMessage response)
+    private static async Task<PersonalAgentApiException> CreateRequestExceptionAsync(string operation, HttpResponseMessage response)
     {
         var body = await response.Content.ReadAsStringAsync();
-        var detail = string.IsNullOrWhiteSpace(body) ? string.Empty : $": {body}";
-        return new HttpRequestException($"Failed to {operation}. API returned {(int)response.StatusCode} {response.ReasonPhrase}{detail}");
+        return new PersonalAgentApiException(operation, response.StatusCode, response.ReasonPhrase, body);
     }
+}
+
+internal class PersonalAgentApiException(string operation, HttpStatusCode statusCode, string? reasonPhrase, string responseBody)
+    : HttpRequestException(
+        $"Failed to {operation}. API returned {(int)statusCode} {reasonPhrase}{(string.IsNullOrWhiteSpace(responseBody) ? string.Empty : $": {responseBody}")}",
+        inner: null,
+        statusCode)
+{
+    public string Operation { get; } = operation;
+    public string ResponseBody { get; } = responseBody;
 }
 
 internal record SessionResponse(string SessionId, string ModelId, string Message);

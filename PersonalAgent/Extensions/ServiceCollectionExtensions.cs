@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using PersonalAgent.Consumers;
 using PersonalAgent.Configuration;
-using PersonalAgent.Messaging;
 using PersonalAgent.Services;
 
 namespace PersonalAgent.Extensions;
@@ -55,6 +54,8 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IAgentSemanticMemoryStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         services.AddSingleton<IAgentEmbeddingService, OpenAiAgentEmbeddingService>();
         services.AddSingleton<SemanticMemoryService>();
+        services.AddSingleton<AgentEventService>();
+        services.AddSingleton<AgentChatService>();
         services.AddSingleton<AgentService>();
         services.AddMassTransit(x =>
         {

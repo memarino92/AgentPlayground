@@ -346,7 +346,7 @@
             selectedModelId = history.ModelId;
             messages = [.. history.Messages];
         }
-        catch (HttpRequestException ex) when (ex.Message.Contains("404"))
+        catch (PersonalAgentApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             if (sessionId == selectedSessionId)
                 await ResetSelectionAsync();
@@ -391,7 +391,7 @@
             await SetStoredProfileIdAsync(profileId);
             await SelectSessionAsync(storedSession.Value);
         }
-        catch (HttpRequestException ex) when (ex.Message.Contains("404"))
+        catch (PersonalAgentApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             await ClearStoredProfileIdAsync();
             await ClearStoredSessionIdAsync();

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using PersonalAgent.Models;
 using PersonalAgent.Security;
 using PersonalAgent.Services;
+using Microsoft.Extensions.Logging;
 
 namespace PersonalAgent.Endpoints;
 
@@ -14,6 +15,7 @@ internal static class PersonalAgentEndpoints
 
         var security = app.Services.GetRequiredService<IOptions<SecurityOptions>>().Value;
         var apiKeyOptions = app.Services.GetRequiredService<IOptions<ApiKeyOptions>>();
+        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PersonalAgent.Api");
         var apiGroup = app.MapGroup("/api").RequireRateLimiting(PersonalAgentConstants.ApiRateLimiter);
 
         if (security.AllowedOrigins.Length > 0) apiGroup.RequireCors(PersonalAgentConstants.ApiCorsPolicy);
@@ -21,7 +23,11 @@ internal static class PersonalAgentEndpoints
         apiGroup.AddEndpointFilter(new InternalApiKeyFilter(apiKeyOptions));
 
         apiGroup.MapGet("/models", (ChatModelCatalog chatModelCatalog) =>
-            Results.Ok(new { models = chatModelCatalog.GetModels() }));
+        {
+            var models = chatModelCatalog.GetModels();
+            logger.LogInformation("Returning {ModelCount} chat models", models.Count);
+            return Results.Ok(new { models });
+        });
 
         apiGroup.MapPost("/sessions", async (CreateSessionRequest request, AgentService agentService, ChatModelCatalog chatModelCatalog) =>
         {
@@ -32,6 +38,7 @@ internal static class PersonalAgentEndpoints
             if (selectedModel is null)
                 return Results.BadRequest(new { error = $"Model '{request.ModelId}' is not available" });
 
+            logger.LogInformation("Creating session for profile {ProfileId} using model {ModelId}", request.ProfileId, selectedModel.Id);
             var created = await agentService.CreateSessionAsync(request.ProfileId, selectedModel.Id);
             return Results.Ok(new { sessionId = created.SessionId, modelId = created.ModelId, message = "Session created successfully" });
         });
@@ -44,6 +51,12 @@ internal static class PersonalAgentEndpoints
             if (beforeActivityAt is null != beforeSessionId is null)
                 return Results.BadRequest(new { error = "BeforeActivityAt and BeforeSessionId must be provided together" });
 
+            logger.LogInformation(
+                "Loading sessions for profile {ProfileId} with page size {PageSize}, beforeActivityAt {BeforeActivityAt}, beforeSessionId {BeforeSessionId}",
+                profileId,
+                pageSize ?? 20,
+                beforeActivityAt,
+                beforeSessionId);
             var page = await agentService.GetSessionsAsync(profileId, beforeActivityAt, beforeSessionId, pageSize ?? 20);
             return Results.Ok(page);
         });
@@ -57,6 +70,11 @@ internal static class PersonalAgentEndpoints
             if (request.Message.Length > PersonalAgentConstants.MaxMessageLength)
                 return Results.BadRequest(new { error = $"Message length exceeds {PersonalAgentConstants.MaxMessageLength} characters" });
 
+            logger.LogInformation(
+                "Sending message for session {SessionId} and profile {ProfileId} with length {MessageLength}",
+                sessionId,
+                request.ProfileId,
+                request.Message.Length);
             var response = await agentService.SendMessageAsync(sessionId, request.ProfileId, request.Message);
             return response is not null
                 ? Results.Ok(new { sessionId, response })
@@ -68,6 +86,7 @@ internal static class PersonalAgentEndpoints
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
 
+            logger.LogInformation("Loading transcript for session {SessionId} and profile {ProfileId}", sessionId, profileId);
             var conversation = await agentService.GetSessionMessagesAsync(sessionId, profileId);
             return conversation is not null
                 ? Results.Ok(new { sessionId = conversation.SessionId, modelId = conversation.ModelId, messages = conversation.Messages })

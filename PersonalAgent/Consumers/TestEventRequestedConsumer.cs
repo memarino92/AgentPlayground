@@ -4,7 +4,7 @@ using PersonalAgent.Services;
 
 namespace PersonalAgent.Consumers;
 
-internal class TestEventRequestedConsumer(AgentService agentService, ILogger<TestEventRequestedConsumer> logger) : IConsumer<TestEventRequested>
+internal class TestEventRequestedConsumer(AgentEventService agentEventService, ILogger<TestEventRequestedConsumer> logger) : IConsumer<TestEventRequested>
 {
     public async Task Consume(ConsumeContext<TestEventRequested> context)
     {
@@ -14,6 +14,6 @@ internal class TestEventRequestedConsumer(AgentService agentService, ILogger<Tes
             context.Message.Source,
             context.Message.RequestedBy);
 
-        await agentService.GenerateAndPublishTestMessageAsync(context.Message, context.CancellationToken);
+        await agentEventService.GenerateAndPublishTestMessageAsync(context.Message, context.CancellationToken);
     }
 }
