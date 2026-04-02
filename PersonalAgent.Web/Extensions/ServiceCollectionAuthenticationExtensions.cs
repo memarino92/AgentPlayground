@@ -1,3 +1,4 @@
+using AgentPlayground.Contracts.Configuration;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using System.Security.Claims;
@@ -18,10 +19,12 @@ internal static class ServiceCollectionAuthenticationExtensions
         .AddOAuth("GitHub", options =>
         {
             var authConfig = configuration.GetSection("Authentication:Schemes:GitHub");
-            var githubClientId = Environment.GetEnvironmentVariable("GITHUB_CLIENT_ID") ?? authConfig["ClientId"];
-            var githubClientSecret = Environment.GetEnvironmentVariable("GITHUB_CLIENT_SECRET") ?? authConfig["ClientSecret"];
-            var callbackPath = Environment.GetEnvironmentVariable("GITHUB_CALLBACK_PATH") ?? authConfig["CallbackPath"] ?? "/signin-github";
-            var allowedUsersString = Environment.GetEnvironmentVariable("GITHUB_ALLOWED_USERS") ?? authConfig["AllowedUsers"] ?? string.Empty;
+            var githubClientId = ConfigurationValueResolver.ResolveString(configuration, "GITHUB_CLIENT_ID", "Authentication:Schemes:GitHub:ClientId", authConfig["ClientId"]);
+            var githubClientSecret = ConfigurationValueResolver.ResolveString(configuration, "GITHUB_CLIENT_SECRET", "Authentication:Schemes:GitHub:ClientSecret", authConfig["ClientSecret"]);
+            var callbackPath = ConfigurationValueResolver.ResolveString(configuration, "GITHUB_CALLBACK_PATH", "Authentication:Schemes:GitHub:CallbackPath", authConfig["CallbackPath"])
+                ?? "/signin-github";
+            var allowedUsersString = ConfigurationValueResolver.ResolveString(configuration, "GITHUB_ALLOWED_USERS", "Authentication:Schemes:GitHub:AllowedUsers", authConfig["AllowedUsers"])
+                ?? string.Empty;
 
             options.ClientId = githubClientId ?? throw new InvalidOperationException("Missing GITHUB_CLIENT_ID or Authentication:Schemes:GitHub:ClientId");
             options.ClientSecret = githubClientSecret ?? throw new InvalidOperationException("Missing GITHUB_CLIENT_SECRET or Authentication:Schemes:GitHub:ClientSecret");

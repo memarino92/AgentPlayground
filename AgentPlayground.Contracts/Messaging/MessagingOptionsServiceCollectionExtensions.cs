@@ -1,3 +1,4 @@
+using AgentPlayground.Contracts.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -13,15 +14,12 @@ public static class MessagingOptionsServiceCollectionExtensions
                 configuration.GetSection(MessagingOptions.SectionName).Bind(opts);
 
                 opts.ConnectionString = ResolveConnectionString(configuration, opts.ConnectionString);
-                opts.Schema = Environment.GetEnvironmentVariable("MESSAGING_SCHEMA")
-                    ?? configuration[$"{MessagingOptions.SectionName}:Schema"]
-                    ?? opts.Schema;
-
-                var createInfrastructure = Environment.GetEnvironmentVariable("MESSAGING_CREATE_INFRASTRUCTURE")
-                    ?? configuration[$"{MessagingOptions.SectionName}:CreateInfrastructure"];
-
-                if (bool.TryParse(createInfrastructure, out var shouldCreateInfrastructure))
-                    opts.CreateInfrastructure = shouldCreateInfrastructure;
+                opts.Schema = ConfigurationValueResolver.ResolveString(configuration, "MESSAGING_SCHEMA", $"{MessagingOptions.SectionName}:Schema", opts.Schema) ?? opts.Schema;
+                opts.CreateInfrastructure = ConfigurationValueResolver.ResolveBool(
+                    configuration,
+                    "MESSAGING_CREATE_INFRASTRUCTURE",
+                    $"{MessagingOptions.SectionName}:CreateInfrastructure",
+                    opts.CreateInfrastructure);
             })
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.ConnectionString), $"{MessagingOptions.SectionName}:ConnectionString is required")
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.Schema), $"{MessagingOptions.SectionName}:Schema is required")
@@ -32,9 +30,11 @@ public static class MessagingOptionsServiceCollectionExtensions
 
     private static string ResolveConnectionString(IConfiguration configuration, string configuredValue)
     {
-        var connectionString = Environment.GetEnvironmentVariable("MESSAGING_CONNECTION_STRING")
-            ?? configuration[$"{MessagingOptions.SectionName}:ConnectionString"]
-            ?? configuredValue;
+        var connectionString = ConfigurationValueResolver.ResolveString(
+            configuration,
+            "MESSAGING_CONNECTION_STRING",
+            $"{MessagingOptions.SectionName}:ConnectionString",
+            configuredValue);
 
         return PostgresConnectionStringNormalizer.Normalize(connectionString)
             ?? PostgresConnectionStringNormalizer.Normalize(Environment.GetEnvironmentVariable("DATABASE_URL"))

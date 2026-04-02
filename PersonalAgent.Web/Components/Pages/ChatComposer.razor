@@ -1,0 +1,21 @@
+<div class="composer">
+    <input class="composer__input"
+           type="text"
+           value="@CurrentMessage"
+           @oninput="HandleInput"
+           @onkeydown="OnKeyDown"
+           disabled="@IsBusy"
+           placeholder="Type a message..." />
+    <button class="btn btn-primary" @onclick="OnSendMessage" disabled="@(IsBusy || string.IsNullOrWhiteSpace(CurrentMessage))">Send</button>
+</div>
+
+@code {
+    [Parameter] public required string CurrentMessage { get; set; }
+    [Parameter] public required bool IsBusy { get; set; }
+    [Parameter] public required EventCallback<string> CurrentMessageChanged { get; set; }
+    [Parameter] public required EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
+    [Parameter] public required EventCallback OnSendMessage { get; set; }
+
+    private Task HandleInput(ChangeEventArgs e) =>
+        CurrentMessageChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty);
+}

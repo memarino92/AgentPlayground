@@ -42,44 +42,14 @@
     }
 
     <div class="chat-layout">
-        <aside class="session-panel">
-            <div class="session-panel__header">
-                <h2>Past Sessions</h2>
-                @if (isLoadingSessions)
-                {
-                    <span class="session-panel__status">Loading...</span>
-                }
-            </div>
-
-            @if (sessions.Count == 0 && !isLoadingSessions)
-            {
-                <p class="session-panel__empty">No chats yet.</p>
-            }
-            else
-            {
-                <div class="session-picker">
-                    <label class="session-picker__label" for="session-select">Previous Sessions</label>
-                    <select id="session-select"
-                            class="session-picker__select"
-                            value="@GetSelectedSessionOption()"
-                            @onchange="HandleSessionSelectionChanged"
-                            disabled="@(isBusy || sessions.Count == 0)">
-                        <option value="">Select a prior session</option>
-                        @foreach (var session in sessions)
-                        {
-                            <option value="@session.SessionId">@FormatSessionOption(session)</option>
-                        }
-                    </select>
-                </div>
-
-                @if (hasMoreSessions)
-                {
-                    <button class="btn btn-secondary session-panel__more" @onclick="LoadMoreSessionsAsync" disabled="@(isBusy || isLoadingSessions)">
-                        Load More
-                    </button>
-                }
-            }
-        </aside>
+        <ChatSessionPanel Sessions="sessions"
+                          IsLoadingSessions="isLoadingSessions"
+                          IsBusy="isBusy"
+                          HasMoreSessions="hasMoreSessions"
+                          SelectedSessionOption="GetSelectedSessionOption()"
+                          FormatSessionOption="FormatSessionOption"
+                          OnSessionSelectionChanged="HandleSessionSelectionChanged"
+                          OnLoadMoreSessions="LoadMoreSessionsAsync" />
 
         <section class="chat-panel">
             @if (sessionId is null)
@@ -103,34 +73,13 @@
                     <button class="btn btn-secondary" @onclick="ResetSelectionAsync" disabled="@isBusy">Clear Selection</button>
                 </div>
 
-                <div class="message-list">
-                    @foreach (var msg in messages)
-                    {
-                        <div class="message-list__item message-list__item--@msg.Role">
-                            <strong>@msg.Role</strong>
-                            <p>@msg.Content</p>
-                        </div>
-                    }
+                <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" />
 
-                    @if (isSendingMessage)
-                    {
-                        <div class="message-list__item message-list__item--assistant">
-                            <strong>assistant</strong>
-                            <p><em>Thinking...</em></p>
-                        </div>
-                    }
-                </div>
-
-                <div class="composer">
-                    <input class="composer__input"
-                           type="text"
-                           @bind="currentMessage"
-                           @bind:event="oninput"
-                           @onkeydown="HandleKeyDown"
-                           disabled="@isBusy"
-                           placeholder="Type a message..." />
-                    <button class="btn btn-primary" @onclick="SendMessage" disabled="@(isBusy || string.IsNullOrWhiteSpace(currentMessage))">Send</button>
-                </div>
+                <ChatComposer CurrentMessage="currentMessage"
+                              CurrentMessageChanged="HandleCurrentMessageChanged"
+                              IsBusy="isBusy"
+                              OnKeyDown="HandleKeyDown"
+                              OnSendMessage="SendMessage" />
             }
         </section>
     </div>
@@ -311,9 +260,8 @@
         await LoadSelectedSessionHistoryAsync(selectedSessionId);
     }
 
-    private async Task HandleSessionSelectionChanged(ChangeEventArgs e)
+    private async Task HandleSessionSelectionChanged(string? selectedSessionId)
     {
-        var selectedSessionId = e.Value?.ToString();
         if (string.IsNullOrWhiteSpace(selectedSessionId))
         {
             await ResetSelectionAsync();
@@ -369,6 +317,12 @@
         {
             await SendMessage();
         }
+    }
+
+    private Task HandleCurrentMessageChanged(string value)
+    {
+        currentMessage = value;
+        return Task.CompletedTask;
     }
 
     private async Task RestoreSessionAsync()

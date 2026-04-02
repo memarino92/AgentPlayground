@@ -1,0 +1,22 @@
+<div class="message-list">
+    @foreach (var msg in Messages)
+    {
+        <div class="message-list__item message-list__item--@msg.Role">
+            <strong>@msg.Role</strong>
+            <p>@msg.Content</p>
+        </div>
+    }
+
+    @if (IsSendingMessage)
+    {
+        <div class="message-list__item message-list__item--assistant">
+            <strong>assistant</strong>
+            <p><em>Thinking...</em></p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public required List<ConversationMessage> Messages { get; set; }
+    [Parameter] public required bool IsSendingMessage { get; set; }
+}

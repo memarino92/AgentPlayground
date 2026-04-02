@@ -1,3 +1,4 @@
+using AgentPlayground.Contracts.Configuration;
 using AgentPlayground.Contracts.Messaging;
 using Microsoft.Extensions.Options;
 
@@ -13,31 +14,28 @@ internal static class AgentMemoryOptionsServiceCollectionExtensions
                 configuration.GetSection(AgentMemoryOptions.SectionName).Bind(opts);
 
                 opts.ConnectionString = ResolveConnectionString(configuration, opts.ConnectionString, messagingOptions.Value.ConnectionString);
-                opts.Schema = Environment.GetEnvironmentVariable("AGENT_MEMORY_SCHEMA")
-                    ?? configuration[$"{AgentMemoryOptions.SectionName}:Schema"]
-                    ?? opts.Schema;
-
-                var createInfrastructure = Environment.GetEnvironmentVariable("AGENT_MEMORY_CREATE_INFRASTRUCTURE")
-                    ?? configuration[$"{AgentMemoryOptions.SectionName}:CreateInfrastructure"];
-
-                if (bool.TryParse(createInfrastructure, out var shouldCreateInfrastructure))
-                    opts.CreateInfrastructure = shouldCreateInfrastructure;
-
-                var enableSemanticMemory = Environment.GetEnvironmentVariable("AGENT_MEMORY_ENABLE_SEMANTIC_MEMORY")
-                    ?? configuration[$"{AgentMemoryOptions.SectionName}:EnableSemanticMemory"];
-
-                if (bool.TryParse(enableSemanticMemory, out var shouldEnableSemanticMemory))
-                    opts.EnableSemanticMemory = shouldEnableSemanticMemory;
-
-                opts.EmbeddingModel = Environment.GetEnvironmentVariable("AGENT_MEMORY_EMBEDDING_MODEL")
-                    ?? configuration[$"{AgentMemoryOptions.SectionName}:EmbeddingModel"]
-                    ?? opts.EmbeddingModel;
-
-                var vectorDimensions = Environment.GetEnvironmentVariable("AGENT_MEMORY_VECTOR_DIMENSIONS")
-                    ?? configuration[$"{AgentMemoryOptions.SectionName}:VectorDimensions"];
-
-                if (int.TryParse(vectorDimensions, out var parsedVectorDimensions) && parsedVectorDimensions > 0)
-                    opts.VectorDimensions = parsedVectorDimensions;
+                opts.Schema = ConfigurationValueResolver.ResolveString(configuration, "AGENT_MEMORY_SCHEMA", $"{AgentMemoryOptions.SectionName}:Schema", opts.Schema) ?? opts.Schema;
+                opts.CreateInfrastructure = ConfigurationValueResolver.ResolveBool(
+                    configuration,
+                    "AGENT_MEMORY_CREATE_INFRASTRUCTURE",
+                    $"{AgentMemoryOptions.SectionName}:CreateInfrastructure",
+                    opts.CreateInfrastructure);
+                opts.EnableSemanticMemory = ConfigurationValueResolver.ResolveBool(
+                    configuration,
+                    "AGENT_MEMORY_ENABLE_SEMANTIC_MEMORY",
+                    $"{AgentMemoryOptions.SectionName}:EnableSemanticMemory",
+                    opts.EnableSemanticMemory);
+                opts.EmbeddingModel = ConfigurationValueResolver.ResolveString(
+                    configuration,
+                    "AGENT_MEMORY_EMBEDDING_MODEL",
+                    $"{AgentMemoryOptions.SectionName}:EmbeddingModel",
+                    opts.EmbeddingModel) ?? opts.EmbeddingModel;
+                opts.VectorDimensions = ConfigurationValueResolver.ResolveInt(
+                    configuration,
+                    "AGENT_MEMORY_VECTOR_DIMENSIONS",
+                    $"{AgentMemoryOptions.SectionName}:VectorDimensions",
+                    opts.VectorDimensions,
+                    value => value > 0);
             })
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.ConnectionString), $"{AgentMemoryOptions.SectionName}:ConnectionString is required")
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.Schema), $"{AgentMemoryOptions.SectionName}:Schema is required")
@@ -52,9 +50,11 @@ internal static class AgentMemoryOptionsServiceCollectionExtensions
 
     private static string ResolveConnectionString(IConfiguration configuration, string configuredValue, string messagingConnectionString)
     {
-        var connectionString = Environment.GetEnvironmentVariable("AGENT_MEMORY_CONNECTION_STRING")
-            ?? configuration[$"{AgentMemoryOptions.SectionName}:ConnectionString"]
-            ?? configuredValue;
+        var connectionString = ConfigurationValueResolver.ResolveString(
+            configuration,
+            "AGENT_MEMORY_CONNECTION_STRING",
+            $"{AgentMemoryOptions.SectionName}:ConnectionString",
+            configuredValue);
 
         return PostgresConnectionStringNormalizer.Normalize(connectionString)
             ?? PostgresConnectionStringNormalizer.Normalize(Environment.GetEnvironmentVariable("DATABASE_URL"))

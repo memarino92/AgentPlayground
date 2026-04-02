@@ -57,7 +57,7 @@
   - If not set or empty, all GitHub users can log in
   - Case-insensitive
 
-- **`PERSONAL_AGENT_INTERNAL_API_KEY`** - Internal API key forwarded to the PersonalAgent API
+- **`INTERNAL_API_KEY`** - Internal API key forwarded to the PersonalAgent API
   - Required only if the API sets `INTERNAL_API_KEY`
 
 - **`ASPNETCORE_Environment`** - Runtime environment (Development/Production)
@@ -69,15 +69,7 @@
 
 ### API Endpoint Resolution
 
-The application resolves the PersonalAgent API in this order:
-
-```csharp
-Environment.GetEnvironmentVariable("PERSONAL_AGENT_API_BASE_URL")
-    ?? builder.Configuration["services:personalagent-api:http:0"]
-    ?? "http://localhost:5100";
-```
-
-This keeps local Aspire-style discovery working while making Railway deployment explicit.
+The application resolves the PersonalAgent API from `PERSONAL_AGENT_API_BASE_URL`, then `PersonalAgentApi:BaseUrl`, then falls back to `http://localhost:5100`.
 
 ## Building and Running
 
@@ -128,7 +120,7 @@ docker run -d \
 
 - `GITHUB_ALLOWED_USERS` - Restrict access to specific users
 - `PERSONAL_AGENT_API_BASE_URL` - API endpoint (defaults to localhost:5100)
-- `PERSONAL_AGENT_INTERNAL_API_KEY` - API key to forward to the backend API
+- `INTERNAL_API_KEY` - API key to forward to the backend API
 
 ### Railway Deployment
 
@@ -148,7 +140,7 @@ The included `Dockerfile` is optimized for Railway deployment:
     - `GITHUB_CLIENT_SECRET` = your GitHub OAuth Client Secret
     - `GITHUB_ALLOWED_USERS` = your GitHub username (optional, restrict access)
     - `PERSONAL_AGENT_API_BASE_URL` = PersonalAgent API URL on Railway
-    - `PERSONAL_AGENT_INTERNAL_API_KEY` = same value as the API's `INTERNAL_API_KEY` when enabled
+    - `INTERNAL_API_KEY` = same value as the API's `INTERNAL_API_KEY` when enabled
 4. Deploy
 
 See [GitHub Auth Setup](./GITHUB_AUTH_SETUP.md) for detailed GitHub OAuth app creation instructions.

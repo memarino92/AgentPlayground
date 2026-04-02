@@ -569,14 +569,14 @@ Upsert-Variables -ProjectIdValue $project.id -EnvironmentId $environmentId -Vari
 
 Upsert-Variables -ProjectIdValue $project.id -EnvironmentId $environmentId -ServiceId $serviceMap["personalagent-web"] -Variables @{
     PERSONAL_AGENT_API_BASE_URL = "http://`${{personalagent-api.RAILWAY_PRIVATE_DOMAIN}}:`${{personalagent-api.PORT}}"
-    PERSONAL_AGENT_INTERNAL_API_KEY = "`${{personalagent-api.INTERNAL_API_KEY}}"
+    INTERNAL_API_KEY = "`${{personalagent-api.INTERNAL_API_KEY}}"
 }
 
 $apiSecrets = Get-SecretVariablesFromMappings -Mappings @(
     @{
         EnvironmentVariableName = "OPENAI_API_KEY"
         UserSecretCandidates = @(
-            @{ ProjectPath = $personalAgentProjectPath; SecretName = "OpenApiKey" }
+            @{ ProjectPath = $personalAgentProjectPath; SecretName = "OpenAI:ApiKey" }
         )
     },
     @{

@@ -1,3 +1,4 @@
+using AgentPlayground.Contracts.Configuration;
 using AgentPlayground.Contracts.Messaging;
 using AgentPlayground.Contracts.Messaging.Events;
 using MassTransit;
@@ -35,11 +36,9 @@ internal static class ServiceCollectionExtensions
         services.AddOptions<ApiKeyOptions>()
             .Configure(opts =>
             {
-                opts.OpenAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-                    ?? configuration["OpenApiKey"]
+                opts.OpenAiKey = ConfigurationValueResolver.ResolveString(configuration, "OPENAI_API_KEY", "OpenAI:ApiKey")
                     ?? string.Empty;
-                opts.InternalApiKey = Environment.GetEnvironmentVariable("INTERNAL_API_KEY")
-                    ?? configuration["Security:InternalApiKey"]
+                opts.InternalApiKey = ConfigurationValueResolver.ResolveString(configuration, "INTERNAL_API_KEY", "Security:InternalApiKey")
                     ?? string.Empty;
             });
 

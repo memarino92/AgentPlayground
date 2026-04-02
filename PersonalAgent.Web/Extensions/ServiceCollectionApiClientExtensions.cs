@@ -1,3 +1,4 @@
+using AgentPlayground.Contracts.Configuration;
 using PersonalAgent.Web.Configuration;
 using PersonalAgent.Web.Services;
 using Microsoft.Extensions.Options;
@@ -13,16 +14,19 @@ internal static class ServiceCollectionApiClientExtensions
             {
                 configuration.GetSection(PersonalAgentApiOptions.SectionName).Bind(opts);
 
-                opts.BaseUrl = FirstNonEmpty(
-                    Environment.GetEnvironmentVariable("PERSONAL_AGENT_API_BASE_URL"),
-                    configuration["services:personalagent-api:http:0"],
-                    opts.BaseUrl);
+                opts.BaseUrl = ConfigurationValueResolver.ResolveString(
+                    configuration,
+                    "PERSONAL_AGENT_API_BASE_URL",
+                    $"{PersonalAgentApiOptions.SectionName}:BaseUrl",
+                    opts.BaseUrl)
+                    ?? opts.BaseUrl;
 
-                opts.InternalApiKey = FirstNonEmpty(
-                    Environment.GetEnvironmentVariable("PERSONAL_AGENT_INTERNAL_API_KEY"),
-                    configuration[$"{PersonalAgentApiOptions.SectionName}:InternalApiKey"],
-                    configuration["Security:InternalApiKey"],
-                    opts.InternalApiKey);
+                opts.InternalApiKey = ConfigurationValueResolver.ResolveString(
+                    configuration,
+                    "INTERNAL_API_KEY",
+                    $"{PersonalAgentApiOptions.SectionName}:InternalApiKey",
+                    opts.InternalApiKey)
+                    ?? opts.InternalApiKey;
             })
             .Validate(opts => Uri.TryCreate(opts.BaseUrl, UriKind.Absolute, out _), $"{PersonalAgentApiOptions.SectionName}:BaseUrl must be an absolute URI")
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.InternalApiKey), $"{PersonalAgentApiOptions.SectionName}:InternalApiKey is required")
@@ -41,7 +45,4 @@ internal static class ServiceCollectionApiClientExtensions
 
         return services;
     }
-
-    private static string FirstNonEmpty(params string?[] values) =>
-        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
 }

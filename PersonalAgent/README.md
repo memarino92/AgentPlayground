@@ -180,7 +180,7 @@ Store in user secrets (never commit to version control):
 ```bash
 cd PersonalAgent
 dotnet user-secrets init
-dotnet user-secrets set OpenApiKey "your-openai-api-key"
+dotnet user-secrets set "OpenAI:ApiKey" "your-openai-api-key"
 ```
 
 Verify setup:

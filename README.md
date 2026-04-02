@@ -100,7 +100,7 @@ The local PostgreSQL container now defaults to `pgvector/pgvector:0.8.2-pg18-tri
 2. Configure your OpenAI key for [`PersonalAgent`](/C:/Users/Michael/projects/AgentPlayground/PersonalAgent/PersonalAgent.csproj):
 
 ```powershell
-dotnet user-secrets set "OpenApiKey" "your-openai-api-key" --project PersonalAgent
+dotnet user-secrets set "OpenAI:ApiKey" "your-openai-api-key" --project PersonalAgent
 ```
 
 3. Start PostgreSQL:
@@ -115,7 +115,7 @@ pwsh -NoProfile -File .\scripts\start-postgres.ps1
 dotnet run --project PersonalAgent
 ```
 
-The agent requires both `OpenApiKey` and `Messaging:ConnectionString` in user secrets.
+The agent requires both `OpenAI:ApiKey` and `Messaging:ConnectionString` in user secrets.
 If you are enabling semantic memory, recreate the local container after pulling the new image so the `vector` extension is available.
 
 5. Start the worker:
@@ -185,7 +185,7 @@ The script reads `.env.railway` automatically. You can still override anything w
 
 Deployment secrets can also be sourced from local user secrets automatically. The Railway scripts currently fall back to:
 
-- `PersonalAgent` user secrets for `OpenApiKey` and `Security:InternalApiKey`
+- `PersonalAgent` user secrets for `OpenAI:ApiKey` and `Security:InternalApiKey`
 - `PersonalAgent.Web` user secrets for `Authentication:Schemes:GitHub:ClientId`, `ClientSecret`, `AllowedUsers`, and `CallbackPath`
 
 If you have not created an internal API key yet, run [`set-internal-api-key.ps1`](/C:/Users/Michael/projects/AgentPlayground/scripts/set-internal-api-key.ps1). It generates a strong key, stores it in `PersonalAgent` user secrets, and writes the same value to `.env.railway`.
@@ -246,7 +246,7 @@ GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
 GITHUB_ALLOWED_USERS=your-github-login
 PERSONAL_AGENT_API_BASE_URL=http://${{personalagent-api.RAILWAY_PRIVATE_DOMAIN}}:${{personalagent-api.PORT}}
-PERSONAL_AGENT_INTERNAL_API_KEY=same-value-as-api-internal-key
+INTERNAL_API_KEY=same-value-as-api-internal-key
 ```
 
 GitHub OAuth should use these URLs:
@@ -266,7 +266,7 @@ The web app now trusts forwarded host/protocol headers so GitHub callback URLs a
 
 - Keep each app as a single instance unless you replace the API's in-memory session storage.
 - The web app and API both bind Railway's `PORT` automatically.
-- If you enable `INTERNAL_API_KEY` on the API, set the same value as `PERSONAL_AGENT_INTERNAL_API_KEY` on the web service.
+- If you enable `INTERNAL_API_KEY` on the API, set the same value on the web service.
 
 ### Agent Event Tool Pattern
 
@@ -313,7 +313,7 @@ dotnet user-secrets set "OpenApiKey" "your-api-key-here" --project MyFirstAgent
 For PersonalAgent:
 
 ```bash
-dotnet user-secrets set "OpenApiKey" "your-api-key-here" --project PersonalAgent
+dotnet user-secrets set "OpenAI:ApiKey" "your-api-key-here" --project PersonalAgent
 ```
 
 ### 5. Run a Project

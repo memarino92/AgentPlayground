@@ -1,0 +1,52 @@
+<aside class="session-panel">
+    <div class="session-panel__header">
+        <h2>Past Sessions</h2>
+        @if (IsLoadingSessions)
+        {
+            <span class="session-panel__status">Loading...</span>
+        }
+    </div>
+
+    @if (Sessions.Count == 0 && !IsLoadingSessions)
+    {
+        <p class="session-panel__empty">No chats yet.</p>
+    }
+    else
+    {
+        <div class="session-picker">
+            <label class="session-picker__label" for="session-select">Previous Sessions</label>
+            <select id="session-select"
+                    class="session-picker__select"
+                    value="@SelectedSessionOption"
+                    @onchange="HandleSelectionChanged"
+                    disabled="@(IsBusy || Sessions.Count == 0)">
+                <option value="">Select a prior session</option>
+                @foreach (var session in Sessions)
+                {
+                    <option value="@session.SessionId">@FormatSessionOption(session)</option>
+                }
+            </select>
+        </div>
+
+        @if (HasMoreSessions)
+        {
+            <button class="btn btn-secondary session-panel__more" @onclick="OnLoadMoreSessions" disabled="@(IsBusy || IsLoadingSessions)">
+                Load More
+            </button>
+        }
+    }
+</aside>
+
+@code {
+    [Parameter] public required List<SessionListItem> Sessions { get; set; }
+    [Parameter] public required bool IsLoadingSessions { get; set; }
+    [Parameter] public required bool IsBusy { get; set; }
+    [Parameter] public required bool HasMoreSessions { get; set; }
+    [Parameter] public required string SelectedSessionOption { get; set; }
+    [Parameter] public required Func<SessionListItem, string> FormatSessionOption { get; set; }
+    [Parameter] public required EventCallback<string?> OnSessionSelectionChanged { get; set; }
+    [Parameter] public required EventCallback OnLoadMoreSessions { get; set; }
+
+    private Task HandleSelectionChanged(ChangeEventArgs e) =>
+        OnSessionSelectionChanged.InvokeAsync(e.Value?.ToString());
+}

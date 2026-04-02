@@ -93,7 +93,7 @@ $secretMappings = @(
         Description = "OpenAI API key for PersonalAgent API"
         Required = $true
         UserSecretCandidates = @(
-            @{ ProjectPath = $personalAgentProjectPath; SecretName = "OpenApiKey"; Source = "PersonalAgent user secrets" }
+            @{ ProjectPath = $personalAgentProjectPath; SecretName = "OpenAI:ApiKey"; Source = "PersonalAgent user secrets" }
         )
     },
     @{

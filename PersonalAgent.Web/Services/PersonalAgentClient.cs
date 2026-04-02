@@ -94,11 +94,11 @@ internal class PersonalAgentApiException(string operation, HttpStatusCode status
     public string ResponseBody { get; } = responseBody;
 }
 
-internal record SessionResponse(string SessionId, string ModelId, string Message);
-internal record ModelCatalogResponse(List<AvailableChatModelResponse> Models);
-internal record MessageResponse(string SessionId, string Response);
-internal record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages);
-internal record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
-internal record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
-internal record ConversationMessage(string Role, string Content);
-internal record AvailableChatModelResponse(string Id, string DisplayName, bool IsDefault);
+public record SessionResponse(string SessionId, string ModelId, string Message);
+public record ModelCatalogResponse(List<AvailableChatModelResponse> Models);
+public record MessageResponse(string SessionId, string Response);
+public record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages);
+public record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
+public record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
+public record ConversationMessage(string Role, string Content);
+public record AvailableChatModelResponse(string Id, string DisplayName, bool IsDefault);
