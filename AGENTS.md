@@ -166,3 +166,11 @@ AgentPlayground/
 - Do not inject scoped `IPublishEndpoint` into singleton services. Use `IBus` for singleton-safe publishing.
 - When the agent needs to publish a bus event, expose a tool with `AIFunctionFactory.Create(...)` and call `IBus.Publish(...)` inside that tool implementation.
 - Keep the consumer thin: log receipt, call the agent service, and let the agent publish through the tool rather than publishing directly inside the consumer.
+
+## Semantic Memory & RAG Pattern
+
+- Use `pgvector` for semantic search and Retrieval-Augmented Generation (RAG).
+- Leverage `Microsoft.Extensions.AI` (`IEmbeddingGenerator`) or `OpenAI.Embeddings.EmbeddingClient` to generate vectors.
+- Ensure the `vector` extension is created (`CREATE EXTENSION IF NOT EXISTS vector;`) before attempting to insert or query vector data.
+- When performing cosine similarity searches, use the `ORDER BY embedding <=> @query_embedding` operator in PostgreSQL.
+- To prevent duplicate vector generation, calculate a deterministic hash (e.g. MD5 of filename+date) to check if content has changed before regenerating embeddings.

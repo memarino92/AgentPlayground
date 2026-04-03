@@ -54,6 +54,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IAgentEmbeddingService, OpenAiAgentEmbeddingService>();
         services.AddSingleton<SemanticMemoryService>();
         services.AddSingleton<AgentEventService>();
+        services.AddSingleton<WorkJournalService>();
         services.AddSingleton<AgentChatService>();
         services.AddSingleton<AgentService>();
         services.AddMassTransit(x =>

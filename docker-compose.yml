@@ -11,7 +11,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - agentplayground-postgres18-data:/var/lib/postgresql
+      - agentplayground-postgres18-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentplayground -d agentplayground"]
       interval: 10s

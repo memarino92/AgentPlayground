@@ -23,5 +23,9 @@
   <ItemGroup>
     <PackageReference Include="MassTransit" />
     <PackageReference Include="MassTransit.SqlTransport.PostgreSQL" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="OpenAI" />
+    <PackageReference Include="Pgvector" />
   </ItemGroup>
 </Project>

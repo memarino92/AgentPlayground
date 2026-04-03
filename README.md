@@ -73,6 +73,8 @@ A complete multi-service personal assistant system demonstrating:
 
 - Microsoft Agent Framework integration with OpenAI (gpt-4o-mini)
 - MassTransit integration using PostgreSQL SQL transport
+- **Work Journal RAG**: Ingests private GitHub markdown journals into a pgvector database for semantic search
+- **Background Jobs**: Weekly scheduled background sync and on-demand synchronization via MassTransit worker
 - Shared Postgres-backed event bus between web, agent, and worker
 - Agent tool calling to publish follow-up bus messages
 - Security hardening: CORS, rate limiting, internal API key validation
@@ -124,7 +126,13 @@ If you are enabling semantic memory, recreate the local container after pulling 
 dotnet run --project PersonalAgent.Worker
 ```
 
-The worker requires `Messaging:ConnectionString` in user secrets.
+The worker requires `Messaging:ConnectionString` in user secrets, and also optionally requires GitHub API configuration if you want to use the RAG background sync feature:
+
+```powershell
+dotnet user-secrets set "GitHub:PersonalAccessToken" "your-github-pat" --project PersonalAgent.Worker
+dotnet user-secrets set "GitHub:RepoOwner" "your-username" --project PersonalAgent.Worker
+dotnet user-secrets set "GitHub:RepoName" "your-repo" --project PersonalAgent.Worker
+```
 
 6. Start the web app:
 
@@ -320,7 +328,15 @@ The web app now trusts forwarded host/protocol headers so GitHub callback URLs a
 
 ### Worker Variables
 
-`personalagent-worker` only needs the shared messaging variables.
+Set these on `personalagent-worker`:
+
+```text
+GITHUB_PAT=...
+GITHUB_OWNER=...
+GITHUB_REPO=...
+GITHUB_BRANCH=main
+GITHUB_JOURNAL_PATH=journal
+```
 
 ### Notes
 
