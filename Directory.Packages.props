@@ -13,7 +13,9 @@
     <!-- Messaging -->
     <PackageVersion Include="MassTransit" Version="8.5.8" />
     <PackageVersion Include="MassTransit.SqlTransport.PostgreSQL" Version="8.5.8" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.4.1" />
     <PackageVersion Include="Npgsql" Version="8.0.7" />
+    <PackageVersion Include="OpenAI" Version="2.9.1" />
     <PackageVersion Include="Pgvector" Version="0.3.2" />
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />

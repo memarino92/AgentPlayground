@@ -1,0 +1,84 @@
+name: agentplayground
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg18-trixie
+    container_name: agentplayground-postgres
+    environment:
+      POSTGRES_DB: agentplayground
+      POSTGRES_USER: agentplayground
+      POSTGRES_PASSWORD: agentplayground
+    ports:
+      - "5432:5432"
+    volumes:
+      - agentplayground-postgres18-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentplayground -d agentplayground"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  personalagent-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.personalagent-api
+    env_file:
+      - path: .env.compose
+        required: false
+    environment:
+      PORT: "5100"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-dev-internal-api-key}"
+      MESSAGING_CONNECTION_STRING: "Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground"
+      AGENT_MEMORY_CONNECTION_STRING: "${AGENT_MEMORY_CONNECTION_STRING:-Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground}"
+      MESSAGING_SCHEMA: "transport"
+      ALLOWED_ORIGINS: "http://localhost:5000"
+    ports:
+      - "5100:5100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  personalagent-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.personalagent-worker
+    env_file:
+      - path: .env.compose
+        required: false
+    environment:
+      MESSAGING_CONNECTION_STRING: "Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground"
+      MESSAGING_SCHEMA: "transport"
+    command: ["sh", "-c", "sleep 15 && dotnet PersonalAgent.Worker.dll"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      personalagent-api:
+        condition: service_started
+      personalagent-web:
+        condition: service_started
+    restart: on-failure:5
+
+  personalagent-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.personalagent-web
+    env_file:
+      - path: .env.compose
+        required: false
+    environment:
+      PORT: "5000"
+      PERSONAL_AGENT_API_BASE_URL: "http://personalagent-api:5100"
+      MESSAGING_CONNECTION_STRING: "Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground"
+      MESSAGING_SCHEMA: "transport"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-dev-internal-api-key}"
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      personalagent-api:
+        condition: service_started
+    restart: on-failure:5
+
+volumes:
+  agentplayground-postgres18-data:

@@ -21,6 +21,7 @@ internal class AgentChatService
     private readonly SemanticMemoryService _semanticMemoryService;
     private readonly OpenAIClient _openAiClient;
     private readonly AgentEventService _eventService;
+    private readonly WorkJournalService _workJournalService;
     private readonly ILogger<AgentChatService> _logger;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
 
@@ -32,6 +33,7 @@ internal class AgentChatService
         IAgentSessionStore sessionStore,
         SemanticMemoryService semanticMemoryService,
         AgentEventService eventService,
+        WorkJournalService workJournalService,
         ILogger<AgentChatService> logger)
     {
         var apiKey = apiKeyOptions.Value.OpenAiKey;
@@ -45,6 +47,7 @@ internal class AgentChatService
         _sessionStore = sessionStore;
         _semanticMemoryService = semanticMemoryService;
         _eventService = eventService;
+        _workJournalService = workJournalService;
         _logger = logger;
 
         var defaultModelId = _chatModelCatalog.GetDefaultModel().Id;
@@ -179,6 +182,10 @@ internal class AgentChatService
     {
         var publishTool = AIFunctionFactory.Create(_eventService.PublishGeneratedMessageToolAsync, "publish_generated_test_message",
             "Publish a generated test message to the shared MassTransit bus.");
+        var syncJournalTool = AIFunctionFactory.Create(_workJournalService.SyncWorkJournalAsync, "sync_work_journal",
+            "Trigger a background process to sync the work journal from GitHub. This syncs markdown files and prepares them for semantic search.");
+        var searchJournalTool = AIFunctionFactory.Create(_workJournalService.SearchWorkJournalAsync, "search_work_journal",
+            "Search the work journal for answers to user questions using RAG (Retrieval-Augmented Generation). Use this tool whenever the user asks about past work, journal entries, or questions like 'when did I work on...' or 'who did I help'.");
 
         return _openAiClient
             .GetChatClient(modelId)
@@ -191,10 +198,13 @@ internal class AgentChatService
                     When asked to respond to a bus test event, you must call the publish_generated_test_message tool exactly once with a concise generated message describing that you received the event.
                     The tool arguments must include a valid correlationId GUID string copied from context.
                     This does not mean that you should respond to every user message with a bus event follow-up, only when you are specifically asked to generate a follow-up message for a bus event.
+                    
+                    When asked about past work, past events, or anything related to the user's work journal, use the search_work_journal tool to find relevant information.
+                    If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
                     """,
                 name: "PersonalAgent",
-                description: "Personal agent that can publish follow-up messages to the shared event bus.",
-                tools: [publishTool],
+                description: "Personal agent that can publish follow-up messages to the shared event bus and query the user's work journal.",
+                tools: [publishTool, syncJournalTool, searchJournalTool],
                 loggerFactory: _loggerFactory,
                 services: _serviceProvider);
     }

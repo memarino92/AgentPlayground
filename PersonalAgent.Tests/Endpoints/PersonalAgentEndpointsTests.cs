@@ -147,12 +147,18 @@ public class PersonalAgentEndpointsTests
             Models = [new ChatModelOption { Id = "gpt-4o-mini", DisplayName = "GPT-4o mini", IsDefault = true }]
         }));
 
+        builder.Services.AddSingleton<IOptions<MassTransit.SqlTransportOptions>>(Options.Create(new MassTransit.SqlTransportOptions
+        {
+            ConnectionString = "Host=localhost;Database=test;Username=postgres;Password=postgres"
+        }));
+
         builder.Services.AddSingleton(ChatModelCatalogFactory);
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
         builder.Services.AddSingleton<IAgentSemanticMemoryStore>(sp => (InMemoryAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         builder.Services.AddSingleton<IAgentEmbeddingService, TestEmbeddingService>();
         builder.Services.AddSingleton<SemanticMemoryService>();
         builder.Services.AddSingleton<AgentEventService>();
+        builder.Services.AddSingleton<WorkJournalService>();
         builder.Services.AddSingleton<AgentChatService>();
         builder.Services.AddSingleton<AgentService>();
         builder.Services.AddSingleton(_ => Mock.Of<IBus>());

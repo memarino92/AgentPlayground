@@ -1,10 +1,17 @@
+using AgentPlayground.Contracts.Commands;
 using AgentPlayground.Contracts.Messaging;
 using AgentPlayground.Contracts.Messaging.Events;
 using MassTransit;
 using Microsoft.Extensions.Options;
+using PersonalAgent.Worker.Configuration;
 using PersonalAgent.Worker.Consumers;
+using PersonalAgent.Worker.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddHostedService<WeeklyWorkJournalSyncService>();
+
+builder.Services.AddGitHubOptions(builder.Configuration);
 
 builder.Services.AddMessagingOptions(builder.Configuration);
 builder.Services.AddOptions<SqlTransportOptions>()
@@ -34,6 +41,13 @@ builder.Services.AddMassTransit(x =>
         {
             e.Name = "personal-agent-worker-agent-generated-test-message";
             e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<AgentGeneratedTestMessage>(_ => { }));
+        });
+        
+    x.AddConsumer<SyncWorkJournalConsumer>()
+        .Endpoint(e =>
+        {
+            e.Name = "personal-agent-worker-sync-work-journal";
+            e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<SyncWorkJournalCommand>(_ => { }));
         });
 
     x.ConfigureSharedPostgresTransport();
