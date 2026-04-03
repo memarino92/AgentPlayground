@@ -48,9 +48,10 @@ public class SyncWorkJournalConsumer(
         using var document = JsonDocument.Parse(contentsJson);
         
         int entriesSynced = 0;
-        var dataSourceBuilder = new NpgsqlDataSourceBuilder(sqlOptions.Value.ConnectionString);
-        dataSourceBuilder.UseVector();
-        await using var dataSource = dataSourceBuilder.Build();
+        var connectionString = sqlOptions.Value.ConnectionString;
+        if (string.IsNullOrWhiteSpace(connectionString)) throw new InvalidOperationException("SqlTransportOptions:ConnectionString is required");
+
+        await using var dataSource = CreateVectorDataSource(connectionString);
         await using var connection = await dataSource.OpenConnectionAsync(context.CancellationToken);
         
         // Ensure pgvector is loaded
@@ -190,5 +191,12 @@ public class SyncWorkJournalConsumer(
         }
 
         return entries;
+    }
+
+    internal static NpgsqlDataSource CreateVectorDataSource(string connectionString)
+    {
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+        dataSourceBuilder.UseVector();
+        return dataSourceBuilder.Build();
     }
 }
