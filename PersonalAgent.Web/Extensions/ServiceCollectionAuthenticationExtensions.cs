@@ -97,6 +97,11 @@ internal static class ServiceCollectionAuthenticationExtensions
 
         services.Configure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, options =>
         {
+            options.ExpireTimeSpan = TimeSpan.FromDays(30);
+            options.SlidingExpiration = true;
+            options.Cookie.MaxAge = options.ExpireTimeSpan;
+            options.Cookie.HttpOnly = true;
+            options.Cookie.IsEssential = true;
             options.Cookie.SameSite = SameSiteMode.Lax;
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         });
