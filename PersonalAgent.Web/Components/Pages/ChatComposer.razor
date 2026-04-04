@@ -6,16 +6,30 @@
            @onkeydown="OnKeyDown"
            disabled="@IsBusy"
            placeholder="Type a message..." />
-    <button class="btn btn-primary" @onclick="OnSendMessage" disabled="@(IsBusy || string.IsNullOrWhiteSpace(CurrentMessage))">Send</button>
+    <select class="composer__model"
+            value="@SelectedModelId"
+            @onchange="HandleModelChanged"
+            disabled="@(IsBusy || Models.Count == 0)">
+        @foreach (var model in Models)
+        {
+            <option value="@model.Id">@model.DisplayName</option>
+        }
+    </select>
+    <button class="btn btn-primary composer__send" @onclick="OnSendMessage" disabled="@(IsBusy || string.IsNullOrWhiteSpace(CurrentMessage))">Send</button>
 </div>
 
 @code {
     [Parameter] public required string CurrentMessage { get; set; }
+    [Parameter] public required string SelectedModelId { get; set; }
+    [Parameter] public required List<AvailableChatModelResponse> Models { get; set; }
     [Parameter] public required bool IsBusy { get; set; }
     [Parameter] public required EventCallback<string> CurrentMessageChanged { get; set; }
+    [Parameter] public required EventCallback<string> SelectedModelIdChanged { get; set; }
     [Parameter] public required EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
     [Parameter] public required EventCallback OnSendMessage { get; set; }
 
     private Task HandleInput(ChangeEventArgs e) =>
         CurrentMessageChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty);
+
+    private Task HandleModelChanged(ChangeEventArgs e) => SelectedModelIdChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty);
 }

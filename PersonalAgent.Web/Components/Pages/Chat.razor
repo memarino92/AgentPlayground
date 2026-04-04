@@ -1,55 +1,32 @@
 @page "/"
 @using static Microsoft.AspNetCore.Components.Web.RenderMode
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Microsoft.AspNetCore.WebUtilities
 @using System.Security.Claims
+@implements IDisposable
 @rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ProtectedSessionStorage SessionStorage
 @inject PersonalAgentClient ApiClient
 @inject TestEventPublisher TestEventPublisher
+@inject NavigationManager NavigationManager
 
 <PageTitle>PersonalAgent - Chat</PageTitle>
 
 <div class="chat-page">
-    <div class="chat-page__header">
-        <div>
-            <h1>PersonalAgent Chat</h1>
-            <p class="chat-page__subtitle">Continue any prior conversation or start a new one.</p>
-        </div>
-        <div class="chat-page__actions">
-            <label>
-                Model
-                <select @bind="selectedModelId" disabled="@(isBusy || availableModels.Count == 0)">
-                    @foreach (var model in availableModels)
-                    {
-                        <option value="@model.Id">@model.DisplayName</option>
-                    }
-                </select>
-            </label>
-            <button class="btn btn-secondary" @onclick="PublishTestEvent" disabled="@isPublishingTestEvent">Fire Test Event</button>
-            <button class="btn btn-primary" @onclick="CreateSession" disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">Start New Chat</button>
-        </div>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(testEventStatus))
-    {
-        <p class="status-message">@testEventStatus</p>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <p class="error-message">@errorMessage</p>
-    }
-
-    <div class="chat-layout">
-        <ChatSessionPanel Sessions="sessions"
-                          IsLoadingSessions="isLoadingSessions"
-                          IsBusy="isBusy"
-                          HasMoreSessions="hasMoreSessions"
-                          SelectedSessionOption="GetSelectedSessionOption()"
-                          FormatSessionOption="FormatSessionOption"
-                          OnSessionSelectionChanged="HandleSessionSelectionChanged"
-                          OnLoadMoreSessions="LoadMoreSessionsAsync" />
+    <div class="chat-shell">
+        @if (isSessionDrawerOpen)
+        {
+            <ChatSessionPanel Sessions="sessions"
+                              IsLoadingSessions="isLoadingSessions"
+                              IsBusy="isBusy"
+                              HasMoreSessions="hasMoreSessions"
+                              SelectedSessionOption="@GetSelectedSessionOption()"
+                              FormatSessionOption="FormatSessionOption"
+                              OnSessionSelectionChanged="HandleSessionSelectionChanged"
+                              OnLoadMoreSessions="LoadMoreSessionsAsync"
+                              OnCloseDrawer="CloseSessionDrawer" />
+        }
 
         <section class="chat-panel">
             @if (sessionId is null)
@@ -57,29 +34,32 @@
                 <div class="chat-panel__empty">
                     <h2>No Session Selected</h2>
                     <p>Select a prior session or start a new chat.</p>
+                    <button class="btn btn-primary" @onclick="CreateSession" disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">New chat</button>
                 </div>
             }
             else
             {
-                <div class="chat-panel__header">
-                    <div>
-                        <h2>Session</h2>
-                        <p class="chat-panel__session-id">@sessionId</p>
-                        @if (!string.IsNullOrWhiteSpace(activeModelDisplayName))
-                        {
-                            <p class="chat-panel__session-id">Model: @activeModelDisplayName</p>
-                        }
-                    </div>
-                    <button class="btn btn-secondary" @onclick="ResetSelectionAsync" disabled="@isBusy">Clear Selection</button>
-                </div>
-
                 <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" />
 
-                <ChatComposer CurrentMessage="currentMessage"
+                <ChatComposer CurrentMessage="@currentMessage"
                               CurrentMessageChanged="HandleCurrentMessageChanged"
+                              SelectedModelId="@(selectedModelId ?? string.Empty)"
+                              SelectedModelIdChanged="HandleSelectedModelChanged"
+                              Models="availableModels"
                               IsBusy="isBusy"
                               OnKeyDown="HandleKeyDown"
                               OnSendMessage="SendMessage" />
+
+                <div class="chat-panel__footer">
+                    <span class="chat-panel__session-id">@sessionId</span>
+                    @if (!string.IsNullOrWhiteSpace(activeModelDisplayName))
+                    {
+                        <span class="chat-panel__session-id">Model: @activeModelDisplayName</span>
+                    }
+                    <button class="btn btn-secondary" @onclick="ResetSelectionAsync" disabled="@isBusy">Clear</button>
+                    <button class="btn btn-secondary" @onclick="PublishTestEvent" disabled="@isPublishingTestEvent">Test event</button>
+                    <button class="btn btn-primary" @onclick="CreateSession" disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">New chat</button>
+                </div>
             }
         </section>
     </div>
@@ -105,6 +85,8 @@
     private string? testEventStatus;
     private string? errorMessage;
     private bool hasAttemptedRestore;
+    private bool hasHandledQueryActions;
+    private bool isSessionDrawerOpen;
     private DateTimeOffset? nextBeforeActivityAt;
     private Guid? nextBeforeSessionId;
     private bool hasMoreSessions;
@@ -117,6 +99,7 @@
         if (!firstRender || hasAttemptedRestore) return;
 
         hasAttemptedRestore = true;
+        NavigationManager.LocationChanged += HandleLocationChanged;
         await InitializeAsync();
         StateHasChanged();
     }
@@ -125,6 +108,7 @@
     {
         try
         {
+            await HandleQueryActionsAsync();
             var resolvedProfileId = await ResolveProfileIdAsync();
             if (string.IsNullOrWhiteSpace(resolvedProfileId))
             {
@@ -165,6 +149,22 @@
         }
     }
 
+    private async Task HandleQueryActionsAsync()
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("drawer", out var drawerValue) && drawerValue.Count > 0 && drawerValue[0] == "1")
+            isSessionDrawerOpen = true;
+
+        if (query.TryGetValue("testEvent", out var value) && value.Count > 0 && value[0] == "1")
+        {
+            if (hasHandledQueryActions) return;
+
+            hasHandledQueryActions = true;
+            await PublishTestEvent();
+        }
+    }
+
     private async Task CreateSession()
     {
         isCreatingSession = true;
@@ -186,6 +186,7 @@
                 activeModelId = response.ModelId;
                 selectedModelId = response.ModelId;
                 await SelectSessionAsync(response.SessionId, []);
+                isSessionDrawerOpen = false;
                 await SetStoredProfileIdAsync(resolvedProfileId);
                 await LoadSessionsAsync();
             }
@@ -247,6 +248,7 @@
         if (profileId is null) return;
 
         sessionId = selectedSessionId;
+        isSessionDrawerOpen = false;
         currentMessage = string.Empty;
         errorMessage = null;
         await SetStoredSessionIdAsync(selectedSessionId);
@@ -324,6 +326,26 @@
         currentMessage = value;
         return Task.CompletedTask;
     }
+
+    private Task HandleSelectedModelChanged(string value)
+    {
+        selectedModelId = value;
+        return Task.CompletedTask;
+    }
+
+    private void CloseSessionDrawer() => isSessionDrawerOpen = false;
+
+    private async void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        hasHandledQueryActions = false;
+        await InvokeAsync(async () =>
+        {
+            await HandleQueryActionsAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => NavigationManager.LocationChanged -= HandleLocationChanged;
 
     private async Task RestoreSessionAsync()
     {

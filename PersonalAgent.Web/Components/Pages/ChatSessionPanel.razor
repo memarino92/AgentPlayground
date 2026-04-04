@@ -1,6 +1,7 @@
-<aside class="session-panel">
-    <div class="session-panel__header">
-        <h2>Past Sessions</h2>
+<aside class="session-panel" id="chat-drawer">
+    <div class="session-panel__summary">
+        <span>Previous chats</span>
+        <button class="session-panel__close" @onclick="OnCloseDrawer">Close</button>
         @if (IsLoadingSessions)
         {
             <span class="session-panel__status">Loading...</span>
@@ -13,25 +14,23 @@
     }
     else
     {
-        <div class="session-picker">
-            <label class="session-picker__label" for="session-select">Previous Sessions</label>
-            <select id="session-select"
-                    class="session-picker__select"
-                    value="@SelectedSessionOption"
-                    @onchange="HandleSelectionChanged"
-                    disabled="@(IsBusy || Sessions.Count == 0)">
-                <option value="">Select a prior session</option>
-                @foreach (var session in Sessions)
-                {
-                    <option value="@session.SessionId">@FormatSessionOption(session)</option>
-                }
-            </select>
-        </div>
+        <ul class="session-panel__list">
+            @foreach (var session in Sessions)
+            {
+                <li class="session-panel__item">
+                    <button class="session-panel__button session-panel__button--@(session.SessionId == SelectedSessionOption ? "active" : "inactive")"
+                            @onclick="() => OnSessionSelectionChanged.InvokeAsync(session.SessionId)"
+                            disabled="@IsBusy">
+                        @FormatSessionOption(session)
+                    </button>
+                </li>
+            }
+        </ul>
 
         @if (HasMoreSessions)
         {
-            <button class="btn btn-secondary session-panel__more" @onclick="OnLoadMoreSessions" disabled="@(IsBusy || IsLoadingSessions)">
-                Load More
+            <button class="session-panel__more" @onclick="OnLoadMoreSessions" disabled="@(IsBusy || IsLoadingSessions)">
+                Load more
             </button>
         }
     }
@@ -46,7 +45,5 @@
     [Parameter] public required Func<SessionListItem, string> FormatSessionOption { get; set; }
     [Parameter] public required EventCallback<string?> OnSessionSelectionChanged { get; set; }
     [Parameter] public required EventCallback OnLoadMoreSessions { get; set; }
-
-    private Task HandleSelectionChanged(ChangeEventArgs e) =>
-        OnSessionSelectionChanged.InvokeAsync(e.Value?.ToString());
+    [Parameter] public required EventCallback OnCloseDrawer { get; set; }
 }
