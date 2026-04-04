@@ -1,264 +1,71 @@
 # PersonalAgent API
 
-`PersonalAgent` is a minimal API wrapper around a Microsoft Agent Framework conversational agent. It exposes session-based chat endpoints so clients can create conversations, send messages, and retrieve per-session history.
+`PersonalAgent` is the central API service for chat orchestration and model tasks in the AgentPlayground stack.
 
-## API Overview
+## What This Service Owns
 
-- **Base behavior**: stateless HTTP endpoints with stateful in-memory conversation sessions.
-- **Agent engine**: `Microsoft.Agents.AI` with OpenAI chat model (`gpt-4o-mini`).
-- **Conversation memory**: maintained by `AgentSession` objects keyed by a generated `sessionId`.
-- **Transcript storage**: mirrored in-memory as user/assistant message pairs.
-- **Endpoint prefix**: agent operations are exposed under `/api`.
+- Session-based chat APIs (`/api/sessions`, `/api/sessions/{id}/messages`, `/api/models`).
+- Agent orchestration with Microsoft Agent Framework.
+- Provider-bound model work (OpenAI) behind app services.
+- Work journal model tasks consumed over MassTransit request/response:
+  - parse markdown into journal entries
+  - generate embeddings for entry content
+- Querying `work_journal_entries` via pgvector for RAG tool responses.
 
-## Session Model
+The Worker is now orchestration-only for journal sync and calls these model tasks via MassTransit contracts rather than calling provider SDKs directly.
 
-A **session** represents one conversation thread.
+## API Endpoints
 
-- Created via `POST /api/sessions`
-- Identified by a GUID `sessionId`
-- Backed by:
-  - Agent framework conversation state (`AgentSession`)
-  - Local transcript list (`ConversationMessage[]`)
-- Used to preserve context across multiple requests in the same thread
+- `GET /` health/status.
+- `GET /api/models` available chat models.
+- `POST /api/sessions` create a session.
+- `GET /api/sessions` list sessions (cursor paging).
+- `POST /api/sessions/{sessionId}/messages` send message.
+- `GET /api/sessions/{sessionId}/messages` read transcript.
 
-If a session ID is unknown, endpoints return `404 Not Found`.
+`/api/*` endpoints use the internal API key filter when configured.
 
-## Endpoints
+## Messaging Role
 
-### `GET /`
+This service uses MassTransit SQL transport and handles:
 
-Health/status endpoint.
+- Event consumption (`TestEventRequested`).
+- Work journal request/response consumers:
+  - `ParseWorkJournalEntriesRequest`
+  - `GenerateEmbeddingsRequest`
 
-**Response**
+These consumers are registered with retry policies and respond with typed contracts from `AgentPlayground.Contracts`.
 
-```json
-{
-  "status": "healthy",
-  "service": "PersonalAgent API"
-}
-```
+## Required Configuration
 
-### `POST /api/sessions`
-
-Creates a new conversation session.
-
-**Response**
-
-```json
-{
-  "sessionId": "9f45af6c-5cde-40ef-a2e6-3e1143f95cb0",
-  "message": "Session created successfully"
-}
-```
-
-### `POST /api/sessions/{sessionId}/messages`
-
-Sends a user message to the agent in an existing session.
-
-**Request Body**
-
-```json
-{
-  "message": "What do you remember about me?"
-}
-```
-
-**Success Response**
-
-```json
-{
-  "sessionId": "9f45af6c-5cde-40ef-a2e6-3e1143f95cb0",
-  "response": "You said your name is Mike and you enjoy biking."
-}
-```
-
-**Not Found Response**
-
-```json
-{
-  "error": "Session not found"
-}
-```
-
-### `GET /api/sessions/{sessionId}/messages`
-
-Returns stored transcript for a session.
-
-**Success Response**
-
-```json
-{
-  "sessionId": "9f45af6c-5cde-40ef-a2e6-3e1143f95cb0",
-  "messages": [
-    { "role": "user", "content": "My name is Mike and I love riding my bike." },
-    { "role": "assistant", "content": "Nice to meet you, Mike..." }
-  ]
-}
-```
-
-## Request Lifecycle
-
-1. API receives a message request for a `sessionId`.
-2. `AgentService` looks up the corresponding `AgentSession`.
-3. User input is appended to in-memory transcript.
-4. Agent runs with `RunAsync(message, session)`.
-5. Agent response is converted to text and appended to transcript.
-6. API returns the response payload.
-
-## Security Behavior
-
-- **Optional internal API key**: if `Security:InternalApiKey` is set, `/api/*` endpoints require `X-Internal-Api-Key` header.
-- **CORS allowlist**: when `Security:AllowedOrigins` contains values, `/api/*` only allows those origins.
-- **Rate limiting**: fixed-window limiter is applied to `/api/*` using `Security:RateLimit` settings.
-- **Forwarded headers + HTTPS redirection**: enabled for reverse-proxy deployments.
-- **Input guardrail**: message payloads must be non-empty and at most 4000 characters.
-
-### Security Configuration Keys
-
-```json
-{
-  "Security": {
-    "AllowedOrigins": ["https://your-frontend-domain.example"],
-    "InternalApiKey": "set-a-long-random-value",
-    "RateLimit": {
-      "PermitLimit": 60,
-      "WindowSeconds": 60
-    }
-  }
-}
-```
-
-## Internal Components
-
-- **`AgentService`**
-  - Initializes the `AIAgent` once at startup
-  - Manages active sessions and transcripts
-  - Handles message dispatch to the model
-- **`MessageRequest`**
-  - Input DTO for `/messages` endpoint
-- **`ConversationMessage`**
-  - Output/history record with `role` and `content`
-
-## Configuration
-
-### Environment Variables Overview
-
-### Configuration Keys (Single Source of Truth)
-
-Use this mapping consistently:
+Use either environment variables or user secrets.
 
 ```text
-OPENAI_API_KEY      -> OpenAI:ApiKey
-INTERNAL_API_KEY    -> Security:InternalApiKey
-ALLOWED_ORIGINS     -> Security:AllowedOrigins
-MESSAGING_CONNECTION_STRING -> Messaging:ConnectionString
-MESSAGING_SCHEMA    -> Messaging:Schema
+OPENAI_API_KEY               -> OpenAI:ApiKey
+MESSAGING_CONNECTION_STRING  -> Messaging:ConnectionString
 ```
 
-Environment variables override user secrets and appsettings values.
+Startup validation is enabled for required options, including `OpenAI:ApiKey`.
 
-#### Required for Deployment
+Optional:
 
-- **`OPENAI_API_KEY`** - OpenAI API key for chat model access (required)
-  - Get from: https://platform.openai.com/account/api-keys
-  - Model used: `gpt-4o-mini`
-  - Never commit this to version control
-
-#### Optional Configuration
-
-- **`ASPNETCORE_ENVIRONMENT`** - Runtime environment (Development/Production)
-  - Defaults to `Production` in deployed containers
-  - Set to `Development` for local development with verbose logging
-
-- **`ASPNETCORE_URLS`** - Server listening address
-  - Defaults to `http://+:5000`
-
-- **`INTERNAL_API_KEY`** - Protect `/api/*` endpoints with an internal API key
-  - If set, clients must include `X-Internal-Api-Key` header on all API requests
-  - Leave empty/unset to disable this protection
-
-- **`ALLOWED_ORIGINS`** - CORS allowlist (comma-separated domains)
-  - Example: `https://personalagent.com,https://app.personalagent.com`
-  - If set, restricts CORS to these origins; leave empty for no CORS restrictions
-
-- **`Security__RateLimit__PermitLimit`** - Max requests per window (default: 60)
-
-- **`Security__RateLimit__WindowSeconds`** - Time window in seconds (default: 60)
-
-### Development Setup
-
-#### OpenAI API Key
-
-Store in user secrets (never commit to version control):
-
-```bash
-cd PersonalAgent
-dotnet user-secrets init
-dotnet user-secrets set "OpenAI:ApiKey" "your-openai-api-key"
+```text
+INTERNAL_API_KEY             -> Security:InternalApiKey
+ALLOWED_ORIGINS              -> Security:AllowedOrigins
+MESSAGING_SCHEMA             -> Messaging:Schema
 ```
 
-Verify setup:
+## Local Run
 
-```bash
-dotnet user-secrets list
+```powershell
+pwsh -NoProfile -File .\scripts\start-postgres.ps1
+dotnet user-secrets set "OpenAI:ApiKey" "your-openai-key" --project .\PersonalAgent
+dotnet user-secrets set "Messaging:ConnectionString" "Host=localhost;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground" --project .\PersonalAgent
+dotnet run --project .\PersonalAgent
 ```
 
-#### Optional: Internal API Key and Security Settings
+## Notes
 
-```bash
-dotnet user-secrets set "Security:InternalApiKey" "your-secret-key"
-```
-
-### Production Deployment
-
-#### Docker Deployment
-
-```bash
-# Build image
-docker build -t personalagent:latest -f PersonalAgent/Dockerfile .
-
-# Run with required environment variables
-docker run -d \
-  -p 5000:5000 \
-  -e OPENAI_API_KEY="your-openai-api-key" \
-  -e ASPNETCORE_ENVIRONMENT="Production" \
-  -e INTERNAL_API_KEY="your-secret-key" \
-  -e ALLOWED_ORIGINS="https://your-frontend-domain.com" \
-  personalagent:latest
-```
-
-#### Railway Deployment
-
-1. Push your repository to GitHub
-2. Connect repo to Railway
-3. Set **Project Variables** in Railway dashboard:
-    - `OPENAI_API_KEY` = your OpenAI API key (required)
-    - `MESSAGING_CONNECTION_STRING` = `${{Postgres.DATABASE_URL}}`
-    - `INTERNAL_API_KEY` = your internal API key (optional)
-    - `ALLOWED_ORIGINS` = comma-separated allowed origins (optional)
-4. Deploy
-
-Use `Dockerfile.personalagent-api` for the Railway service. The API now binds Railway's `PORT` automatically and trusts forwarded proxy headers for HTTPS redirection.
-
-### Configuration Resolution
-
-Configuration is managed via `IOptions<T>` pattern with dependency injection. Values resolve in this order:
-
-1. **Environment variables** (used in production)
-2. **User secrets** (used in development)
-3. **appsettings.json** (fallback defaults)
-4. **Throws exception** if required values are missing
-
-## Current Behavior and Constraints
-
-- Session and transcript data are in-memory only (lost on process restart).
-- Data is local to one app instance (not shared across replicas).
-- No authentication or authorization is applied yet.
-- No custom tool execution pipeline is wired yet (this API is the base scaffold for that).
-
-## Next Extension Points
-
-- Add auth and per-user session ownership.
-- Persist sessions/history in durable storage.
-- Add custom tools/integrations (calendar, tasks, home automation, etc.).
-- Add streaming responses and richer response metadata.
+- Session/transcript state is persisted to PostgreSQL through the session store service.
+- Work-journal parse/embedding provider logic is intentionally centralized here so provider swaps do not affect worker behavior.
+- If `INTERNAL_API_KEY` is set, clients must send `X-Internal-Api-Key`.

@@ -24,9 +24,6 @@ internal class AgentEventService
         IServiceProvider serviceProvider)
     {
         var apiKey = apiKeyOptions.Value.OpenAiKey;
-        if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException("OpenAI API key not found. In production set OPENAI_API_KEY env var; for local dev use: dotnet user-secrets set OpenApiKey \"your-key\" --project PersonalAgent");
-
         _bus = bus;
         _logger = logger;
 

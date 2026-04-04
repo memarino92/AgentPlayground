@@ -40,7 +40,9 @@ internal static class ServiceCollectionExtensions
                     ?? string.Empty;
                 opts.InternalApiKey = ConfigurationValueResolver.ResolveString(configuration, "INTERNAL_API_KEY", "Security:InternalApiKey")
                     ?? string.Empty;
-            });
+            })
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.OpenAiKey), "OpenAI:ApiKey is required")
+            .ValidateOnStart();
 
         services.AddOptions<ChatModelCatalogOptions>()
             .Bind(configuration.GetSection(ChatModelCatalogOptions.SectionName));
@@ -54,11 +56,24 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IAgentEmbeddingService, OpenAiAgentEmbeddingService>();
         services.AddSingleton<SemanticMemoryService>();
         services.AddSingleton<AgentEventService>();
+        services.AddSingleton<WorkJournalParsingService>();
         services.AddSingleton<WorkJournalService>();
         services.AddSingleton<AgentChatService>();
         services.AddSingleton<AgentService>();
         services.AddMassTransit(x =>
         {
+            x.AddConsumer<ParseWorkJournalEntriesRequestConsumer>(cfg =>
+                cfg.UseMessageRetry(retry => retry.Exponential(3, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1))))
+                .Endpoint(e =>
+                {
+                    e.Name = "personal-agent-parse-work-journal-entries";
+                });
+            x.AddConsumer<GenerateEmbeddingsRequestConsumer>(cfg =>
+                cfg.UseMessageRetry(retry => retry.Exponential(3, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(2))))
+                .Endpoint(e =>
+                {
+                    e.Name = "personal-agent-generate-embeddings";
+                });
             x.AddConsumer<TestEventRequestedConsumer>()
                 .Endpoint(e =>
                 {

@@ -1,0 +1,70 @@
+using AgentPlayground.Contracts.Messaging.Responses;
+using Microsoft.Extensions.Options;
+using OpenAI;
+using OpenAI.Chat;
+using PersonalAgent.Configuration;
+using System.Text.Json;
+
+namespace PersonalAgent.Services;
+
+internal class WorkJournalParsingService
+{
+    private readonly ChatClient _chatClient;
+    private readonly ILogger<WorkJournalParsingService> _logger;
+
+    public WorkJournalParsingService(
+        IOptions<ApiKeyOptions> apiKeyOptions,
+        ChatModelCatalog chatModelCatalog,
+        ILogger<WorkJournalParsingService> logger)
+    {
+        var apiKey = apiKeyOptions.Value.OpenAiKey;
+        var modelId = chatModelCatalog.GetDefaultModel().Id;
+        _chatClient = new OpenAIClient(apiKey).GetChatClient(modelId);
+        _logger = logger;
+        _logger.LogInformation("Initialized work journal parsing service with model {ModelId}", modelId);
+    }
+
+    public async Task<List<ParsedWorkJournalEntry>> ParseEntriesAsync(string fileName, string fileContent, CancellationToken cancellationToken = default)
+    {
+        var prompt = $$"""
+        You are a helpful data extraction assistant.
+        Parse the following work journal markdown file into distinct entries.
+        The filename is '{{fileName}}', which indicates the year and month (e.g. 2026_01.md implies Jan 2026).
+        Entries start with '## ' headings that represent dates or date ranges (e.g. '## 01/2' or '## 01/4-5').
+        
+        Return a JSON object with the following structure exactly:
+        {
+            "entries": [
+                {
+                    "date": "YYYY-MM-DD",
+                    "content": "The full markdown content of the entry, including the heading and bullet points."
+                }
+            ]
+        }
+
+        Markdown content:
+        {{fileContent}}
+        """;
+
+        var response = await _chatClient.CompleteChatAsync(
+            [new UserChatMessage(prompt)],
+            new ChatCompletionOptions { ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() },
+            cancellationToken);
+
+        var json = response.Value.Content[0].Text;
+        using var document = JsonDocument.Parse(json);
+        var entries = new List<ParsedWorkJournalEntry>();
+
+        if (!document.RootElement.TryGetProperty("entries", out var entriesElement)) return entries;
+
+        foreach (var element in entriesElement.EnumerateArray())
+        {
+            if (!element.TryGetProperty("date", out var dateElement)) continue;
+            if (!element.TryGetProperty("content", out var contentElement)) continue;
+            if (!DateTime.TryParse(dateElement.GetString(), out var date)) continue;
+            entries.Add(new ParsedWorkJournalEntry(date, contentElement.GetString() ?? string.Empty));
+        }
+
+        return entries;
+    }
+}

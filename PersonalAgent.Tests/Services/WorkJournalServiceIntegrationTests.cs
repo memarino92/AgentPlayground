@@ -40,6 +40,9 @@ public sealed class WorkJournalServiceIntegrationTests : IClassFixture<PostgresV
     {
         public Task<ReadOnlyMemory<float>> GenerateEmbeddingAsync(string content, CancellationToken cancellationToken = default) =>
             Task.FromResult<ReadOnlyMemory<float>>(embedding);
+
+        public Task<List<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IReadOnlyList<string> contents, CancellationToken cancellationToken = default) =>
+            Task.FromResult(contents.Select(_ => new ReadOnlyMemory<float>(embedding)).ToList());
     }
 }
 
