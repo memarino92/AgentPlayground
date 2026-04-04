@@ -8,6 +8,7 @@ using PersonalAgent.Configuration;
 using PersonalAgent.Models;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text;
 
 namespace PersonalAgent.Services;
 
@@ -22,6 +23,7 @@ internal class AgentChatService
     private readonly OpenAIClient _openAiClient;
     private readonly AgentEventService _eventService;
     private readonly WorkJournalService _workJournalService;
+    private readonly ITavilyMcpToolProvider _tavilyMcpToolProvider;
     private readonly ILogger<AgentChatService> _logger;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
 
@@ -34,6 +36,7 @@ internal class AgentChatService
         SemanticMemoryService semanticMemoryService,
         AgentEventService eventService,
         WorkJournalService workJournalService,
+        ITavilyMcpToolProvider tavilyMcpToolProvider,
         ILogger<AgentChatService> logger)
     {
         var apiKey = apiKeyOptions.Value.OpenAiKey;
@@ -45,6 +48,7 @@ internal class AgentChatService
         _semanticMemoryService = semanticMemoryService;
         _eventService = eventService;
         _workJournalService = workJournalService;
+        _tavilyMcpToolProvider = tavilyMcpToolProvider;
         _logger = logger;
 
         var defaultModelId = _chatModelCatalog.GetDefaultModel().Id;
@@ -124,12 +128,16 @@ internal class AgentChatService
             var response = await agent.RunAsync(messages, session, options: null, cancellationToken: default);
             var responseText = response.ToString();
             var wasSaved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, responseText, persistedSession.SessionStateJson);
+            var citedUrlCount = CountUrls(responseText);
 
             _logger.LogInformation(
-                "Processed message for model {ModelId}; recalledMemories={RecalledMemories}; persisted={WasSaved}",
+                "Processed message for model {ModelId}; recalledMemories={RecalledMemories}; persisted={WasSaved}; responseLength={ResponseLength}; citedUrlCount={CitedUrlCount}; tavilyAvailable={TavilyAvailable}",
                 sessionState.ModelId,
                 recalledMemories.Count,
-                wasSaved);
+                wasSaved,
+                responseText.Length,
+                citedUrlCount,
+                _tavilyMcpToolProvider.IsAvailable);
 
             if (wasSaved)
                 await _semanticMemoryService.StoreConversationMemoriesAsync(parsedSessionId, persistedSession.ProfileId, message, responseText);
@@ -177,12 +185,42 @@ internal class AgentChatService
 
     private ChatClientAgent CreateSessionAgent(string modelId)
     {
-        var publishTool = AIFunctionFactory.Create(_eventService.PublishGeneratedMessageToolAsync, "publish_generated_test_message",
-            "Publish a generated test message to the shared MassTransit bus.");
-        var syncJournalTool = AIFunctionFactory.Create(_workJournalService.SyncWorkJournalAsync, "sync_work_journal",
-            "Trigger a background process to sync the work journal from GitHub. This syncs markdown files and prepares them for semantic search.");
-        var searchJournalTool = AIFunctionFactory.Create(_workJournalService.SearchWorkJournalAsync, "search_work_journal",
-            "Search the work journal for answers to user questions using RAG (Retrieval-Augmented Generation). Use this tool whenever the user asks about past work, journal entries, or questions like 'when did I work on...' or 'who did I help'.");
+        var publishTool = WrapTool(AIFunctionFactory.Create(_eventService.PublishGeneratedMessageToolAsync, "publish_generated_test_message",
+            "Publish a generated test message to the shared MassTransit bus."));
+        var syncJournalTool = WrapTool(AIFunctionFactory.Create(_workJournalService.SyncWorkJournalAsync, "sync_work_journal",
+            "Trigger a background process to sync the work journal from GitHub. This syncs markdown files and prepares them for semantic search."));
+        var searchJournalTool = WrapTool(AIFunctionFactory.Create(_workJournalService.SearchWorkJournalAsync, "search_work_journal",
+            "Search the work journal for answers to user questions using RAG (Retrieval-Augmented Generation). Use this tool whenever the user asks about past work, journal entries, or questions like 'when did I work on...' or 'who did I help'."));
+        var webTools = _tavilyMcpToolProvider.GetTools().Select(WrapWebTool).ToList();
+        var tools = new List<AIFunction> { publishTool, syncJournalTool, searchJournalTool };
+        if (webTools.Count > 0) tools.AddRange(webTools);
+
+        _logger.LogInformation(
+            "Creating agent for model {ModelId}; tavilyAvailable={TavilyAvailable}; tavilyStatus={TavilyStatus}; tavilyToolCount={TavilyToolCount}; totalToolCount={TotalToolCount}",
+            modelId,
+            _tavilyMcpToolProvider.IsAvailable,
+            _tavilyMcpToolProvider.Status,
+            webTools.Count,
+            tools.Count);
+
+        if (webTools.Count > 0)
+            _logger.LogDebug("Tavily tools for model {ModelId}: {ToolNames}", modelId, string.Join(",", webTools.Select(tool => tool.Name)));
+
+        var instructions = new StringBuilder(
+            """
+            You are a helpful personal assistant.
+            When asked to respond to a bus test event, you must call the publish_generated_test_message tool exactly once with a concise generated message describing that you received the event.
+            The tool arguments must include a valid correlationId GUID string copied from context.
+            This does not mean that you should respond to every user message with a bus event follow-up, only when you are specifically asked to generate a follow-up message for a bus event.
+
+            When asked about past work, past events, or anything related to the user's work journal, use the search_work_journal tool to find relevant information.
+            If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
+            """);
+
+        if (webTools.Count > 0)
+            instructions.AppendLine("Use available Tavily web tools for current events, external facts, and documentation lookups. When you use web tools, include source URLs in your response.");
+        else
+            instructions.AppendLine("Web search is currently unavailable; answer without web tools and acknowledge limits for current events when needed.");
 
         return _openAiClient
             .GetChatClient(modelId)
@@ -190,21 +228,16 @@ internal class AgentChatService
             .AsBuilder()
             .UseFunctionInvocation()
             .BuildAIAgent(
-                instructions: """
-                    You are a helpful personal assistant.
-                    When asked to respond to a bus test event, you must call the publish_generated_test_message tool exactly once with a concise generated message describing that you received the event.
-                    The tool arguments must include a valid correlationId GUID string copied from context.
-                    This does not mean that you should respond to every user message with a bus event follow-up, only when you are specifically asked to generate a follow-up message for a bus event.
-                    
-                    When asked about past work, past events, or anything related to the user's work journal, use the search_work_journal tool to find relevant information.
-                    If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
-                    """,
+                instructions: instructions.ToString(),
                 name: "PersonalAgent",
                 description: "Personal agent that can publish follow-up messages to the shared event bus and query the user's work journal.",
-                tools: [publishTool, syncJournalTool, searchJournalTool],
+                tools: [.. tools],
                 loggerFactory: _loggerFactory,
                 services: _serviceProvider);
     }
+
+    private AIFunction WrapTool(AIFunction tool) => new LoggingAIFunction(tool, _logger, "Local");
+    private AIFunction WrapWebTool(AIFunction tool) => new LoggingAIFunction(tool, _logger, "TavilyMcp");
 
     private AgentSessionState DeserializeSessionState(string? sessionStateJson)
     {
@@ -219,4 +252,30 @@ internal class AgentChatService
     private static string BuildMemoryPrompt(IEnumerable<string> recalledMemories) =>
         "Use these remembered user facts if they are relevant to the current request. Treat them as higher-priority personal memory unless the user corrects them:\n"
         + string.Join("\n", recalledMemories.Select((memory, index) => $"{index + 1}. {memory}"));
+
+    private static int CountUrls(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return 0;
+
+        var count = 0;
+        var startIndex = 0;
+        while (startIndex < text.Length)
+        {
+            var httpIndex = text.IndexOf("http://", startIndex, StringComparison.OrdinalIgnoreCase);
+            var httpsIndex = text.IndexOf("https://", startIndex, StringComparison.OrdinalIgnoreCase);
+            var matchIndex = httpIndex switch
+            {
+                -1 when httpsIndex >= 0 => httpsIndex,
+                >= 0 when httpsIndex == -1 => httpIndex,
+                >= 0 when httpsIndex >= 0 => Math.Min(httpIndex, httpsIndex),
+                _ => -1
+            };
+
+            if (matchIndex < 0) break;
+            count++;
+            startIndex = matchIndex + 1;
+        }
+
+        return count;
+    }
 }

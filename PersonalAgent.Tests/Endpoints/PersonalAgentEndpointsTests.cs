@@ -139,7 +139,8 @@ public class PersonalAgentEndpointsTests
         builder.Services.AddSingleton<IOptions<ApiKeyOptions>>(Options.Create(new ApiKeyOptions
         {
             OpenAiKey = "test-key",
-            InternalApiKey = internalApiKey ?? string.Empty
+            InternalApiKey = internalApiKey ?? string.Empty,
+            EnableWebSearch = false
         }));
 
         builder.Services.AddSingleton<IOptions<ChatModelCatalogOptions>>(Options.Create(new ChatModelCatalogOptions
@@ -159,6 +160,7 @@ public class PersonalAgentEndpointsTests
         builder.Services.AddSingleton<SemanticMemoryService>();
         builder.Services.AddSingleton<AgentEventService>();
         builder.Services.AddSingleton<WorkJournalService>();
+        builder.Services.AddSingleton<ITavilyMcpToolProvider, TestTavilyMcpToolProvider>();
         builder.Services.AddSingleton<AgentChatService>();
         builder.Services.AddSingleton<AgentService>();
         builder.Services.AddSingleton(_ => Mock.Of<IBus>());
@@ -170,6 +172,13 @@ public class PersonalAgentEndpointsTests
         app.MapPersonalAgentEndpoints();
         await app.StartAsync();
         return app;
+    }
+
+    private sealed class TestTavilyMcpToolProvider : ITavilyMcpToolProvider
+    {
+        public bool IsAvailable => false;
+        public string Status => "TestStub";
+        public IReadOnlyList<Microsoft.Extensions.AI.AIFunction> GetTools() => [];
     }
 
     private static ChatModelCatalog ChatModelCatalogFactory(IServiceProvider sp) =>
