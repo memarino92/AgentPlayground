@@ -23,7 +23,9 @@
                     <span class="user-info">
                         @context.User.FindFirst(ClaimTypes.Name)?.Value
                     </span>
-                    <a href="login?returnUrl=/" class="btn btn-logout">Log out</a>
+                    <form method="post" action="/logout">
+                        <button type="submit" class="btn btn-logout">Log out</button>
+                    </form>
                 </Authorized>
                 <NotAuthorized>
                     <a href="login" class="btn btn-login">Log in</a>
