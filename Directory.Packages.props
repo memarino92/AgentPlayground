@@ -30,5 +30,6 @@
     <PackageVersion Include="MassTransit.TestFramework" Version="8.5.8" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.8.1" />
     <PackageVersion Include="bunit" Version="1.40.0" />
+    <PackageVersion Include="Markdig" Version="0.38.0" />
   </ItemGroup>
 </Project>

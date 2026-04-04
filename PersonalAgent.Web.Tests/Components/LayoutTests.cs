@@ -29,7 +29,8 @@ public class LayoutTests : TestContext
             })));
 
         cut.Markup.Should().Contain("Please log in to continue");
-        cut.Markup.Should().Contain("Login with GitHub");
+        cut.Markup.Should().Contain("Send test event");
+        cut.Markup.Should().Contain("Sessions");
     }
 
     [Fact]
@@ -51,6 +52,9 @@ public class LayoutTests : TestContext
             })));
 
         cut.Find("#authorized-body").TextContent.Should().Be("body");
-        cut.Markup.Should().Contain("Logged in as michael");
+        cut.Markup.Should().Contain("michael");
+        cut.Markup.Should().Contain("Log out");
+        cut.Markup.Should().Contain("Send test event");
+        cut.Markup.Should().Contain("Sessions");
     }
 }

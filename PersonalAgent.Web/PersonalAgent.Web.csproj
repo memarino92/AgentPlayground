@@ -22,6 +22,7 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
         <PackageReference Include="Microsoft.AspNetCore.Components.QuickGrid" />
+        <PackageReference Include="Markdig" />
         <PackageReference Include="MassTransit" />
         <PackageReference Include="MassTransit.SqlTransport.PostgreSQL" />
     </ItemGroup>

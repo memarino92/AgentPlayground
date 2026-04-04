@@ -4,41 +4,45 @@
 
 <div class="page">
     <header class="navbar">
-        <div class="container">
-            <div class="navbar-header">
-                <h1>PersonalAgent</h1>
-                <p>Your personal AI assistant</p>
+        <div class="navbar__start">
+            <details class="navbar-menu">
+                <summary aria-label="Open menu">☰</summary>
+                <div class="navbar-menu__items">
+                    <a href="/?drawer=1">Sessions</a>
+                    <a href="/?testEvent=1">Send test event</a>
+                </div>
+            </details>
+
+            <div class="navbar__title">
+            <h1>PersonalAgent</h1>
             </div>
-            <div class="navbar-auth">
-                <AuthorizeView>
-                    <Authorized>
-                        <span class="user-info">
-                            Logged in as @context.User.FindFirst(ClaimTypes.Name)?.Value
-                        </span>
-                        <a href="login?returnUrl=/" class="btn btn-logout">Logout</a>
-                    </Authorized>
-                    <NotAuthorized>
-                        <a href="login" class="btn btn-login">Login with GitHub</a>
-                    </NotAuthorized>
-                </AuthorizeView>
-            </div>
+        </div>
+        <div class="navbar__actions">
+            <AuthorizeView>
+                <Authorized>
+                    <span class="user-info">
+                        @context.User.FindFirst(ClaimTypes.Name)?.Value
+                    </span>
+                    <a href="login?returnUrl=/" class="btn btn-logout">Log out</a>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="login" class="btn btn-login">Log in</a>
+                </NotAuthorized>
+            </AuthorizeView>
         </div>
     </header>
     <main class="main">
-        <article class="content">
-            <AuthorizeView>
-                <Authorized>
-                    @Body
-                </Authorized>
-                <NotAuthorized>
-                    <div class="login-prompt">
-                        <h2>Please log in to continue</h2>
-                        <p>Use your GitHub account to access PersonalAgent.</p>
-                        <a href="login" class="btn btn-primary">Login with GitHub</a>
-                    </div>
-                </NotAuthorized>
-            </AuthorizeView>
-        </article>
+        <AuthorizeView>
+            <Authorized>
+                @Body
+            </Authorized>
+            <NotAuthorized>
+                <div class="login-prompt">
+                    <h2>Please log in to continue</h2>
+                    <p>Use your GitHub account to access PersonalAgent.</p>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
     </main>
 </div>
 

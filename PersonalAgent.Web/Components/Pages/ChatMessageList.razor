@@ -1,15 +1,26 @@
+@using Markdig
+
 <div class="message-list">
     @foreach (var msg in Messages)
     {
-        <div class="message-list__item message-list__item--@msg.Role">
-            <strong>@msg.Role</strong>
-            <p>@msg.Content</p>
+        <div class="message-list__item message-list__item--@msg.Role" data-role="@msg.Role">
+            <strong>@(msg.Role == "user" ? "You" : msg.Role)</strong>
+            @if (msg.Role == "assistant")
+            {
+                <div class="message-list__content">
+                    @((MarkupString)RenderMarkdown(msg.Content))
+                </div>
+            }
+            else
+            {
+                <div class="message-list__content">@msg.Content</div>
+            }
         </div>
     }
 
     @if (IsSendingMessage)
     {
-        <div class="message-list__item message-list__item--assistant">
+        <div class="message-list__item message-list__item--assistant" data-role="assistant">
             <strong>assistant</strong>
             <p><em>Thinking...</em></p>
         </div>
@@ -17,6 +28,12 @@
 </div>
 
 @code {
+    private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
+        .DisableHtml()
+        .Build();
+
     [Parameter] public required List<ConversationMessage> Messages { get; set; }
     [Parameter] public required bool IsSendingMessage { get; set; }
+
+    private static string RenderMarkdown(string content) => Markdown.ToHtml(content, MarkdownPipeline).Trim();
 }
