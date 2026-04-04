@@ -31,6 +31,12 @@ internal class WorkJournalParsingService
         Parse the following work journal markdown file into distinct entries.
         The filename is '{{fileName}}', which indicates the year and month (e.g. 2026_01.md implies Jan 2026).
         Entries start with '## ' headings that represent dates or date ranges (e.g. '## 01/2' or '## 01/4-5').
+        Each '## ' heading must produce exactly one entry.
+        The "date" field must contain a single date in YYYY-MM-DD format derived from the heading using the year and month from the filename.
+        If a heading is a date range, use the first date in the range for the "date" field. For example, '## 01/4-5' maps to 'YYYY-01-04'.
+        If a heading uses any shorthand or otherwise ambiguous form that could imply multiple dates, always use the earliest implied date as the single "date" value.
+        Do not expand date ranges into multiple entries.
+        Preserve the full original markdown for that heading in "content", including the heading and bullet points.
         
         Return a JSON object with the following structure exactly:
         {
