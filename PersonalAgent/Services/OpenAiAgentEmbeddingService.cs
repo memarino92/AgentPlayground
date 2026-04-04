@@ -23,13 +23,13 @@ internal class OpenAiAgentEmbeddingService : IAgentEmbeddingService
 
     public async Task<List<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IReadOnlyList<string> contents, CancellationToken cancellationToken = default)
     {
-        var embeddings = new List<ReadOnlyMemory<float>>(contents.Count);
-        foreach (var content in contents)
-        {
-            var embedding = await GenerateEmbeddingAsync(content, cancellationToken);
-            embeddings.Add(embedding);
-        }
+        if (contents.Count == 0) return [];
 
+        var response = await _embeddingClient.GenerateEmbeddingsAsync(contents, cancellationToken: cancellationToken);
+        var embeddings = new List<ReadOnlyMemory<float>>(contents.Count);
+
+        foreach (var embedding in response.Value)
+            embeddings.Add(embedding.ToFloats().ToArray());
         return embeddings;
     }
 }
