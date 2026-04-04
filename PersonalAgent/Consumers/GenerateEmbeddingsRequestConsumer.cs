@@ -24,7 +24,7 @@ internal class GenerateEmbeddingsRequestConsumer(
         if (context.Message.Inputs.Count == 0)
         {
             logger.LogInformation("Received embedding request with no inputs");
-            await context.RespondAsync(new GenerateEmbeddingsResponse([], memoryOptions.Value.VectorDimensions, context.Message.Model ?? memoryOptions.Value.EmbeddingModel));
+            await context.RespondAsync(new GenerateEmbeddingsResponse([], memoryOptions.Value.VectorDimensions));
             return;
         }
 
@@ -34,7 +34,6 @@ internal class GenerateEmbeddingsRequestConsumer(
 
         await context.RespondAsync(new GenerateEmbeddingsResponse(
             vectors.Select(vector => vector.ToArray()).ToList(),
-            memoryOptions.Value.VectorDimensions,
-            context.Message.Model ?? memoryOptions.Value.EmbeddingModel));
+            memoryOptions.Value.VectorDimensions));
     }
 }
