@@ -3,12 +3,19 @@ using AgentPlayground.Contracts.Messaging;
 using AgentPlayground.Contracts.Messaging.Events;
 using AgentPlayground.Contracts.Messaging.Requests;
 using MassTransit;
+using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
 using PersonalAgent.Worker.Configuration;
 using PersonalAgent.Worker.Consumers;
 using PersonalAgent.Worker.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddHttpClient("GitHubWorkJournal", client =>
+{
+    client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("PersonalAgent", "1.0"));
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 var workJournalConfigValidation = WorkerExtensions.ValidateWorkJournalSyncConfiguration(builder.Configuration);
 var workJournalSyncEnabled = workJournalConfigValidation.IsValid;
