@@ -40,6 +40,13 @@ internal static class ServiceCollectionExtensions
                     ?? string.Empty;
                 opts.InternalApiKey = ConfigurationValueResolver.ResolveString(configuration, "INTERNAL_API_KEY", "Security:InternalApiKey")
                     ?? string.Empty;
+                opts.TavilyApiKey = ConfigurationValueResolver.ResolveString(configuration, "TAVILY_API_KEY", "Tavily:ApiKey")
+                    ?? string.Empty;
+                opts.TavilyMcpUrl = ConfigurationValueResolver.ResolveString(configuration, "TAVILY_MCP_URL", "Tavily:McpUrl", "https://mcp.tavily.com/mcp")
+                    ?? "https://mcp.tavily.com/mcp";
+                opts.TavilyDefaultParameters = ConfigurationValueResolver.ResolveString(configuration, "TAVILY_DEFAULT_PARAMETERS", "Tavily:DefaultParameters")
+                    ?? string.Empty;
+                opts.EnableWebSearch = ConfigurationValueResolver.ResolveBool(configuration, "ENABLE_WEB_SEARCH", "Tavily:EnableWebSearch", true);
             })
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.OpenAiKey), "OpenAI:ApiKey is required")
             .ValidateOnStart();
@@ -58,6 +65,9 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<AgentEventService>();
         services.AddSingleton<WorkJournalParsingService>();
         services.AddSingleton<WorkJournalService>();
+        services.AddSingleton<TavilyMcpToolProvider>();
+        services.AddSingleton<ITavilyMcpToolProvider>(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
+        services.AddHostedService(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
         services.AddSingleton<AgentChatService>();
         services.AddSingleton<AgentService>();
         services.AddMassTransit(x =>

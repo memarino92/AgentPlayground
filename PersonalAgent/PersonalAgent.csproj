@@ -26,6 +26,9 @@
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
     <PackageReference Include="MassTransit" />
     <PackageReference Include="MassTransit.SqlTransport.PostgreSQL" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Pgvector" />
   </ItemGroup>
