@@ -15,6 +15,7 @@ namespace PersonalAgent.Worker.Consumers;
 
 public class SyncWorkJournalConsumer(
     ILogger<SyncWorkJournalConsumer> logger,
+    IHttpClientFactory httpClientFactory,
     IOptions<GitHubOptions> githubOptions,
     IRequestClient<ParseWorkJournalEntriesRequest> parseRequestClient,
     IRequestClient<GenerateEmbeddingsRequest> embeddingRequestClient,
@@ -38,9 +39,8 @@ public class SyncWorkJournalConsumer(
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         logger.LogInformation("Starting work journal sync from GitHub");
 
-        using var client = new HttpClient();
+        var client = httpClientFactory.CreateClient("GitHubWorkJournal");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Token", _options.PersonalAccessToken);
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("PersonalAgent", "1.0"));
 
         var url = $"https://api.github.com/repos/{_options.RepoOwner}/{_options.RepoName}/contents/{_options.JournalPath}?ref={_options.Branch}";
         
