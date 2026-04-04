@@ -9,7 +9,7 @@ namespace PersonalAgent.Web.Tests.Components;
 public class ChatMessageListTests : TestContext
 {
     [Fact]
-    public void MessageList_GroupsMessagesBySender()
+    public void MessageList_RendersEachMessageWithRoleLabels()
     {
         var cut = RenderComponent<ChatMessageList>(parameters => parameters
             .Add(component => component.Messages, [new ConversationMessage("user", "Hi"), new ConversationMessage("assistant", "Hello")])
