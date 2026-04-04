@@ -179,6 +179,9 @@ public class PersonalAgentEndpointsTests
     {
         public Task<ReadOnlyMemory<float>> GenerateEmbeddingAsync(string content, CancellationToken cancellationToken = default) =>
             Task.FromResult<ReadOnlyMemory<float>>(new float[] { 0.1f, 0.2f, 0.3f });
+
+        public Task<List<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IReadOnlyList<string> contents, CancellationToken cancellationToken = default) =>
+            Task.FromResult(contents.Select(_ => new ReadOnlyMemory<float>(new float[] { 0.1f, 0.2f, 0.3f })).ToList());
     }
 
     private sealed class InMemoryAgentSessionStore : IAgentSessionStore, IAgentSemanticMemoryStore

@@ -1,32 +1,41 @@
 using AgentPlayground.Contracts.Commands;
 using AgentPlayground.Contracts.Events;
+using AgentPlayground.Contracts.Messaging.Requests;
+using AgentPlayground.Contracts.Messaging.Responses;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
-using OpenAI;
-using OpenAI.Chat;
-using OpenAI.Embeddings;
 using PersonalAgent.Worker.Configuration;
 using Pgvector.Npgsql;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace PersonalAgent.Worker.Consumers;
 
 public class SyncWorkJournalConsumer(
     ILogger<SyncWorkJournalConsumer> logger,
     IOptions<GitHubOptions> githubOptions,
-    IOptions<ApiKeyOptions> apiKeyOptions,
+    IRequestClient<ParseWorkJournalEntriesRequest> parseRequestClient,
+    IRequestClient<GenerateEmbeddingsRequest> embeddingRequestClient,
     IOptions<SqlTransportOptions> sqlOptions) : IConsumer<SyncWorkJournalCommand>
 {
+    private static readonly TimeSpan ParseRequestTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan EmbeddingRequestTimeout = TimeSpan.FromMinutes(2);
     private readonly GitHubOptions _options = githubOptions.Value;
-    private readonly EmbeddingClient _embeddingClient = new OpenAIClient(apiKeyOptions.Value.OpenAiKey).GetEmbeddingClient("text-embedding-3-small");
-    private readonly ChatClient _chatClient = new OpenAIClient(apiKeyOptions.Value.OpenAiKey).GetChatClient("gpt-4o-mini");
 
     public async Task Consume(ConsumeContext<SyncWorkJournalCommand> context)
     {
+        var correlationId = context.CorrelationId ?? context.MessageId ?? Guid.NewGuid();
+        using var scope = logger.BeginScope(new Dictionary<string, object>
+        {
+            ["CorrelationId"] = correlationId,
+            ["MessageId"] = context.MessageId ?? Guid.Empty,
+            ["Source"] = "PersonalAgent.Worker"
+        });
+
+        var startedAt = DateTimeOffset.UtcNow;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         logger.LogInformation("Starting work journal sync from GitHub");
 
         using var client = new HttpClient();
@@ -46,8 +55,18 @@ public class SyncWorkJournalConsumer(
 
         var contentsJson = await response.Content.ReadAsStringAsync(context.CancellationToken);
         using var document = JsonDocument.Parse(contentsJson);
+
+        var markdownFiles = document.RootElement.EnumerateArray()
+            .Where(element =>
+                string.Equals(element.GetProperty("type").GetString(), "file", StringComparison.OrdinalIgnoreCase)
+                && element.GetProperty("name").GetString()?.EndsWith(".md", StringComparison.OrdinalIgnoreCase) == true)
+            .ToList();
+        logger.LogInformation("Found {MarkdownFileCount} markdown files in journal path {JournalPath}", markdownFiles.Count, _options.JournalPath);
         
         int entriesSynced = 0;
+        int filesFailed = 0;
+        int entriesSkippedUnchanged = 0;
+        int entriesParsed = 0;
         var connectionString = sqlOptions.Value.ConnectionString;
         if (string.IsNullOrWhiteSpace(connectionString)) throw new InvalidOperationException("SqlTransportOptions:ConnectionString is required");
 
@@ -74,47 +93,120 @@ public class SyncWorkJournalConsumer(
         }
         
         connection.ReloadTypes(); 
+        logger.LogInformation("Initialized pgvector infrastructure for work journal sync");
 
-        foreach (var element in document.RootElement.EnumerateArray())
+        foreach (var element in markdownFiles)
         {
-            var type = element.GetProperty("type").GetString();
             var name = element.GetProperty("name").GetString();
-            
-            if (type == "file" && name?.EndsWith(".md", StringComparison.OrdinalIgnoreCase) == true)
+            var downloadUrl = element.GetProperty("download_url").GetString();
+
+            if (name is null || downloadUrl is null)
             {
-                var downloadUrl = element.GetProperty("download_url").GetString();
-                if (downloadUrl != null)
+                logger.LogWarning("Skipping journal file because name or download URL is missing");
+                continue;
+            }
+
+            try
+            {
+                logger.LogInformation("Downloading journal file {FileName}", name);
+                var fileContent = await client.GetStringAsync(downloadUrl, context.CancellationToken);
+
+                logger.LogInformation("Requesting journal parsing for {FileName}", name);
+                var parseResponse = await RequestWithTimeoutAsync(
+                    requestCancellationToken => parseRequestClient.GetResponse<ParseWorkJournalEntriesResponse>(
+                        new ParseWorkJournalEntriesRequest(correlationId, "PersonalAgent.Worker", name, fileContent),
+                        requestCancellationToken),
+                    context.CancellationToken,
+                    ParseRequestTimeout);
+
+                var entries = parseResponse.Message.Entries;
+                entriesParsed += entries.Count;
+                logger.LogInformation("Parsed {EntryCount} entries from {FileName}", entries.Count, name);
+
+                var changedEntries = new List<(Guid Id, DateTime Date, string Content)>();
+                foreach (var entry in entries)
                 {
-                    logger.LogInformation("Downloading journal file {FileName}", name);
-                    var fileContent = await client.GetStringAsync(downloadUrl, context.CancellationToken);
-                    
-                    var entries = await ParseJournalEntriesAsync(name, fileContent, context.CancellationToken);
-                    foreach (var entry in entries)
+                    var idString = $"{name}-{entry.Date:yyyy-MM-dd}";
+                    using var md5 = System.Security.Cryptography.MD5.Create();
+                    var idBytes = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(idString));
+                    var id = new Guid(idBytes);
+
+                    var existingContent = await GetExistingContentAsync(connection, id, context.CancellationToken);
+                    if (existingContent == entry.Content)
                     {
-                        var idString = $"{name}-{entry.Date:yyyy-MM-dd}";
-                        using var md5 = System.Security.Cryptography.MD5.Create();
-                        var idBytes = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(idString));
-                        var id = new Guid(idBytes);
-
-                        var existingContent = await GetExistingContentAsync(connection, id, context.CancellationToken);
-
-                        if (existingContent == entry.Content)
-                        {
-                            logger.LogInformation("Skipping entry {Date} in {FileName} because content has not changed.", entry.Date.ToString("yyyy-MM-dd"), name);
-                            continue;
-                        }
-
-                        var embeddingResponse = await _embeddingClient.GenerateEmbeddingAsync(entry.Content, cancellationToken: context.CancellationToken);
-                        var embedding = embeddingResponse.Value.ToFloats().ToArray();
-                        await UpsertEntryAsync(connection, id, name, entry.Date, entry.Content, embedding, context.CancellationToken);
-                        entriesSynced++;
+                        entriesSkippedUnchanged++;
+                        continue;
                     }
+
+                    changedEntries.Add((id, entry.Date, entry.Content));
                 }
+
+                if (changedEntries.Count == 0)
+                {
+                    logger.LogInformation("No changed entries found in {FileName}; skipping embedding generation", name);
+                    continue;
+                }
+
+                logger.LogInformation("Requesting {ChangedEntryCount} embeddings for {FileName}", changedEntries.Count, name);
+                var embeddingResponse = await RequestWithTimeoutAsync(
+                    requestCancellationToken => embeddingRequestClient.GetResponse<GenerateEmbeddingsResponse>(
+                        new GenerateEmbeddingsRequest(correlationId, "PersonalAgent.Worker", changedEntries.Select(entry => entry.Content).ToList()),
+                        requestCancellationToken),
+                    context.CancellationToken,
+                    EmbeddingRequestTimeout);
+
+                var embeddings = embeddingResponse.Message.Embeddings;
+                if (embeddings.Count != changedEntries.Count)
+                    throw new InvalidOperationException($"Embedding count mismatch for {name}. Expected {changedEntries.Count}, received {embeddings.Count}.");
+
+                for (var index = 0; index < changedEntries.Count; index++)
+                {
+                    var changedEntry = changedEntries[index];
+                    await UpsertEntryAsync(connection, changedEntry.Id, name, changedEntry.Date, changedEntry.Content, embeddings[index], context.CancellationToken);
+                    entriesSynced++;
+                }
+
+                logger.LogInformation(
+                    "Finished processing {FileName}. Parsed: {ParsedCount}, Changed: {ChangedCount}, Upserted: {UpsertedCount}",
+                    name,
+                    entries.Count,
+                    changedEntries.Count,
+                    changedEntries.Count);
+            }
+            catch (RequestFaultException ex)
+            {
+                filesFailed++;
+                logger.LogWarning(ex, "Model request failed for file {FileName}; continuing with remaining files", name);
+            }
+            catch (RequestTimeoutException ex)
+            {
+                filesFailed++;
+                logger.LogWarning(ex, "Model request timed out for file {FileName}; continuing with remaining files", name);
+            }
+            catch (OperationCanceledException ex) when (!context.CancellationToken.IsCancellationRequested)
+            {
+                filesFailed++;
+                logger.LogWarning(ex, "Model request hit local timeout for file {FileName}; continuing with remaining files", name);
+            }
+            catch (Exception ex)
+            {
+                filesFailed++;
+                logger.LogError(ex, "Unexpected error while processing file {FileName}; continuing with remaining files", name);
             }
         }
 
-        logger.LogInformation("Finished syncing {Count} journal entries", entriesSynced);
+        stopwatch.Stop();
+        logger.LogInformation(
+            "Finished work journal sync. Files: {FileCount}, FailedFiles: {FailedFileCount}, ParsedEntries: {ParsedEntries}, SkippedUnchanged: {SkippedUnchanged}, SyncedEntries: {SyncedEntries}, StartedAtUtc: {StartedAtUtc}, DurationMs: {DurationMs}",
+            markdownFiles.Count,
+            filesFailed,
+            entriesParsed,
+            entriesSkippedUnchanged,
+            entriesSynced,
+            startedAt,
+            stopwatch.ElapsedMilliseconds);
         await context.Publish(new WorkJournalSyncedEvent(entriesSynced, DateTime.UtcNow), context.CancellationToken);
+        logger.LogInformation("Published WorkJournalSyncedEvent with {EntriesSynced} synced entries", entriesSynced);
     }
 
     private async Task<string?> GetExistingContentAsync(NpgsqlConnection connection, Guid id, CancellationToken cancellationToken)
@@ -146,57 +238,20 @@ public class SyncWorkJournalConsumer(
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private async Task<IEnumerable<(DateTime Date, string Content)>> ParseJournalEntriesAsync(string fileName, string fileContent, CancellationToken cancellationToken)
-    {
-        var prompt = $$"""
-        You are a helpful data extraction assistant.
-        Parse the following work journal markdown file into distinct entries.
-        The filename is '{{fileName}}', which indicates the year and month (e.g. 2026_01.md implies Jan 2026).
-        Entries start with '## ' headings that represent dates or date ranges (e.g. '## 01/2' or '## 01/4-5').
-        
-        Return a JSON object with the following structure exactly:
-        {
-            "entries": [
-                {
-                    "date": "YYYY-MM-DD", // The exact start date of the entry based on the heading and filename. If it's a range, use the FIRST date.
-                    "content": "The full markdown content of the entry, including the heading and bullet points."
-                }
-            ]
-        }
-
-        Markdown content:
-        {{fileContent}}
-        """;
-
-        var response = await _chatClient.CompleteChatAsync(
-            [new UserChatMessage(prompt)],
-            new ChatCompletionOptions { ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() },
-            cancellationToken);
-
-        var json = response.Value.Content[0].Text;
-        using var doc = JsonDocument.Parse(json);
-        var entries = new List<(DateTime Date, string Content)>();
-
-        if (doc.RootElement.TryGetProperty("entries", out var entriesArray))
-        {
-            foreach (var element in entriesArray.EnumerateArray())
-            {
-                if (element.TryGetProperty("date", out var dateElement) && 
-                    element.TryGetProperty("content", out var contentElement) &&
-                    DateTime.TryParse(dateElement.GetString(), out var date))
-                {
-                    entries.Add((date, contentElement.GetString() ?? ""));
-                }
-            }
-        }
-
-        return entries;
-    }
-
     internal static NpgsqlDataSource CreateVectorDataSource(string connectionString)
     {
         var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
         dataSourceBuilder.UseVector();
         return dataSourceBuilder.Build();
+    }
+
+    internal static async Task<TResponse> RequestWithTimeoutAsync<TResponse>(
+        Func<CancellationToken, Task<TResponse>> request,
+        CancellationToken cancellationToken,
+        TimeSpan timeout)
+    {
+        using var timeoutCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCancellationTokenSource.CancelAfter(timeout);
+        return await request(timeoutCancellationTokenSource.Token);
     }
 }

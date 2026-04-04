@@ -12,9 +12,6 @@ internal class OpenAiAgentEmbeddingService : IAgentEmbeddingService
     public OpenAiAgentEmbeddingService(IOptions<ApiKeyOptions> apiKeyOptions, IOptions<AgentMemoryOptions> agentMemoryOptions)
     {
         var apiKey = apiKeyOptions.Value.OpenAiKey;
-        if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException("OpenAI API key not found. In production set OPENAI_API_KEY env var; for local dev use: dotnet user-secrets set OpenApiKey \"your-key\" --project PersonalAgent");
-
         _embeddingClient = new OpenAIClient(apiKey).GetEmbeddingClient(agentMemoryOptions.Value.EmbeddingModel);
     }
 
@@ -22,5 +19,17 @@ internal class OpenAiAgentEmbeddingService : IAgentEmbeddingService
     {
         var response = await _embeddingClient.GenerateEmbeddingAsync(content, cancellationToken: cancellationToken);
         return response.Value.ToFloats().ToArray();
+    }
+
+    public async Task<List<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IReadOnlyList<string> contents, CancellationToken cancellationToken = default)
+    {
+        var embeddings = new List<ReadOnlyMemory<float>>(contents.Count);
+        foreach (var content in contents)
+        {
+            var embedding = await GenerateEmbeddingAsync(content, cancellationToken);
+            embeddings.Add(embedding);
+        }
+
+        return embeddings;
     }
 }

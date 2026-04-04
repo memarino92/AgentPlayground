@@ -20,10 +20,6 @@ AgentPlayground/
 ├── .github/
 │   └── copilot-instructions.md            # Copilot guidelines for this workspace
 ├── README.md                              # This file
-├── MyFirstAgent/                          # Simple agent getting started example
-│   ├── MyFirstAgent.csproj
-│   ├── Program.cs
-│   └── ...
 ├── PersonalAgent/                         # Minimal API personal assistant agent
 │   ├── PersonalAgent.csproj
 │   ├── Program.cs
@@ -49,17 +45,6 @@ AgentPlayground/
 
 ## Current Projects
 
-### MyFirstAgent
-
-A beginner-friendly example demonstrating:
-
-- Creating an agent with the Microsoft Agent Framework
-- Using OpenAI's GPT-4o-mini model
-- Managing conversation sessions and history
-- Following modern C# style guidelines
-
-**Technology**: .NET 10.0, Microsoft.Agents.AI (RC 1.0), OpenAI
-
 ### PersonalAgent
 
 A complete multi-service personal assistant system demonstrating:
@@ -75,6 +60,7 @@ A complete multi-service personal assistant system demonstrating:
 - MassTransit integration using PostgreSQL SQL transport
 - **Work Journal RAG**: Ingests private GitHub markdown journals into a pgvector database for semantic search
 - **Background Jobs**: Weekly scheduled background sync and on-demand synchronization via MassTransit worker
+- **Model task centralization**: worker requests parsing/embedding through MassTransit request/response so model provider coupling stays in API services
 - Shared Postgres-backed event bus between web, agent, and worker
 - Agent tool calling to publish follow-up bus messages
 - Security hardening: CORS, rate limiting, internal API key validation
@@ -133,6 +119,8 @@ dotnet user-secrets set "GitHub:PersonalAccessToken" "your-github-pat" --project
 dotnet user-secrets set "GitHub:RepoOwner" "your-username" --project PersonalAgent.Worker
 dotnet user-secrets set "GitHub:RepoName" "your-repo" --project PersonalAgent.Worker
 ```
+
+If those GitHub settings are missing, the worker still starts and processes non-work-journal consumers; work journal sync components are skipped and a startup warning is logged with missing keys.
 
 6. Start the web app:
 
@@ -379,13 +367,6 @@ dotnet build
 
 ### 4. Configure Secrets (if needed)
 
-For projects that require API keys (like MyFirstAgent with OpenAI):
-
-```bash
-dotnet user-secrets init --project MyFirstAgent
-dotnet user-secrets set "OpenApiKey" "your-api-key-here" --project MyFirstAgent
-```
-
 For PersonalAgent:
 
 ```bash
@@ -393,12 +374,6 @@ dotnet user-secrets set "OpenAI:ApiKey" "your-api-key-here" --project PersonalAg
 ```
 
 ### 5. Run a Project
-
-**MyFirstAgent** (standalone console app):
-
-```bash
-dotnet run --project MyFirstAgent
-```
 
 **PersonalAgent** (API only):
 

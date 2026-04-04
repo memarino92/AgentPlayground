@@ -1,6 +1,7 @@
 using AgentPlayground.Contracts.Commands;
 using AgentPlayground.Contracts.Messaging;
 using AgentPlayground.Contracts.Messaging.Events;
+using AgentPlayground.Contracts.Messaging.Requests;
 using MassTransit;
 using Microsoft.Extensions.Options;
 using PersonalAgent.Worker.Configuration;
@@ -9,9 +10,14 @@ using PersonalAgent.Worker.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddHostedService<WeeklyWorkJournalSyncService>();
+var workJournalConfigValidation = WorkerExtensions.ValidateWorkJournalSyncConfiguration(builder.Configuration);
+var workJournalSyncEnabled = workJournalConfigValidation.IsValid;
 
-builder.Services.AddGitHubOptions(builder.Configuration);
+if (workJournalSyncEnabled)
+{
+    builder.Services.AddGitHubOptions(builder.Configuration);
+    builder.Services.AddHostedService<WeeklyWorkJournalSyncService>();
+}
 
 builder.Services.AddMessagingOptions(builder.Configuration);
 builder.Services.AddOptions<SqlTransportOptions>()
@@ -30,6 +36,12 @@ builder.Services.AddPostgresMigrationHostedService(options =>
 });
 builder.Services.AddMassTransit(x =>
 {
+    if (workJournalSyncEnabled)
+    {
+        x.AddRequestClient<ParseWorkJournalEntriesRequest>();
+        x.AddRequestClient<GenerateEmbeddingsRequest>();
+    }
+
     x.AddConsumer<TestEventRequestedConsumer>()
         .Endpoint(e =>
         {
@@ -43,15 +55,30 @@ builder.Services.AddMassTransit(x =>
             e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<AgentGeneratedTestMessage>(_ => { }));
         });
         
-    x.AddConsumer<SyncWorkJournalConsumer>()
-        .Endpoint(e =>
-        {
-            e.Name = "personal-agent-worker-sync-work-journal";
-            e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<SyncWorkJournalCommand>(_ => { }));
-        });
+    if (workJournalSyncEnabled)
+    {
+        x.AddConsumer<SyncWorkJournalConsumer>()
+            .Endpoint(e =>
+            {
+                e.Name = "personal-agent-worker-sync-work-journal";
+                e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<SyncWorkJournalCommand>(_ => { }));
+            });
+    }
 
     x.ConfigureSharedPostgresTransport();
 });
 
 var host = builder.Build();
+var startupLogger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PersonalAgent.Worker.Startup");
+if (workJournalSyncEnabled)
+{
+    startupLogger.LogInformation("Work journal sync is enabled");
+}
+else
+{
+    startupLogger.LogWarning(
+        "Work journal sync is disabled due to missing configuration values: {MissingSettings}",
+        string.Join(", ", workJournalConfigValidation.MissingSettings));
+}
+
 host.Run();

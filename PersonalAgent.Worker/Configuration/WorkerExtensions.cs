@@ -6,6 +6,22 @@ namespace PersonalAgent.Worker.Configuration;
 
 public static class WorkerExtensions
 {
+    public static WorkJournalSyncConfigurationValidation ValidateWorkJournalSyncConfiguration(IConfiguration configuration)
+    {
+        var missingSettings = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_PAT") ?? configuration["GitHub:PersonalAccessToken"]))
+            missingSettings.Add("GitHub:PersonalAccessToken");
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_OWNER") ?? configuration["GitHub:RepoOwner"]))
+            missingSettings.Add("GitHub:RepoOwner");
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_REPO") ?? configuration["GitHub:RepoName"]))
+            missingSettings.Add("GitHub:RepoName");
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_JOURNAL_PATH") ?? configuration["GitHub:JournalPath"]))
+            missingSettings.Add("GitHub:JournalPath");
+
+        return new WorkJournalSyncConfigurationValidation(missingSettings.Count is 0, missingSettings);
+    }
+
     public static void AddGitHubOptions(this IServiceCollection services, IConfiguration configuration)
     {
          services.AddOptions<GitHubOptions>()
@@ -21,19 +37,9 @@ public static class WorkerExtensions
                     ?? configuration["GitHub:Branch"] ?? "main";
                 opts.JournalPath = Environment.GetEnvironmentVariable("GITHUB_JOURNAL_PATH") 
                     ?? configuration["GitHub:JournalPath"] ?? string.Empty;
-            })
-            .Validate(opts => !string.IsNullOrWhiteSpace(opts.PersonalAccessToken), "GitHub:PersonalAccessToken is required")
-            .Validate(opts => !string.IsNullOrWhiteSpace(opts.RepoOwner), "GitHub:RepoOwner is required")
-            .Validate(opts => !string.IsNullOrWhiteSpace(opts.RepoName), "GitHub:RepoName is required")
-            .ValidateOnStart();
+            });
 
-        services.AddOptions<ApiKeyOptions>()
-            .Configure(opts =>
-            {
-                opts.OpenAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") 
-                    ?? configuration["OpenAI:ApiKey"] ?? string.Empty;
-            })
-            .Validate(opts => !string.IsNullOrWhiteSpace(opts.OpenAiKey), "OpenAI:ApiKey is required")
-            .ValidateOnStart();
     }
 }
+
+public record WorkJournalSyncConfigurationValidation(bool IsValid, List<string> MissingSettings);
