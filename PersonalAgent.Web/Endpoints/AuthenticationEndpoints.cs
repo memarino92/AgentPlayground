@@ -9,7 +9,13 @@ public static class AuthenticationEndpoints
     {
         app.MapGet("/login", (string? returnUrl) =>
             Results.Challenge(
-                new AuthenticationProperties { RedirectUri = returnUrl ?? "/" },
+                new AuthenticationProperties
+                {
+                    RedirectUri = returnUrl ?? "/",
+                    IsPersistent = true,
+                    AllowRefresh = true,
+                    ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+                },
                 ["GitHub"]
             )
         ).WithName("Login");

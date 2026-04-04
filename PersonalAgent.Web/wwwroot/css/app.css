@@ -187,7 +187,7 @@ body {
 .chat-page__subtitle,
 .chat-panel__session-id,
 .chat-panel__empty p {
-  margin: 0.25rem 0 0;
+  margin: 0.25rem 0 1rem;
 }
 
 .chat-page__actions {
