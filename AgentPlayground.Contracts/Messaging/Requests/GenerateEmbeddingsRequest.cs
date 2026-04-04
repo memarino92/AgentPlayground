@@ -1,3 +1,3 @@
 namespace AgentPlayground.Contracts.Messaging.Requests;
 
-public record GenerateEmbeddingsRequest(Guid CorrelationId, string Source, List<string> Inputs, string? Model = null);
+public record GenerateEmbeddingsRequest(Guid CorrelationId, string Source, List<string> Inputs);
