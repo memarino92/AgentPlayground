@@ -30,6 +30,10 @@ AgentPlayground/
 │   ├── Components/
 │   │   └── Pages/Chat.razor
 │   └── ...
+├── PersonalAgent.Mobile/                  # Android MAUI companion app
+│   ├── PersonalAgent.Mobile.csproj
+│   ├── MainPage.xaml
+│   └── ...
 ├── AgentPlayground.Contracts/             # Shared message contracts and messaging options
 │   ├── AgentPlayground.Contracts.csproj
 │   └── ...
@@ -51,6 +55,7 @@ A complete multi-service personal assistant system demonstrating:
 
 - **PersonalAgent API**: Session-based chat endpoints in ASP.NET Core Minimal APIs
 - **PersonalAgent.Web**: Blazor Server frontend for interactive chat
+- **PersonalAgent.Mobile**: Android MAUI companion app for 2FA approval workflows and WebView shell
 - **PersonalAgent.Worker**: Hosted background worker consuming and logging test events
 - **AgentPlayground.Contracts**: Shared event contracts and messaging configuration
 

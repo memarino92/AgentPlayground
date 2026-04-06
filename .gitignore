@@ -9,6 +9,10 @@
 !.env.railway.example
 !.env.compose.example
 
+# Firebase mobile/backend credentials
+google-services.json
+*firebase-adminsdk*.json
+
 # User-specific files
 *.rsuser
 *.suo
@@ -37,6 +41,8 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+PersonalAgent.Mobile/obj/
+PersonalAgent.Mobile/bin/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/

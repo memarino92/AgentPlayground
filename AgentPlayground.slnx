@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="AgentPlayground.Contracts/AgentPlayground.Contracts.csproj" />
   <Project Path="AgentPlayground.Contracts.Tests/AgentPlayground.Contracts.Tests.csproj" />
+  <Project Path="PersonalAgent.Mobile/PersonalAgent.Mobile.csproj" />
   <Project Path="PersonalAgent.Web/PersonalAgent.Web.csproj" />
   <Project Path="PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj" />
   <Project Path="PersonalAgent.Worker/PersonalAgent.Worker.csproj" />

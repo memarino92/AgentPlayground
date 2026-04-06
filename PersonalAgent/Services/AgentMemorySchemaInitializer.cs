@@ -37,6 +37,8 @@ internal class AgentMemorySchemaInitializer(IOptions<AgentMemoryOptions> options
         var sessionsTable = QualifiedTableName(_options.SessionsTableName);
         var transcriptMessagesTable = QualifiedTableName(_options.TranscriptMessagesTableName);
         var memoryRecordsTable = QualifiedTableName(_options.MemoryRecordsTableName);
+        var mobileDeviceTokensTable = QualifiedTableName(_options.MobileDeviceTokensTableName);
+        var agentApprovalsTable = QualifiedTableName(_options.AgentApprovalsTableName);
         var vectorColumnDefinition = _options.EnableSemanticMemory
             ? $", embedding vector({_options.VectorDimensions}) NULL"
             : string.Empty;
@@ -106,6 +108,40 @@ internal class AgentMemorySchemaInitializer(IOptions<AgentMemoryOptions> options
             CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.MemoryRecordsTableName}_session_created_at")} ON {memoryRecordsTable} (session_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.MemoryRecordsTableName}_profile_created_at")} ON {memoryRecordsTable} (profile_id, created_at DESC);
             {vectorIndexSql}
+
+            CREATE TABLE IF NOT EXISTS {mobileDeviceTokensTable}
+            (
+                profile_id text NOT NULL,
+                device_id text NOT NULL,
+                platform text NOT NULL,
+                push_token text NOT NULL,
+                app_version text NULL,
+                registered_at timestamptz NOT NULL,
+                last_seen_at timestamptz NOT NULL,
+                CONSTRAINT {QuoteIdentifier($"pk_{_options.MobileDeviceTokensTableName}")} PRIMARY KEY (profile_id, device_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.MobileDeviceTokensTableName}_profile_last_seen")} ON {mobileDeviceTokensTable} (profile_id, last_seen_at DESC);
+            CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.MobileDeviceTokensTableName}_push_token")} ON {mobileDeviceTokensTable} (push_token);
+
+            CREATE TABLE IF NOT EXISTS {agentApprovalsTable}
+            (
+                approval_id uuid PRIMARY KEY,
+                profile_id text NOT NULL,
+                session_id text NOT NULL,
+                tool_name text NOT NULL,
+                action_summary text NOT NULL,
+                requested_by text NOT NULL,
+                requested_at timestamptz NOT NULL,
+                expires_at timestamptz NOT NULL,
+                status text NOT NULL,
+                decision_at timestamptz NULL,
+                decided_by text NULL,
+                reason text NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.AgentApprovalsTableName}_profile_requested")} ON {agentApprovalsTable} (profile_id, requested_at DESC);
+            CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.AgentApprovalsTableName}_session_requested")} ON {agentApprovalsTable} (session_id, requested_at DESC);
             """;
     }
 

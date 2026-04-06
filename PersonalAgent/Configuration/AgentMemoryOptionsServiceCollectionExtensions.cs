@@ -42,6 +42,8 @@ internal static class AgentMemoryOptionsServiceCollectionExtensions
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.SessionsTableName), $"{AgentMemoryOptions.SectionName}:SessionsTableName is required")
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.TranscriptMessagesTableName), $"{AgentMemoryOptions.SectionName}:TranscriptMessagesTableName is required")
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.MemoryRecordsTableName), $"{AgentMemoryOptions.SectionName}:MemoryRecordsTableName is required")
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.MobileDeviceTokensTableName), $"{AgentMemoryOptions.SectionName}:MobileDeviceTokensTableName is required")
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.AgentApprovalsTableName), $"{AgentMemoryOptions.SectionName}:AgentApprovalsTableName is required")
             .Validate(opts => !opts.EnableSemanticMemory || opts.VectorDimensions > 0, $"{AgentMemoryOptions.SectionName}:VectorDimensions must be greater than zero when semantic memory is enabled")
             .ValidateOnStart();
 

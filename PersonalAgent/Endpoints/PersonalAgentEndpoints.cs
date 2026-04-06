@@ -93,6 +93,76 @@ internal static class PersonalAgentEndpoints
                 : Results.NotFound(new { error = "Session not found" });
         });
 
+        apiGroup.MapPost("/mobile/devices/register", async (RegisterMobileDeviceTokenRequest request, AgentService agentService) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.ProfileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+            if (string.IsNullOrWhiteSpace(request.DeviceId))
+                return Results.BadRequest(new { error = "DeviceId is required" });
+            if (string.IsNullOrWhiteSpace(request.Platform))
+                return Results.BadRequest(new { error = "Platform is required" });
+            if (string.IsNullOrWhiteSpace(request.PushToken))
+                return Results.BadRequest(new { error = "PushToken is required" });
+
+            await agentService.RegisterMobileDeviceTokenAsync(request);
+            logger.LogInformation(
+                "Registered mobile device token for profile {ProfileId}, device {DeviceId}, platform {Platform}",
+                request.ProfileId,
+                request.DeviceId,
+                request.Platform);
+            return Results.Ok(new { message = "Device token registered" });
+        });
+
+        apiGroup.MapPost("/approvals", async (RequestAgentApprovalRequest request, AgentService agentService) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.ProfileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+            if (string.IsNullOrWhiteSpace(request.SessionId))
+                return Results.BadRequest(new { error = "SessionId is required" });
+            if (string.IsNullOrWhiteSpace(request.ToolName))
+                return Results.BadRequest(new { error = "ToolName is required" });
+            if (string.IsNullOrWhiteSpace(request.ActionSummary))
+                return Results.BadRequest(new { error = "ActionSummary is required" });
+            if (string.IsNullOrWhiteSpace(request.RequestedBy))
+                return Results.BadRequest(new { error = "RequestedBy is required" });
+
+            var approval = await agentService.RequestApprovalAsync(request);
+            return Results.Ok(new
+            {
+                approvalId = approval.ApprovalId,
+                status = approval.Status,
+                expiresAt = approval.ExpiresAt
+            });
+        });
+
+        apiGroup.MapPost("/approvals/{approvalId:guid}/decision", async (Guid approvalId, CompleteAgentApprovalRequest request, AgentService agentService) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.ProfileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+            if (string.IsNullOrWhiteSpace(request.DecidedBy))
+                return Results.BadRequest(new { error = "DecidedBy is required" });
+
+            var updated = await agentService.CompleteApprovalAsync(approvalId, request);
+            if (updated is null)
+                return Results.NotFound(new { error = "Pending approval not found" });
+
+            return Results.Ok(new
+            {
+                approvalId = updated.ApprovalId,
+                status = updated.Status,
+                decisionAt = updated.DecisionAt,
+                decidedBy = updated.DecidedBy
+            });
+        });
+
+        apiGroup.MapGet("/approvals/{approvalId:guid}", async (Guid approvalId, AgentService agentService) =>
+        {
+            var approval = await agentService.GetApprovalAsync(approvalId);
+            return approval is null
+                ? Results.NotFound(new { error = "Approval not found" })
+                : Results.Ok(approval);
+        });
+
         return app;
     }
 }
