@@ -13,4 +13,6 @@ internal record AgentMemoryOptions
     public string SessionsTableName { get; set; } = "sessions";
     public string TranscriptMessagesTableName { get; set; } = "transcript_messages";
     public string MemoryRecordsTableName { get; set; } = "memory_records";
+    public string MobileDeviceTokensTableName { get; set; } = "mobile_device_tokens";
+    public string AgentApprovalsTableName { get; set; } = "agent_approvals";
 }

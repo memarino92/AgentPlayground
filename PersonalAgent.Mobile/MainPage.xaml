@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="PersonalAgent.Mobile.MainPage"
+             BackgroundColor="#f8fafc">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Padding="12,10,12,0" RowSpacing="10">
+        <Border Grid.Row="0" StrokeThickness="0" BackgroundColor="#0f172a" StrokeShape="RoundRectangle 14" Padding="12,10">
+            <VerticalStackLayout Spacing="2">
+                <Label Text="PersonalAgent Mobile" FontSize="18" FontAttributes="Bold" TextColor="#f8fafc" />
+                <Label Text="2FA gateway + web companion" FontSize="12" TextColor="#cbd5e1" />
+            </VerticalStackLayout>
+        </Border>
+
+        <HorizontalStackLayout Grid.Row="1" Spacing="8">
+            <Button Text="Reload" Clicked="OnReloadClicked" BackgroundColor="#1e293b" TextColor="#f8fafc" CornerRadius="10" Padding="14,10" FontSize="13" />
+            <Button Text="Approve Pending" Clicked="OnOpenApprovalClicked" BackgroundColor="#166534" TextColor="#f0fdf4" CornerRadius="10" Padding="14,10" FontSize="13" />
+            <Button Text="Request 2FA" Clicked="OnRequestTestApprovalClicked" BackgroundColor="#0f766e" TextColor="#ecfeff" CornerRadius="10" Padding="14,10" FontSize="13" />
+        </HorizontalStackLayout>
+
+        <HorizontalStackLayout Grid.Row="2" Spacing="8">
+            <Button Text="Register Device" Clicked="OnRegisterDeviceClicked" BackgroundColor="#334155" TextColor="#f8fafc" CornerRadius="10" Padding="14,10" FontSize="13" />
+            <Label Text="{Binding StatusMessage}" VerticalOptions="Center" TextColor="#475569" LineBreakMode="TailTruncation" />
+        </HorizontalStackLayout>
+
+        <WebView x:Name="AgentWebView" Grid.Row="3" Source="{Binding WebAppUrl}" Navigated="OnWebViewNavigated" />
+    </Grid>
+
+</ContentPage>

@@ -22,6 +22,10 @@ The Worker is now orchestration-only for journal sync and calls these model task
 - `GET /api/sessions` list sessions (cursor paging).
 - `POST /api/sessions/{sessionId}/messages` send message.
 - `GET /api/sessions/{sessionId}/messages` read transcript.
+- `POST /api/mobile/devices/register` register/update mobile push token.
+- `POST /api/approvals` create a pending approval and trigger push delivery.
+- `POST /api/approvals/{approvalId}/decision` approve/deny a pending request.
+- `GET /api/approvals/{approvalId}` read approval status.
 
 `/api/*` endpoints use the internal API key filter when configured.
 
@@ -53,7 +57,15 @@ Optional:
 INTERNAL_API_KEY             -> Security:InternalApiKey
 ALLOWED_ORIGINS              -> Security:AllowedOrigins
 MESSAGING_SCHEMA             -> Messaging:Schema
+PUSH_NOTIFICATIONS_ENABLED   -> PushNotifications:Enabled
+FIREBASE_PROJECT_ID          -> PushNotifications:FirebaseProjectId
+FIREBASE_SERVICE_ACCOUNT_JSON -> PushNotifications:ServiceAccountJson
+FIREBASE_SERVICE_ACCOUNT_PATH -> PushNotifications:ServiceAccountPath
+ANDROID_PUSH_CHANNEL_ID      -> PushNotifications:AndroidChannelId
 ```
+
+For push notifications, set `PUSH_NOTIFICATIONS_ENABLED=true` and provide either
+`FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_PATH`.
 
 ## Local Run
 

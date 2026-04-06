@@ -51,6 +51,23 @@ internal static class ServiceCollectionExtensions
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.OpenAiKey), "OpenAI:ApiKey is required")
             .ValidateOnStart();
 
+        services.AddOptions<PushNotificationsOptions>()
+            .Configure(opts =>
+            {
+                opts.Enabled = ConfigurationValueResolver.ResolveBool(configuration, "PUSH_NOTIFICATIONS_ENABLED", $"{PushNotificationsOptions.SectionName}:Enabled", opts.Enabled);
+                opts.FirebaseProjectId = ConfigurationValueResolver.ResolveString(configuration, "FIREBASE_PROJECT_ID", $"{PushNotificationsOptions.SectionName}:FirebaseProjectId")
+                    ?? string.Empty;
+                opts.ServiceAccountJson = ConfigurationValueResolver.ResolveString(configuration, "FIREBASE_SERVICE_ACCOUNT_JSON", $"{PushNotificationsOptions.SectionName}:ServiceAccountJson")
+                    ?? string.Empty;
+                opts.ServiceAccountPath = ConfigurationValueResolver.ResolveString(configuration, "FIREBASE_SERVICE_ACCOUNT_PATH", $"{PushNotificationsOptions.SectionName}:ServiceAccountPath")
+                    ?? string.Empty;
+                opts.AndroidChannelId = ConfigurationValueResolver.ResolveString(configuration, "ANDROID_PUSH_CHANNEL_ID", $"{PushNotificationsOptions.SectionName}:AndroidChannelId", "agent-approval-high")
+                    ?? "agent-approval-high";
+            })
+            .Validate(opts => !opts.Enabled || !string.IsNullOrWhiteSpace(opts.FirebaseProjectId), $"{PushNotificationsOptions.SectionName}:FirebaseProjectId is required when push notifications are enabled")
+            .Validate(opts => !opts.Enabled || !string.IsNullOrWhiteSpace(opts.ServiceAccountJson) || !string.IsNullOrWhiteSpace(opts.ServiceAccountPath), $"{PushNotificationsOptions.SectionName}:ServiceAccountJson or ServiceAccountPath is required when push notifications are enabled")
+            .ValidateOnStart();
+
         services.AddOptions<ChatModelCatalogOptions>()
             .Bind(configuration.GetSection(ChatModelCatalogOptions.SectionName));
 
@@ -60,9 +77,12 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<ChatModelCatalog>();
         services.AddSingleton<IAgentSessionStore, PostgresAgentSessionStore>();
         services.AddSingleton<IAgentSemanticMemoryStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
+        services.AddSingleton<IAgentApprovalStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         services.AddSingleton<IAgentEmbeddingService, OpenAiAgentEmbeddingService>();
         services.AddSingleton<SemanticMemoryService>();
         services.AddSingleton<AgentEventService>();
+        services.AddSingleton<AgentApprovalService>();
+        services.AddSingleton<PushNotificationService>();
         services.AddSingleton<WorkJournalParsingService>();
         services.AddSingleton<WorkJournalService>();
         services.AddSingleton<TavilyMcpToolProvider>();
@@ -89,6 +109,13 @@ internal static class ServiceCollectionExtensions
                 {
                     e.Name = "personal-agent-test-event-requested";
                     e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<TestEventRequested>(_ => { }));
+                });
+            x.AddConsumer<DevicePushNotificationRequestedConsumer>(cfg =>
+                cfg.UseMessageRetry(retry => retry.Exponential(3, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(2))))
+                .Endpoint(e =>
+                {
+                    e.Name = "personal-agent-device-push-notification-requested";
+                    e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<DevicePushNotificationRequested>(_ => { }));
                 });
 
             x.ConfigureSharedPostgresTransport();

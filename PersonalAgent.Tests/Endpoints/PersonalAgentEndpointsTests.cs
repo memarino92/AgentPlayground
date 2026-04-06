@@ -109,6 +109,57 @@ public class PersonalAgentEndpointsTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task RegisterDeviceToken_ReturnsBadRequest_WhenPushTokenMissing()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/api/mobile/devices/register", new
+        {
+            profileId = "test-user",
+            deviceId = "device-1",
+            platform = "android",
+            pushToken = ""
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ApprovalFlow_CreatesAndCompletesApproval()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/approvals", new
+        {
+            profileId = "test-user",
+            sessionId = "session-123",
+            toolName = "DangerousTool",
+            actionSummary = "Run dangerous operation",
+            requestedBy = "agent"
+        });
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var createPayload = await ReadJsonAsync(createResponse);
+        var approvalId = createPayload.GetProperty("approvalId").GetGuid();
+        createPayload.GetProperty("status").GetString().Should().Be("pending");
+
+        var decisionResponse = await client.PostAsJsonAsync($"/api/approvals/{approvalId}/decision", new
+        {
+            profileId = "test-user",
+            approved = true,
+            decidedBy = "mobile-user",
+            reason = "looks good"
+        });
+
+        decisionResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var decisionPayload = await ReadJsonAsync(decisionResponse);
+        decisionPayload.GetProperty("status").GetString().Should().Be("approved");
+        decisionPayload.GetProperty("decidedBy").GetString().Should().Be("mobile-user");
+    }
+
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response)
     {
         var content = await response.Content.ReadAsStringAsync();
@@ -156,11 +207,15 @@ public class PersonalAgentEndpointsTests
         builder.Services.AddSingleton(ChatModelCatalogFactory);
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
         builder.Services.AddSingleton<IAgentSemanticMemoryStore>(sp => (InMemoryAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
+        builder.Services.AddSingleton<IAgentApprovalStore>(sp => (InMemoryAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         builder.Services.AddSingleton<IAgentEmbeddingService, TestEmbeddingService>();
         builder.Services.AddSingleton<SemanticMemoryService>();
         builder.Services.AddSingleton<AgentEventService>();
+        builder.Services.AddSingleton<AgentApprovalService>();
         builder.Services.AddSingleton<WorkJournalService>();
         builder.Services.AddSingleton<ITavilyMcpToolProvider, TestTavilyMcpToolProvider>();
+        builder.Services.AddSingleton<PushNotificationService>();
+        builder.Services.AddSingleton<IOptions<PushNotificationsOptions>>(Options.Create(new PushNotificationsOptions()));
         builder.Services.AddSingleton<AgentChatService>();
         builder.Services.AddSingleton<AgentService>();
         builder.Services.AddSingleton(_ => Mock.Of<IBus>());
@@ -193,10 +248,12 @@ public class PersonalAgentEndpointsTests
             Task.FromResult(contents.Select(_ => new ReadOnlyMemory<float>(new float[] { 0.1f, 0.2f, 0.3f })).ToList());
     }
 
-    private sealed class InMemoryAgentSessionStore : IAgentSessionStore, IAgentSemanticMemoryStore
+    private sealed class InMemoryAgentSessionStore : IAgentSessionStore, IAgentSemanticMemoryStore, IAgentApprovalStore
     {
         private readonly Dictionary<Guid, PersistedAgentSession> _sessions = [];
         private readonly Dictionary<Guid, List<ConversationMessage>> _messages = [];
+        private readonly Dictionary<string, List<PersistedMobileDeviceToken>> _deviceTokens = [];
+        private readonly Dictionary<Guid, PersistedAgentApproval> _approvals = [];
 
         public Task CreateSessionAsync(Guid sessionId, string profileId, string sessionStateJson, CancellationToken cancellationToken = default)
         {
@@ -239,5 +296,69 @@ public class PersonalAgentEndpointsTests
 
         public Task<List<MemoryRecord>> SearchMemoriesAsync(string profileId, ReadOnlyMemory<float> embedding, int limit, CancellationToken cancellationToken = default) =>
             Task.FromResult(new List<MemoryRecord>());
+
+        public Task RegisterMobileDeviceTokenAsync(string profileId, string deviceId, string platform, string pushToken, string? appVersion, CancellationToken cancellationToken = default)
+        {
+            if (!_deviceTokens.TryGetValue(profileId, out var tokens))
+            {
+                tokens = [];
+                _deviceTokens[profileId] = tokens;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            tokens.RemoveAll(t => string.Equals(t.DeviceId, deviceId, StringComparison.Ordinal));
+            tokens.Add(new PersistedMobileDeviceToken(deviceId, platform, pushToken, appVersion, now, now));
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<PersistedMobileDeviceToken>> GetMobileDeviceTokensAsync(string profileId, CancellationToken cancellationToken = default)
+        {
+            var tokens = _deviceTokens.TryGetValue(profileId, out var stored)
+                ? (IReadOnlyList<PersistedMobileDeviceToken>)stored
+                : [];
+
+            return Task.FromResult(tokens);
+        }
+
+        public Task<PersistedAgentApproval> CreateAgentApprovalAsync(string profileId, string sessionId, string toolName, string actionSummary, string requestedBy, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
+        {
+            var approval = new PersistedAgentApproval(
+                Guid.NewGuid(),
+                profileId,
+                sessionId,
+                toolName,
+                actionSummary,
+                requestedBy,
+                DateTimeOffset.UtcNow,
+                expiresAt,
+                "pending",
+                null,
+                null,
+                null);
+            _approvals[approval.ApprovalId] = approval;
+            return Task.FromResult(approval);
+        }
+
+        public Task<PersistedAgentApproval?> CompleteAgentApprovalAsync(Guid approvalId, string profileId, bool approved, string decidedBy, string? reason, CancellationToken cancellationToken = default)
+        {
+            if (!_approvals.TryGetValue(approvalId, out var existing))
+                return Task.FromResult<PersistedAgentApproval?>(null);
+
+            if (!string.Equals(existing.ProfileId, profileId, StringComparison.Ordinal) || !string.Equals(existing.Status, "pending", StringComparison.Ordinal))
+                return Task.FromResult<PersistedAgentApproval?>(null);
+
+            var updated = existing with
+            {
+                Status = approved ? "approved" : "denied",
+                DecisionAt = DateTimeOffset.UtcNow,
+                DecidedBy = decidedBy,
+                Reason = reason
+            };
+            _approvals[approvalId] = updated;
+            return Task.FromResult<PersistedAgentApproval?>(updated);
+        }
+
+        public Task<PersistedAgentApproval?> GetAgentApprovalAsync(Guid approvalId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_approvals.TryGetValue(approvalId, out var approval) ? approval : null);
     }
 }

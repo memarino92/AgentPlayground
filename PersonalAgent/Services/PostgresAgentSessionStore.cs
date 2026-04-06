@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace PersonalAgent.Services;
 
-internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, ILogger<PostgresAgentSessionStore> logger) : IAgentSessionStore, IAgentSemanticMemoryStore
+internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, ILogger<PostgresAgentSessionStore> logger) : IAgentSessionStore, IAgentSemanticMemoryStore, IAgentApprovalStore
 {
     private const int SessionStateVersion = 1;
     private readonly AgentMemoryOptions _options = options.Value;
@@ -287,6 +287,212 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
         return memories;
     }
 
+    public async Task RegisterMobileDeviceTokenAsync(string profileId, string deviceId, string platform, string pushToken, string? appVersion, CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            INSERT INTO {MobileDeviceTokensTable}
+            (
+                profile_id,
+                device_id,
+                platform,
+                push_token,
+                app_version,
+                registered_at,
+                last_seen_at
+            )
+            VALUES
+            (
+                @profileId,
+                @deviceId,
+                @platform,
+                @pushToken,
+                @appVersion,
+                @registeredAt,
+                @lastSeenAt
+            )
+            ON CONFLICT (profile_id, device_id)
+            DO UPDATE SET
+                platform = EXCLUDED.platform,
+                push_token = EXCLUDED.push_token,
+                app_version = EXCLUDED.app_version,
+                last_seen_at = EXCLUDED.last_seen_at;
+            """;
+        command.Parameters.AddWithValue("profileId", profileId);
+        command.Parameters.AddWithValue("deviceId", deviceId);
+        command.Parameters.AddWithValue("platform", platform);
+        command.Parameters.AddWithValue("pushToken", pushToken);
+        command.Parameters.Add(new NpgsqlParameter("appVersion", NpgsqlDbType.Text) { Value = (object?)appVersion ?? DBNull.Value });
+        command.Parameters.AddWithValue("registeredAt", now);
+        command.Parameters.AddWithValue("lastSeenAt", now);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PersistedMobileDeviceToken>> GetMobileDeviceTokensAsync(string profileId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT device_id, platform, push_token, app_version, registered_at, last_seen_at
+            FROM {MobileDeviceTokensTable}
+            WHERE profile_id = @profileId
+            ORDER BY last_seen_at DESC;
+            """;
+        command.Parameters.AddWithValue("profileId", profileId);
+
+        var tokens = new List<PersistedMobileDeviceToken>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            tokens.Add(new PersistedMobileDeviceToken(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.GetFieldValue<DateTimeOffset>(4),
+                reader.GetFieldValue<DateTimeOffset>(5)));
+
+        return tokens;
+    }
+
+    public async Task<PersistedAgentApproval> CreateAgentApprovalAsync(string profileId, string sessionId, string toolName, string actionSummary, string requestedBy, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
+    {
+        var approvalId = Guid.NewGuid();
+        var requestedAt = DateTimeOffset.UtcNow;
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            INSERT INTO {AgentApprovalsTable}
+            (
+                approval_id,
+                profile_id,
+                session_id,
+                tool_name,
+                action_summary,
+                requested_by,
+                requested_at,
+                expires_at,
+                status,
+                decision_at,
+                decided_by,
+                reason
+            )
+            VALUES
+            (
+                @approvalId,
+                @profileId,
+                @sessionId,
+                @toolName,
+                @actionSummary,
+                @requestedBy,
+                @requestedAt,
+                @expiresAt,
+                'pending',
+                NULL,
+                NULL,
+                NULL
+            );
+            """;
+        command.Parameters.AddWithValue("approvalId", approvalId);
+        command.Parameters.AddWithValue("profileId", profileId);
+        command.Parameters.AddWithValue("sessionId", sessionId);
+        command.Parameters.AddWithValue("toolName", toolName);
+        command.Parameters.AddWithValue("actionSummary", actionSummary);
+        command.Parameters.AddWithValue("requestedBy", requestedBy);
+        command.Parameters.AddWithValue("requestedAt", requestedAt);
+        command.Parameters.AddWithValue("expiresAt", expiresAt);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+
+        return new PersistedAgentApproval(
+            approvalId,
+            profileId,
+            sessionId,
+            toolName,
+            actionSummary,
+            requestedBy,
+            requestedAt,
+            expiresAt,
+            "pending",
+            null,
+            null,
+            null);
+    }
+
+    public async Task<PersistedAgentApproval?> CompleteAgentApprovalAsync(Guid approvalId, string profileId, bool approved, string decidedBy, string? reason, CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var status = approved ? "approved" : "denied";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {AgentApprovalsTable}
+            SET status = @status,
+                decision_at = @decisionAt,
+                decided_by = @decidedBy,
+                reason = @reason
+            WHERE approval_id = @approvalId
+              AND profile_id = @profileId
+              AND status = 'pending'
+            RETURNING approval_id, profile_id, session_id, tool_name, action_summary, requested_by, requested_at, expires_at, status, decision_at, decided_by, reason;
+            """;
+        command.Parameters.AddWithValue("approvalId", approvalId);
+        command.Parameters.AddWithValue("profileId", profileId);
+        command.Parameters.AddWithValue("status", status);
+        command.Parameters.AddWithValue("decisionAt", now);
+        command.Parameters.AddWithValue("decidedBy", decidedBy);
+        command.Parameters.Add(new NpgsqlParameter("reason", NpgsqlDbType.Text) { Value = (object?)reason ?? DBNull.Value });
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+
+        return new PersistedAgentApproval(
+            reader.GetGuid(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetFieldValue<DateTimeOffset>(6),
+            reader.GetFieldValue<DateTimeOffset>(7),
+            reader.GetString(8),
+            reader.GetFieldValue<DateTimeOffset>(9),
+            reader.GetString(10),
+            reader.IsDBNull(11) ? null : reader.GetString(11));
+    }
+
+    public async Task<PersistedAgentApproval?> GetAgentApprovalAsync(Guid approvalId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT approval_id, profile_id, session_id, tool_name, action_summary, requested_by, requested_at, expires_at, status, decision_at, decided_by, reason
+            FROM {AgentApprovalsTable}
+            WHERE approval_id = @approvalId;
+            """;
+        command.Parameters.AddWithValue("approvalId", approvalId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+
+        return new PersistedAgentApproval(
+            reader.GetGuid(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetFieldValue<DateTimeOffset>(6),
+            reader.GetFieldValue<DateTimeOffset>(7),
+            reader.GetString(8),
+            reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTimeOffset>(9),
+            reader.IsDBNull(10) ? null : reader.GetString(10),
+            reader.IsDBNull(11) ? null : reader.GetString(11));
+    }
+
     private async Task InsertMessageAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid sessionId, long messageSequence, string role, string content, DateTimeOffset createdAt, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -329,6 +535,8 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
     private string SessionsTable => QualifiedTableName(_options.SessionsTableName);
     private string TranscriptMessagesTable => QualifiedTableName(_options.TranscriptMessagesTableName);
     private string MemoryRecordsTable => QualifiedTableName(_options.MemoryRecordsTableName);
+    private string MobileDeviceTokensTable => QualifiedTableName(_options.MobileDeviceTokensTableName);
+    private string AgentApprovalsTable => QualifiedTableName(_options.AgentApprovalsTableName);
 
     private string QualifiedTableName(string tableName) => $"{QuoteIdentifier(_options.Schema)}.{QuoteIdentifier(tableName)}";
 
