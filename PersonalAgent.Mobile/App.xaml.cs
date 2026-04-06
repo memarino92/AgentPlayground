@@ -10,5 +10,5 @@ public partial class App : Application
         _mainPage = mainPage;
     }
 
-    protected override Window CreateWindow(IActivationState? activationState) => new(new AppShell(_mainPage));
+    protected override Window CreateWindow(IActivationState? activationState) => new(_mainPage);
 }
