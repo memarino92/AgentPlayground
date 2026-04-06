@@ -13,7 +13,7 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
     public string WebAppUrl => _options.WebAppUrl;
     public string ProfileId => _options.ProfileId;
 
-    public async Task RegisterDeviceTokenAsync(string pushToken, CancellationToken cancellationToken = default)
+    public async Task<ApiCallResult> RegisterDeviceTokenAsync(string pushToken, CancellationToken cancellationToken = default)
     {
         var request = new RegisterMobileDeviceTokenRequest(
             _options.ProfileId,
@@ -22,11 +22,21 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
             pushToken,
             AppInfo.Current.VersionString);
 
-        using var response = await httpClient.PostAsJsonAsync("api/mobile/devices/register", request, cancellationToken);
-        if (response.IsSuccessStatusCode) return;
+        try
+        {
+            using var response = await httpClient.PostAsJsonAsync("api/mobile/devices/register", request, cancellationToken);
+            if (response.IsSuccessStatusCode) return ApiCallResult.Success();
 
-        var error = await response.Content.ReadAsStringAsync(cancellationToken);
-        logger.LogWarning("Device token registration failed: {StatusCode} {Error}", response.StatusCode, error);
+            var error = await response.Content.ReadAsStringAsync(cancellationToken);
+            var message = $"{(int)response.StatusCode} {response.StatusCode}: {error}";
+            logger.LogWarning("Device token registration failed: {StatusCode} {Error}", response.StatusCode, error);
+            return ApiCallResult.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Device token registration failed with exception");
+            return ApiCallResult.Failure(ex.Message);
+        }
     }
 
     public async Task<string?> RequestTestApprovalAsync(CancellationToken cancellationToken = default)
@@ -68,6 +78,14 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
         var generated = $"android-{Guid.NewGuid():N}";
         Preferences.Default.Set("DeviceId", generated);
         return generated;
+    }
+
+    public string GetApiBaseUrl() => httpClient.BaseAddress?.ToString() ?? _options.ApiBaseUrl;
+
+    public sealed record ApiCallResult(bool IsSuccess, string? Error)
+    {
+        public static ApiCallResult Success() => new(true, null);
+        public static ApiCallResult Failure(string error) => new(false, error);
     }
 
     private sealed record ApprovalCreateResponse(string ApprovalId, string Status, DateTimeOffset ExpiresAt);
