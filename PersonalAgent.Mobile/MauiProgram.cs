@@ -23,7 +23,7 @@ public static class MauiProgram
         {
             ApiBaseUrl = ResolveString("PERSONAL_AGENT_API_BASE_URL", "http://127.0.0.1:5100"),
             WebAppUrl = ResolveString("PERSONAL_AGENT_WEB_BASE_URL", "http://127.0.0.1:5100"),
-            InternalApiKey = ResolveString("INTERNAL_API_KEY", string.Empty),
+            InternalApiKey = ResolveString("INTERNAL_API_KEY", "dev-internal-api-key"),
             ProfileId = ResolveString("PERSONAL_AGENT_PROFILE_ID", "mobile-dev"),
             AndroidChannelId = ResolveString("ANDROID_PUSH_CHANNEL_ID", "agent-approval-high")
         };
