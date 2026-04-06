@@ -185,6 +185,31 @@ docker compose down
 docker compose down -v
 ```
 
+### Android Mobile with Docker API (USB)
+
+For the Android companion app while API runs in Docker on your machine:
+
+1. Ensure API is up and published on `5100`:
+
+```bash
+OPENAI_API_KEY=your-openai-api-key docker compose up -d postgres personalagent-api
+```
+
+2. Bridge phone to host API over USB:
+
+```bash
+adb reverse tcp:5100 tcp:5100
+adb reverse --list
+```
+
+3. Use mobile app API base URL:
+
+```text
+http://127.0.0.1:5100
+```
+
+This is typically more reliable than LAN IP routing for local phone testing.
+
 If you previously used an older compose/Postgres layout, run `docker compose down -v` once before the first start to reset the volume for Postgres 18.
 
 ### Messaging Secrets

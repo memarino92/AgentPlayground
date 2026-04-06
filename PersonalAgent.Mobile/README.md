@@ -36,6 +36,32 @@ PERSONAL_AGENT_API_BASE_URL=http://192.168.1.10:5100
 PERSONAL_AGENT_WEB_BASE_URL=http://192.168.1.10:5100
 ```
 
+### Docker backend + USB-connected phone (recommended)
+
+If `PersonalAgent` runs in Docker on your dev machine, this is the fastest setup:
+
+1. Start backend containers:
+
+```bash
+OPENAI_API_KEY=your-key docker compose up -d postgres personalagent-api
+```
+
+2. Create USB reverse tunnel so phone `127.0.0.1:5100` maps to host `localhost:5100`:
+
+```bash
+adb reverse tcp:5100 tcp:5100
+adb reverse --list
+```
+
+3. Keep mobile app defaults:
+
+```text
+PERSONAL_AGENT_API_BASE_URL=http://127.0.0.1:5100
+PERSONAL_AGENT_WEB_BASE_URL=http://127.0.0.1:5100
+```
+
+This avoids LAN firewall issues and works consistently for local testing.
+
 ## Firebase Setup
 
 1. Keep `google-services.json` at repository root (it is gitignored).
