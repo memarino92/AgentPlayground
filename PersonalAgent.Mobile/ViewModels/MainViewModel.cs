@@ -44,16 +44,24 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
             return;
         }
 
-        await apiClient.RegisterDeviceTokenAsync(pushToken, cancellationToken);
-        StatusMessage = "Device token registered";
+        StatusMessage = "Registering device...";
+        var result = await apiClient.RegisterDeviceTokenAsync(pushToken, cancellationToken);
+        StatusMessage = result.IsSuccess
+            ? $"Device token registered ({Short(pushToken)})"
+            : $"Register failed: {result.Error}";
     }
 
     public async Task<string?> RequestTestApprovalAsync(CancellationToken cancellationToken = default)
     {
+        StatusMessage = "Requesting 2FA...";
         var approvalId = await apiClient.RequestTestApprovalAsync(cancellationToken);
         StatusMessage = approvalId is null ? "Failed to request 2FA" : $"2FA requested: {approvalId[..8]}...";
         return approvalId;
     }
+
+    public string GetApiBaseUrl() => apiClient.GetApiBaseUrl();
+
+    private static string Short(string value) => value.Length <= 12 ? value : $"{value[..6]}...{value[^4..]}";
 
     public Task SubmitApprovalDecisionAsync(Guid approvalId, bool approved, string reason, string decidedBy, CancellationToken cancellationToken = default) =>
         apiClient.SubmitApprovalDecisionAsync(approvalId, approved, reason, decidedBy, cancellationToken);
