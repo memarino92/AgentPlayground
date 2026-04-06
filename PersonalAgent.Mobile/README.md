@@ -23,10 +23,17 @@ ANDROID_PUSH_CHANNEL_ID
 Recommended Android emulator defaults for local dev:
 
 ```text
-PERSONAL_AGENT_API_BASE_URL=https://10.0.2.2:5001
-PERSONAL_AGENT_WEB_BASE_URL=https://10.0.2.2:5000
+PERSONAL_AGENT_API_BASE_URL=http://127.0.0.1:5100
+PERSONAL_AGENT_WEB_BASE_URL=http://127.0.0.1:5100
 PERSONAL_AGENT_PROFILE_ID=mobile-dev
 ANDROID_PUSH_CHANNEL_ID=agent-approval-high
+```
+
+For physical devices, use your host machine LAN IP, for example:
+
+```text
+PERSONAL_AGENT_API_BASE_URL=http://192.168.1.10:5100
+PERSONAL_AGENT_WEB_BASE_URL=http://192.168.1.10:5100
 ```
 
 ## Firebase Setup

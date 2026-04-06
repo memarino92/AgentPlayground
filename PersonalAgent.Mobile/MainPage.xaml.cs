@@ -42,9 +42,7 @@ public partial class MainPage : ContentPage
     private async void OnRegisterDeviceClicked(object? sender, EventArgs e)
     {
         await _viewModel.RegisterDeviceAsync();
-        var message = _viewModel.StatusMessage;
-        if (message.StartsWith("Register failed", StringComparison.Ordinal))
-            await DisplayAlertAsync("Register Device", $"{message}\nAPI: {_viewModel.GetApiBaseUrl()}", "OK");
+        await DisplayAlertAsync("Register Device", $"{_viewModel.StatusMessage}\nAPI: {_viewModel.GetApiBaseUrl()}", "OK");
     }
 
     private async void OnRequestTestApprovalClicked(object? sender, EventArgs e)
