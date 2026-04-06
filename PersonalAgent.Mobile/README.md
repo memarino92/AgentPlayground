@@ -62,6 +62,10 @@ PERSONAL_AGENT_WEB_BASE_URL=http://127.0.0.1:5100
 
 This avoids LAN firewall issues and works consistently for local testing.
 
+Android 9+ blocks plain HTTP by default. This app explicitly enables cleartext
+traffic in `Platforms/Android/AndroidManifest.xml` for local `http://127.0.0.1`
+development paths (USB reverse and LAN testing).
+
 ## Firebase Setup
 
 1. Keep `google-services.json` at repository root (it is gitignored).
