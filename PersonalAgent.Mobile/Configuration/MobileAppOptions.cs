@@ -7,4 +7,5 @@ public record MobileAppOptions
     public string InternalApiKey { get; init; } = string.Empty;
     public string ProfileId { get; init; } = "mobile-dev";
     public string AndroidChannelId { get; init; } = "agent-approval-high";
+    public bool EnableLocalApprovalShortcut { get; init; } = false;
 }

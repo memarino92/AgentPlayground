@@ -18,6 +18,7 @@ PERSONAL_AGENT_WEB_BASE_URL
 INTERNAL_API_KEY
 PERSONAL_AGENT_PROFILE_ID
 ANDROID_PUSH_CHANNEL_ID
+ENABLE_LOCAL_APPROVAL_SHORTCUT
 ```
 
 Recommended Android emulator defaults for local dev:
@@ -28,6 +29,7 @@ PERSONAL_AGENT_WEB_BASE_URL=http://127.0.0.1:5100
 INTERNAL_API_KEY=dev-internal-api-key
 PERSONAL_AGENT_PROFILE_ID=mobile-dev
 ANDROID_PUSH_CHANNEL_ID=agent-approval-high
+ENABLE_LOCAL_APPROVAL_SHORTCUT=false
 ```
 
 For physical devices, use your host machine LAN IP, for example:
@@ -80,8 +82,11 @@ for token and message callbacks.
 Current implementation status:
 
 - Device registration uses Firebase token when available, with placeholder token as fallback for local dev.
-- Approval prompt routing is exercised locally through API-triggered requests.
+- Approval prompt routing is driven by Firebase data messages by default.
 - Incoming Firebase data payloads are bridged into the native approval prompt routing.
+
+Set `ENABLE_LOCAL_APPROVAL_SHORTCUT=true` only when you want the Request 2FA
+button to inject a local pending request without waiting for push delivery.
 
 Current package graph now restores/builds without `NU1608` suppression.
 

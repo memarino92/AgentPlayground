@@ -12,6 +12,7 @@
 # Firebase mobile/backend credentials
 google-services.json
 *firebase-adminsdk*.json
+firebase-service-account.json
 
 # User-specific files
 *.rsuser
