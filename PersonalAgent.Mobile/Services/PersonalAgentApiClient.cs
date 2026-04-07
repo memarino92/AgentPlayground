@@ -9,14 +9,15 @@ namespace PersonalAgent.Mobile.Services;
 public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOptions> options, ILogger<PersonalAgentApiClient> logger)
 {
     private readonly MobileAppOptions _options = options.Value;
+    private const string ProfileIdPreferenceKey = "ProfileId";
 
     public string WebAppUrl => _options.WebAppUrl;
-    public string ProfileId => _options.ProfileId;
+    public string ProfileId => GetProfileId();
 
     public async Task<ApiCallResult> RegisterDeviceTokenAsync(string pushToken, CancellationToken cancellationToken = default)
     {
         var request = new RegisterMobileDeviceTokenRequest(
-            _options.ProfileId,
+            GetProfileId(),
             GetDeviceId(),
             "android",
             pushToken,
@@ -42,7 +43,7 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
     public async Task<string?> RequestTestApprovalAsync(CancellationToken cancellationToken = default)
     {
         var request = new RequestAgentApprovalRequest(
-            _options.ProfileId,
+            GetProfileId(),
             $"mobile-session-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}",
             "ToolCallGuard",
             "Approve test action from Android companion app",
@@ -62,7 +63,7 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
 
     public async Task SubmitApprovalDecisionAsync(Guid approvalId, bool approved, string reason, string decidedBy, CancellationToken cancellationToken = default)
     {
-        var request = new CompleteAgentApprovalRequest(_options.ProfileId, approved, decidedBy, reason);
+        var request = new CompleteAgentApprovalRequest(GetProfileId(), approved, decidedBy, reason);
         using var response = await httpClient.PostAsJsonAsync($"api/approvals/{approvalId}/decision", request, cancellationToken);
         if (response.IsSuccessStatusCode) return;
 
@@ -98,6 +99,18 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
     }
 
     public string GetApiBaseUrl() => httpClient.BaseAddress?.ToString() ?? _options.ApiBaseUrl;
+
+    public void SetProfileId(string profileId)
+    {
+        if (string.IsNullOrWhiteSpace(profileId)) return;
+        Preferences.Default.Set(ProfileIdPreferenceKey, profileId.Trim());
+    }
+
+    private string GetProfileId()
+    {
+        var stored = Preferences.Default.Get(ProfileIdPreferenceKey, string.Empty);
+        return string.IsNullOrWhiteSpace(stored) ? _options.ProfileId : stored;
+    }
 
     public sealed record ApiCallResult(bool IsSuccess, string? Error)
     {
