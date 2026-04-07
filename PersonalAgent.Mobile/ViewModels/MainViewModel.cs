@@ -10,12 +10,49 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
     private bool _isInitialized;
     private string _statusMessage = "Ready";
     private string _profileId = apiClient.ProfileId;
+    private string _apiBaseUrl = apiClient.GetApiBaseUrl();
+    private string _webAppUrl = apiClient.GetWebAppUrl();
+    private string _internalApiKey = apiClient.GetInternalApiKey();
     private Guid? _lastApprovalId;
     private string? _lastApprovalStatus;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public string WebAppUrl => apiClient.WebAppUrl;
+    public string WebAppUrl
+    {
+        get => _webAppUrl;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+            if (string.Equals(_webAppUrl, normalized, StringComparison.Ordinal)) return;
+            _webAppUrl = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    public string ApiBaseUrl
+    {
+        get => _apiBaseUrl;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+            if (string.Equals(_apiBaseUrl, normalized, StringComparison.Ordinal)) return;
+            _apiBaseUrl = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    public string InternalApiKey
+    {
+        get => _internalApiKey;
+        set
+        {
+            var normalized = value?.Trim() ?? string.Empty;
+            if (string.Equals(_internalApiKey, normalized, StringComparison.Ordinal)) return;
+            _internalApiKey = normalized;
+            OnPropertyChanged();
+        }
+    }
     public string ProfileId
     {
         get => _profileId;
@@ -69,6 +106,19 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
         apiClient.SetProfileId(ProfileId);
         StatusMessage = $"Profile set to {ProfileId}";
         await RegisterDeviceAsync(cancellationToken);
+    }
+
+    public Task SaveConnectionSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(ApiBaseUrl) || string.IsNullOrWhiteSpace(WebAppUrl))
+        {
+            StatusMessage = "API and Web URLs are required";
+            return Task.CompletedTask;
+        }
+
+        apiClient.SetConnectionSettings(ApiBaseUrl, WebAppUrl, InternalApiKey);
+        StatusMessage = "Connection settings saved";
+        return Task.CompletedTask;
     }
 
     public async Task RegisterDeviceAsync(CancellationToken cancellationToken = default)
