@@ -74,16 +74,21 @@ development paths (USB reverse and LAN testing).
 2. The project auto-links it into Android builds when the file exists.
 3. Ensure Firebase Cloud Messaging is enabled for your Android app in Firebase console.
 
+This app now integrates `Plugin.Firebase.CloudMessaging` + `Plugin.Firebase.Core`
+for token and message callbacks.
+
+Note: `NU1608` is currently downgraded from error to warning only in
+`PersonalAgent.Mobile.csproj` while resolving package graph drift between the
+plugin's AndroidX constraints and MAUI's transitive AndroidX versions.
+
 Current implementation status:
 
-- Device registration uses a local placeholder token for development.
+- Device registration uses Firebase token when available, with placeholder token as fallback for local dev.
 - Approval prompt routing is exercised locally through API-triggered requests.
-- A debug Android receiver (`FirebaseNotificationReceiver`) can still route local
-  broadcast test payloads into the native approval flow.
+- Incoming Firebase data payloads are bridged into the native approval prompt routing.
 
-The production FCM SDK wiring is intentionally the next milestone because current
-`Xamarin.Firebase.Messaging` packages conflict with MAUI/AndroidX dependency
-versions under .NET 10 in this solution.
+Next hardening step is pinning a clean AndroidX set in the mobile project so the
+`NU1608` compatibility warnings can be removed.
 
 ## Build
 
