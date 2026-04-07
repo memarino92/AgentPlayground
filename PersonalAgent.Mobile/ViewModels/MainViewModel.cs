@@ -9,13 +9,24 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
 {
     private bool _isInitialized;
     private string _statusMessage = "Ready";
+    private string _profileId = apiClient.ProfileId;
     private Guid? _lastApprovalId;
     private string? _lastApprovalStatus;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public string WebAppUrl => apiClient.WebAppUrl;
-    public string ProfileId => apiClient.ProfileId;
+    public string ProfileId
+    {
+        get => _profileId;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+            if (string.Equals(_profileId, normalized, StringComparison.Ordinal)) return;
+            _profileId = normalized;
+            OnPropertyChanged();
+        }
+    }
     public string? LastApprovalStatus
     {
         get => _lastApprovalStatus;
@@ -45,7 +56,19 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
 
         await RegisterDeviceAsync(cancellationToken);
         _isInitialized = true;
-        OnPropertyChanged(nameof(ProfileId));
+    }
+
+    public async Task SaveProfileIdAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(ProfileId))
+        {
+            StatusMessage = "Profile id is required";
+            return;
+        }
+
+        apiClient.SetProfileId(ProfileId);
+        StatusMessage = $"Profile set to {ProfileId}";
+        await RegisterDeviceAsync(cancellationToken);
     }
 
     public async Task RegisterDeviceAsync(CancellationToken cancellationToken = default)

@@ -49,6 +49,12 @@ public partial class MainPage : ContentPage
         await DisplayAlertAsync("Register Device", $"{_viewModel.StatusMessage}\nAPI: {_viewModel.GetApiBaseUrl()}", "OK");
     }
 
+    private async void OnSaveProfileClicked(object? sender, EventArgs e)
+    {
+        await _viewModel.SaveProfileIdAsync();
+        await DisplayAlertAsync("Profile", _viewModel.StatusMessage, "OK");
+    }
+
     private async void OnRequestTestApprovalClicked(object? sender, EventArgs e)
     {
         var approvalId = await _viewModel.RequestTestApprovalAsync();
@@ -162,6 +168,25 @@ public partial class MainPage : ContentPage
         };
         registerButton.Clicked += OnRegisterDeviceClicked;
 
+        var saveProfileButton = new Button
+        {
+            Text = "Save Profile",
+            BackgroundColor = Color.FromArgb("#1d4ed8"),
+            TextColor = Color.FromArgb("#eff6ff"),
+            CornerRadius = 10,
+            Padding = new Thickness(14, 10),
+            FontSize = 13
+        };
+        saveProfileButton.Clicked += OnSaveProfileClicked;
+
+        var profileEntry = new Entry
+        {
+            Placeholder = "Profile id (e.g. memarino92)",
+            BackgroundColor = Colors.White,
+            TextColor = Color.FromArgb("#0f172a")
+        };
+        profileEntry.SetBinding(Entry.TextProperty, nameof(MainViewModel.ProfileId), mode: BindingMode.TwoWay);
+
         var statusLabel = new Label
         {
             VerticalOptions = LayoutOptions.Center,
@@ -169,6 +194,18 @@ public partial class MainPage : ContentPage
             LineBreakMode = LineBreakMode.TailTruncation
         };
         statusLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.StatusMessage));
+
+        var profileRow = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto }
+            },
+            ColumnSpacing = 8
+        };
+        profileRow.Add(profileEntry, 0);
+        profileRow.Add(saveProfileButton, 1);
 
         var row2 = new Grid
         {
@@ -235,6 +272,7 @@ public partial class MainPage : ContentPage
                 Children =
                 {
                     header,
+                    profileRow,
                     row1,
                     requestButton,
                     row2,

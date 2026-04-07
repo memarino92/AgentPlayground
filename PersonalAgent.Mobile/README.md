@@ -21,6 +21,11 @@ ANDROID_PUSH_CHANNEL_ID
 ENABLE_LOCAL_APPROVAL_SHORTCUT
 ```
 
+You can override `PERSONAL_AGENT_PROFILE_ID` directly inside the app using the
+`Profile id` field and `Save Profile` button. The value is persisted in device
+preferences and used for token registration + approvals, so you do not need to
+hardcode your username in source.
+
 Recommended Android emulator defaults for local dev:
 
 ```text
