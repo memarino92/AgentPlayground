@@ -220,6 +220,9 @@ ANDROID_PUSH_CHANNEL_ID=agent-approval-high
 FIREBASE_SERVICE_ACCOUNT_FILE=./firebase-service-account.json
 ```
 
+For hosted platforms where mounting files is awkward (Railway, etc.), you can
+set `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64` instead of mounting a file.
+
 If you previously used an older compose/Postgres layout, run `docker compose down -v` once before the first start to reset the volume for Postgres 18.
 
 ### Messaging Secrets

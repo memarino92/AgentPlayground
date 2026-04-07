@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using PersonalAgent.Consumers;
 using PersonalAgent.Configuration;
 using PersonalAgent.Services;
+using System.Text;
 
 namespace PersonalAgent.Extensions;
 
@@ -59,6 +60,10 @@ internal static class ServiceCollectionExtensions
                     ?? string.Empty;
                 opts.ServiceAccountJson = ConfigurationValueResolver.ResolveString(configuration, "FIREBASE_SERVICE_ACCOUNT_JSON", $"{PushNotificationsOptions.SectionName}:ServiceAccountJson")
                     ?? string.Empty;
+                opts.ServiceAccountJsonBase64 = ConfigurationValueResolver.ResolveString(configuration, "FIREBASE_SERVICE_ACCOUNT_JSON_BASE64", $"{PushNotificationsOptions.SectionName}:ServiceAccountJsonBase64")
+                    ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(opts.ServiceAccountJson) && !string.IsNullOrWhiteSpace(opts.ServiceAccountJsonBase64))
+                    opts.ServiceAccountJson = DecodeBase64Json(opts.ServiceAccountJsonBase64);
                 opts.ServiceAccountPath = ConfigurationValueResolver.ResolveString(configuration, "FIREBASE_SERVICE_ACCOUNT_PATH", $"{PushNotificationsOptions.SectionName}:ServiceAccountPath")
                     ?? string.Empty;
                 opts.AndroidChannelId = ConfigurationValueResolver.ResolveString(configuration, "ANDROID_PUSH_CHANNEL_ID", $"{PushNotificationsOptions.SectionName}:AndroidChannelId", "agent-approval-high")
@@ -143,6 +148,19 @@ internal static class ServiceCollectionExtensions
         });
 
         return services;
+    }
+
+    private static string DecodeBase64Json(string base64)
+    {
+        try
+        {
+            var bytes = Convert.FromBase64String(base64);
+            return Encoding.UTF8.GetString(bytes);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 is not valid base64", ex);
+        }
     }
 
     private static SecurityOptions BuildSecurityOptions(IConfiguration configuration)
