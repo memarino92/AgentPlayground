@@ -36,8 +36,7 @@ public static class MauiProgram
             WebAppUrl = ResolveString("PERSONAL_AGENT_WEB_BASE_URL", "http://127.0.0.1:5100"),
             InternalApiKey = ResolveString("INTERNAL_API_KEY", "dev-internal-api-key"),
             ProfileId = ResolveString("PERSONAL_AGENT_PROFILE_ID", "mobile-dev"),
-            AndroidChannelId = ResolveString("ANDROID_PUSH_CHANNEL_ID", "agent-approval-high"),
-            EnableLocalApprovalShortcut = ResolveBool("ENABLE_LOCAL_APPROVAL_SHORTCUT", false)
+            AndroidChannelId = ResolveString("ANDROID_PUSH_CHANNEL_ID", "agent-approval-high")
         };
 
         builder.Services.AddSingleton(Microsoft.Extensions.Options.Options.Create(options));
@@ -80,9 +79,4 @@ public static class MauiProgram
     private static string EnsureTrailingSlash(string value) =>
         value.EndsWith("/", StringComparison.Ordinal) ? value : $"{value}/";
 
-    private static bool ResolveBool(string key, bool fallback)
-    {
-        var rawValue = Environment.GetEnvironmentVariable(key);
-        return bool.TryParse(rawValue, out var parsed) ? parsed : fallback;
-    }
 }

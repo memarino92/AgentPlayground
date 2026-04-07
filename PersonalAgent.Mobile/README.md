@@ -18,7 +18,6 @@ PERSONAL_AGENT_WEB_BASE_URL
 INTERNAL_API_KEY
 PERSONAL_AGENT_PROFILE_ID
 ANDROID_PUSH_CHANNEL_ID
-ENABLE_LOCAL_APPROVAL_SHORTCUT
 ```
 
 You can override `PERSONAL_AGENT_PROFILE_ID` directly inside the app using the
@@ -34,7 +33,6 @@ PERSONAL_AGENT_WEB_BASE_URL=http://127.0.0.1:5100
 INTERNAL_API_KEY=dev-internal-api-key
 PERSONAL_AGENT_PROFILE_ID=mobile-dev
 ANDROID_PUSH_CHANNEL_ID=agent-approval-high
-ENABLE_LOCAL_APPROVAL_SHORTCUT=false
 ```
 
 For physical devices, use your host machine LAN IP, for example:
@@ -90,9 +88,6 @@ Current implementation status:
 - Approval prompt routing is driven by Firebase data messages by default.
 - Incoming Firebase data payloads are bridged into the native approval prompt routing.
 
-Set `ENABLE_LOCAL_APPROVAL_SHORTCUT=true` only when you want the Request 2FA
-button to inject a local pending request without waiting for push delivery.
-
 Current package graph now restores/builds without `NU1608` suppression.
 
 ## Build
@@ -128,3 +123,21 @@ Install on an attached emulator/device:
 ```bash
 adb install -r PersonalAgent.Mobile/bin/Debug/net10.0-android/publish/com.personalagent.mobile-Signed.apk
 ```
+
+## Reviewer Checklist
+
+1. Start backend + push infra:
+
+```bash
+docker compose up -d postgres personalagent-api
+```
+
+2. Bridge USB device to local API:
+
+```bash
+adb reverse tcp:5100 tcp:5100
+```
+
+3. Open app, set your profile id, tap `Save Profile`, then tap `Register Device`.
+4. From web chat, ask agent to send a mobile notification to your profile id.
+5. Verify notification appears on phone lock screen/notification tray.

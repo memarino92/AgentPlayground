@@ -2,8 +2,6 @@ using PersonalAgent.Mobile.Models;
 using PersonalAgent.Mobile.Services;
 using PersonalAgent.Mobile.ViewModels;
 using Microsoft.Maui.Controls.Shapes;
-using Microsoft.Extensions.Options;
-using PersonalAgent.Mobile.Configuration;
 
 namespace PersonalAgent.Mobile;
 
@@ -12,13 +10,11 @@ public partial class MainPage : ContentPage
     private readonly MainViewModel _viewModel;
     private readonly NotificationRoutingService _notificationRoutingService;
     private readonly WebView _agentWebView;
-    private readonly MobileAppOptions _options;
 
-    public MainPage(MainViewModel viewModel, NotificationRoutingService notificationRoutingService, IOptions<MobileAppOptions> options)
+    public MainPage(MainViewModel viewModel, NotificationRoutingService notificationRoutingService)
     {
         _viewModel = viewModel;
         _notificationRoutingService = notificationRoutingService;
-        _options = options.Value;
         BindingContext = _viewModel;
         _notificationRoutingService.PendingApprovalReceived += OnPendingApprovalReceived;
 
@@ -53,26 +49,6 @@ public partial class MainPage : ContentPage
     {
         await _viewModel.SaveProfileIdAsync();
         await DisplayAlertAsync("Profile", _viewModel.StatusMessage, "OK");
-    }
-
-    private async void OnRequestTestApprovalClicked(object? sender, EventArgs e)
-    {
-        var approvalId = await _viewModel.RequestTestApprovalAsync();
-        if (string.IsNullOrWhiteSpace(approvalId))
-        {
-            await DisplayAlertAsync("Request failed", "Could not create test approval request.", "OK");
-            return;
-        }
-
-        if (_options.EnableLocalApprovalShortcut && Guid.TryParse(approvalId, out var parsedApprovalId))
-            _notificationRoutingService.RoutePendingApproval(new PendingApprovalNotification(
-                parsedApprovalId,
-                "mobile-debug",
-                "ToolCallGuard",
-                "Approve test action from Android companion app",
-                DateTimeOffset.UtcNow.AddMinutes(5)));
-
-        await DisplayAlertAsync("2FA Requested", $"Approval ID: {approvalId}", "OK");
     }
 
     private async void OnPendingApprovalReceived(object? sender, PendingApprovalNotification notification)
@@ -146,17 +122,6 @@ public partial class MainPage : ContentPage
         ((Button)row1.Children[0]).Clicked += OnReloadClicked;
         ((Button)row1.Children[1]).Clicked += OnOpenApprovalClicked;
 
-        var requestButton = new Button
-        {
-            Text = "Request 2FA",
-            BackgroundColor = Color.FromArgb("#0f766e"),
-            TextColor = Color.FromArgb("#ecfeff"),
-            CornerRadius = 10,
-            Padding = new Thickness(14, 10),
-            FontSize = 13
-        };
-        requestButton.Clicked += OnRequestTestApprovalClicked;
-
         var registerButton = new Button
         {
             Text = "Register Device",
@@ -219,17 +184,6 @@ public partial class MainPage : ContentPage
         row2.Add(registerButton, 0);
         row2.Add(statusLabel, 1);
 
-        var refreshStatusButton = new Button
-        {
-            Text = "Refresh Status",
-            BackgroundColor = Color.FromArgb("#475569"),
-            TextColor = Color.FromArgb("#f8fafc"),
-            CornerRadius = 10,
-            Padding = new Thickness(14, 10),
-            FontSize = 13
-        };
-        refreshStatusButton.Clicked += async (_, _) => await _viewModel.PollLastApprovalStatusAsync();
-
         var approvalStatusLabel = new Label
         {
             VerticalOptions = LayoutOptions.Center,
@@ -237,19 +191,7 @@ public partial class MainPage : ContentPage
             FontAttributes = FontAttributes.Bold,
             LineBreakMode = LineBreakMode.TailTruncation
         };
-        approvalStatusLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LastApprovalStatus));
-
-        var row3 = new Grid
-        {
-            ColumnDefinitions =
-            {
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Star }
-            },
-            ColumnSpacing = 8
-        };
-        row3.Add(refreshStatusButton, 0);
-        row3.Add(approvalStatusLabel, 1);
+        approvalStatusLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LastApprovalStatus), stringFormat: "Last approval: {0}");
 
         var webFrame = new Border
         {
@@ -274,9 +216,8 @@ public partial class MainPage : ContentPage
                     header,
                     profileRow,
                     row1,
-                    requestButton,
                     row2,
-                    row3,
+                    approvalStatusLabel,
                     new Label { Text = "Web Preview", FontSize = 12, TextColor = Color.FromArgb("#64748b") },
                     webFrame
                 }
