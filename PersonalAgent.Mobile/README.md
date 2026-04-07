@@ -77,18 +77,13 @@ development paths (USB reverse and LAN testing).
 This app now integrates `Plugin.Firebase.CloudMessaging` + `Plugin.Firebase.Core`
 for token and message callbacks.
 
-Note: `NU1608` is currently downgraded from error to warning only in
-`PersonalAgent.Mobile.csproj` while resolving package graph drift between the
-plugin's AndroidX constraints and MAUI's transitive AndroidX versions.
-
 Current implementation status:
 
 - Device registration uses Firebase token when available, with placeholder token as fallback for local dev.
 - Approval prompt routing is exercised locally through API-triggered requests.
 - Incoming Firebase data payloads are bridged into the native approval prompt routing.
 
-Next hardening step is pinning a clean AndroidX set in the mobile project so the
-`NU1608` compatibility warnings can be removed.
+Current package graph now restores/builds without `NU1608` suppression.
 
 ## Build
 
