@@ -178,6 +178,38 @@ public partial class MainPage : ContentPage
         row2.Add(registerButton, 0);
         row2.Add(statusLabel, 1);
 
+        var refreshStatusButton = new Button
+        {
+            Text = "Refresh Status",
+            BackgroundColor = Color.FromArgb("#475569"),
+            TextColor = Color.FromArgb("#f8fafc"),
+            CornerRadius = 10,
+            Padding = new Thickness(14, 10),
+            FontSize = 13
+        };
+        refreshStatusButton.Clicked += async (_, _) => await _viewModel.PollLastApprovalStatusAsync();
+
+        var approvalStatusLabel = new Label
+        {
+            VerticalOptions = LayoutOptions.Center,
+            TextColor = Color.FromArgb("#334155"),
+            FontAttributes = FontAttributes.Bold,
+            LineBreakMode = LineBreakMode.TailTruncation
+        };
+        approvalStatusLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LastApprovalStatus));
+
+        var row3 = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Star }
+            },
+            ColumnSpacing = 8
+        };
+        row3.Add(refreshStatusButton, 0);
+        row3.Add(approvalStatusLabel, 1);
+
         var webFrame = new Border
         {
             Stroke = Color.FromArgb("#cbd5e1"),
@@ -202,6 +234,7 @@ public partial class MainPage : ContentPage
                     row1,
                     requestButton,
                     row2,
+                    row3,
                     new Label { Text = "Web Preview", FontSize = 12, TextColor = Color.FromArgb("#64748b") },
                     webFrame
                 }
