@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using AgentPlayground.Contracts.Configuration;
 
 namespace PersonalAgent.Worker.Configuration;
 
@@ -39,6 +40,32 @@ public static class WorkerExtensions
                     ?? configuration["GitHub:JournalPath"] ?? string.Empty;
             });
 
+    }
+
+    public static void AddPersonalAgentApiOptions(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<PersonalAgentApiOptions>()
+            .Configure(opts =>
+            {
+                configuration.GetSection(PersonalAgentApiOptions.SectionName).Bind(opts);
+
+                opts.BaseUrl = ConfigurationValueResolver.ResolveString(
+                    configuration,
+                    "PERSONAL_AGENT_API_BASE_URL",
+                    $"{PersonalAgentApiOptions.SectionName}:BaseUrl",
+                    opts.BaseUrl)
+                    ?? opts.BaseUrl;
+
+                opts.InternalApiKey = ConfigurationValueResolver.ResolveString(
+                    configuration,
+                    "INTERNAL_API_KEY",
+                    $"{PersonalAgentApiOptions.SectionName}:InternalApiKey",
+                    opts.InternalApiKey)
+                    ?? opts.InternalApiKey;
+            })
+            .Validate(opts => Uri.TryCreate(opts.BaseUrl, UriKind.Absolute, out _), $"{PersonalAgentApiOptions.SectionName}:BaseUrl must be an absolute URI")
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.InternalApiKey), $"{PersonalAgentApiOptions.SectionName}:InternalApiKey is required")
+            .ValidateOnStart();
     }
 }
 
