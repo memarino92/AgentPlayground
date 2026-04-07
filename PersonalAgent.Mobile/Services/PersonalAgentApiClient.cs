@@ -70,6 +70,23 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
         logger.LogWarning("Approval decision failed: {StatusCode} {Error}", response.StatusCode, error);
     }
 
+    public async Task<string?> GetApprovalStatusAsync(Guid approvalId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await httpClient.GetAsync($"api/approvals/{approvalId}", cancellationToken);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var payload = await response.Content.ReadFromJsonAsync<ApprovalStatusResponse>(cancellationToken);
+            return payload?.Status;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed reading approval status for {ApprovalId}", approvalId);
+            return null;
+        }
+    }
+
     private static string GetDeviceId()
     {
         var existing = Preferences.Default.Get("DeviceId", string.Empty);
@@ -89,4 +106,5 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
     }
 
     private sealed record ApprovalCreateResponse(string ApprovalId, string Status, DateTimeOffset ExpiresAt);
+    private sealed record ApprovalStatusResponse(string ApprovalId, string Status);
 }

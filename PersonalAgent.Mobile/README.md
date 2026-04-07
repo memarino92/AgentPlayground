@@ -72,7 +72,18 @@ development paths (USB reverse and LAN testing).
 
 1. Keep `google-services.json` at repository root (it is gitignored).
 2. The project auto-links it into Android builds when the file exists.
-3. Firebase native token callbacks are not wired yet in this build; the app uses a placeholder token to exercise backend registration and 2FA flow.
+3. Ensure Firebase Cloud Messaging is enabled for your Android app in Firebase console.
+
+Current implementation status:
+
+- Device registration uses a local placeholder token for development.
+- Approval prompt routing is exercised locally through API-triggered requests.
+- A debug Android receiver (`FirebaseNotificationReceiver`) can still route local
+  broadcast test payloads into the native approval flow.
+
+The production FCM SDK wiring is intentionally the next milestone because current
+`Xamarin.Firebase.Messaging` packages conflict with MAUI/AndroidX dependency
+versions under .NET 10 in this solution.
 
 ## Build
 

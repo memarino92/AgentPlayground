@@ -6,6 +6,8 @@ public class PushTokenProvider(ILogger<PushTokenProvider> logger) : IPushTokenPr
 {
     private string? _cachedToken;
 
+    public event EventHandler<string>? TokenUpdated;
+
     public Task<string?> GetPushTokenAsync(CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrWhiteSpace(_cachedToken)) return Task.FromResult<string?>(_cachedToken);
@@ -16,6 +18,7 @@ public class PushTokenProvider(ILogger<PushTokenProvider> logger) : IPushTokenPr
             _cachedToken = $"placeholder-{Guid.NewGuid():N}";
             Preferences.Default.Set("PushToken", _cachedToken);
             logger.LogInformation("Generated placeholder push token for local development");
+            TokenUpdated?.Invoke(this, _cachedToken);
         }
 
         return Task.FromResult<string?>(_cachedToken);
