@@ -107,4 +107,37 @@ internal class AgentEventService
 
         return await PublishGeneratedMessageAsync(parsedCorrelationId, promptSummary, message, cancellationToken);
     }
+
+    public async Task<string> PublishMobileNotificationToolAsync(string profileId, string title, string body, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(profileId))
+            return "Unable to publish notification: profileId is required.";
+        if (string.IsNullOrWhiteSpace(title))
+            return "Unable to publish notification: title is required.";
+        if (string.IsNullOrWhiteSpace(body))
+            return "Unable to publish notification: body is required.";
+
+        var payload = new DevicePushNotificationRequested
+        {
+            NotificationId = Guid.NewGuid(),
+            RequestedAt = DateTimeOffset.UtcNow,
+            ProfileId = profileId.Trim(),
+            NotificationType = "agent-notification",
+            Title = title.Trim(),
+            Body = body.Trim(),
+            Data = new Dictionary<string, string>
+            {
+                ["source"] = "agent-tool"
+            }
+        };
+
+        await _bus.Publish(payload, cancellationToken);
+
+        _logger.LogInformation(
+            "Published mobile notification event for profile {ProfileId} with title {Title}",
+            payload.ProfileId,
+            payload.Title);
+
+        return $"Published mobile notification for profile {payload.ProfileId}";
+    }
 }
