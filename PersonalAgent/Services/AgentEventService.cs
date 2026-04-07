@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using PersonalAgent.Configuration;
+using PersonalAgent.Models;
 
 namespace PersonalAgent.Services;
 
@@ -14,11 +15,13 @@ internal class AgentEventService
     private readonly IBus _bus;
     private readonly ChatClientAgent _eventAgent;
     private readonly ILogger<AgentEventService> _logger;
+    private readonly SchedulingService _schedulingService;
 
     public AgentEventService(
         IOptions<ApiKeyOptions> apiKeyOptions,
         IBus bus,
         ChatModelCatalog chatModelCatalog,
+        SchedulingService schedulingService,
         ILogger<AgentEventService> logger,
         ILoggerFactory loggerFactory,
         IServiceProvider serviceProvider)
@@ -26,6 +29,7 @@ internal class AgentEventService
         var apiKey = apiKeyOptions.Value.OpenAiKey;
         _bus = bus;
         _logger = logger;
+        _schedulingService = schedulingService;
 
         var eventChatClient = new OpenAIClient(apiKey)
             .GetChatClient(chatModelCatalog.GetDefaultModel().Id);
@@ -139,5 +143,59 @@ internal class AgentEventService
             payload.Title);
 
         return $"Published mobile notification for profile {payload.ProfileId}";
+    }
+
+    public async Task<string> ScheduleNotificationToolAsync(string profileId, string title, string body, string? delay, string? executeAt, string? when, string? timeZoneId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(profileId)) return "Unable to schedule notification: profileId is required.";
+        if (string.IsNullOrWhiteSpace(title)) return "Unable to schedule notification: title is required.";
+        if (string.IsNullOrWhiteSpace(body)) return "Unable to schedule notification: body is required.";
+
+        var (tenantId, userId) = ParseTenantAndUser(profileId);
+        var parsedExecuteAt = DateTimeOffset.TryParse(executeAt, out var value) ? value : (DateTimeOffset?)null;
+        var result = await _schedulingService.ScheduleNotificationAsync(new ScheduleNotificationRequest
+        {
+            TenantId = tenantId,
+            UserId = userId,
+            Title = title,
+            Body = body,
+            Delay = delay,
+            ExecuteAt = parsedExecuteAt,
+            When = when,
+            TimeZoneId = timeZoneId
+        }, cancellationToken);
+
+        return $"Scheduled notification {result.Id} at {result.ExecuteAtUtc:O}";
+    }
+
+    public async Task<string> ScheduleAgentTaskToolAsync(string profileId, string instruction, string? delay, string? executeAt, string? when, string? timeZoneId, bool notifyOnCompletion = true, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(profileId)) return "Unable to schedule agent task: profileId is required.";
+        if (string.IsNullOrWhiteSpace(instruction)) return "Unable to schedule agent task: instruction is required.";
+
+        var (tenantId, userId) = ParseTenantAndUser(profileId);
+        var parsedExecuteAt = DateTimeOffset.TryParse(executeAt, out var value) ? value : (DateTimeOffset?)null;
+        var result = await _schedulingService.ScheduleAgentTaskAsync(new ScheduleAgentTaskRequest
+        {
+            TenantId = tenantId,
+            UserId = userId,
+            Instruction = instruction,
+            Delay = delay,
+            ExecuteAt = parsedExecuteAt,
+            When = when,
+            TimeZoneId = timeZoneId,
+            NotifyOnCompletion = notifyOnCompletion
+        }, cancellationToken);
+
+        return $"Scheduled agent task {result.Id} at {result.ExecuteAtUtc:O}";
+    }
+
+    private static (string TenantId, string UserId) ParseTenantAndUser(string profileId)
+    {
+        var trimmed = profileId.Trim();
+        var segments = trimmed.Split(':', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length is 2
+            ? (segments[0], segments[1])
+            : ("default", trimmed);
     }
 }

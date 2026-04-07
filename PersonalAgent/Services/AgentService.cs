@@ -3,7 +3,7 @@ using PersonalAgent.Models;
 
 namespace PersonalAgent.Services;
 
-internal class AgentService(AgentChatService chatService, AgentEventService eventService, AgentApprovalService approvalService)
+internal class AgentService(AgentChatService chatService, AgentEventService eventService, AgentApprovalService approvalService, SchedulingService schedulingService)
 {
     public Task<(string SessionId, string ModelId)> CreateSessionAsync(string profileId, string modelId) =>
         chatService.CreateSessionAsync(profileId, modelId);
@@ -31,4 +31,10 @@ internal class AgentService(AgentChatService chatService, AgentEventService even
 
     public Task<PersistedAgentApproval?> GetApprovalAsync(Guid approvalId, CancellationToken cancellationToken = default) =>
         approvalService.GetApprovalAsync(approvalId, cancellationToken);
+
+    public Task<ScheduleResult> ScheduleNotificationAsync(ScheduleNotificationRequest request, CancellationToken cancellationToken = default) =>
+        schedulingService.ScheduleNotificationAsync(request, cancellationToken);
+
+    public Task<ScheduleResult> ScheduleAgentTaskAsync(ScheduleAgentTaskRequest request, CancellationToken cancellationToken = default) =>
+        schedulingService.ScheduleAgentTaskAsync(request, cancellationToken);
 }

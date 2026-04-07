@@ -160,6 +160,77 @@ public class PersonalAgentEndpointsTests
         decisionPayload.GetProperty("decidedBy").GetString().Should().Be("mobile-user");
     }
 
+    [Fact]
+    public async Task ScheduleNotification_ReturnsBadRequest_WhenNoTimingInputProvided()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/api/schedule/notifications", new
+        {
+            tenantId = "tenant-a",
+            userId = "user-1",
+            title = "Reminder",
+            body = "Do the thing"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ScheduleNotification_ReturnsBadRequest_WhenMultipleTimingInputsProvided()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/api/schedule/notifications", new
+        {
+            tenantId = "tenant-a",
+            userId = "user-1",
+            title = "Reminder",
+            body = "Do the thing",
+            delay = "PT5M",
+            when = "tonight"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ScheduleAgentTask_ReturnsBadRequest_WhenNoTimingInputProvided()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/api/schedule/agent-tasks", new
+        {
+            tenantId = "tenant-a",
+            userId = "user-1",
+            instruction = "check service health"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ScheduleAgentTask_ReturnsOk_WhenExactlyOneTimingInputProvided()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/api/schedule/agent-tasks", new
+        {
+            tenantId = "tenant-a",
+            userId = "user-1",
+            instruction = "check service health",
+            delay = "PT1M"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await ReadJsonAsync(response);
+        payload.GetProperty("id").GetGuid().Should().NotBeEmpty();
+    }
+
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response)
     {
         var content = await response.Content.ReadAsStringAsync();
@@ -210,6 +281,7 @@ public class PersonalAgentEndpointsTests
         builder.Services.AddSingleton<IAgentApprovalStore>(sp => (InMemoryAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         builder.Services.AddSingleton<IAgentEmbeddingService, TestEmbeddingService>();
         builder.Services.AddSingleton<SemanticMemoryService>();
+        builder.Services.AddSingleton<SchedulingService>();
         builder.Services.AddSingleton<AgentEventService>();
         builder.Services.AddSingleton<AgentApprovalService>();
         builder.Services.AddSingleton<WorkJournalService>();

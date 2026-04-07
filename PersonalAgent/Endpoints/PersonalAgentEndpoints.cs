@@ -113,6 +113,38 @@ internal static class PersonalAgentEndpoints
             return Results.Ok(new { message = "Device token registered" });
         });
 
+        apiGroup.MapPost("/schedule/notifications", async (ScheduleNotificationRequest request, AgentService agentService) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.TenantId))
+                return Results.BadRequest(new { error = "TenantId is required" });
+            if (string.IsNullOrWhiteSpace(request.UserId))
+                return Results.BadRequest(new { error = "UserId is required" });
+            if (string.IsNullOrWhiteSpace(request.Title))
+                return Results.BadRequest(new { error = "Title is required" });
+            if (string.IsNullOrWhiteSpace(request.Body))
+                return Results.BadRequest(new { error = "Body is required" });
+            if (!HasExactlyOneTimingInput(request.Delay, request.ExecuteAt, request.When))
+                return Results.BadRequest(new { error = "Provide exactly one of Delay, ExecuteAt, or When" });
+
+            var result = await agentService.ScheduleNotificationAsync(request);
+            return Results.Ok(new { id = result.Id, executeAtUtc = result.ExecuteAtUtc, correlationId = result.CorrelationId, status = result.Status });
+        });
+
+        apiGroup.MapPost("/schedule/agent-tasks", async (ScheduleAgentTaskRequest request, AgentService agentService) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.TenantId))
+                return Results.BadRequest(new { error = "TenantId is required" });
+            if (string.IsNullOrWhiteSpace(request.UserId))
+                return Results.BadRequest(new { error = "UserId is required" });
+            if (string.IsNullOrWhiteSpace(request.Instruction))
+                return Results.BadRequest(new { error = "Instruction is required" });
+            if (!HasExactlyOneTimingInput(request.Delay, request.ExecuteAt, request.When))
+                return Results.BadRequest(new { error = "Provide exactly one of Delay, ExecuteAt, or When" });
+
+            var result = await agentService.ScheduleAgentTaskAsync(request);
+            return Results.Ok(new { id = result.Id, executeAtUtc = result.ExecuteAtUtc, correlationId = result.CorrelationId, status = result.Status });
+        });
+
         apiGroup.MapPost("/approvals", async (RequestAgentApprovalRequest request, AgentService agentService) =>
         {
             if (string.IsNullOrWhiteSpace(request.ProfileId))
@@ -164,5 +196,14 @@ internal static class PersonalAgentEndpoints
         });
 
         return app;
+    }
+
+    private static bool HasExactlyOneTimingInput(string? delay, DateTimeOffset? executeAt, string? when)
+    {
+        var count = 0;
+        if (!string.IsNullOrWhiteSpace(delay)) count++;
+        if (executeAt is not null) count++;
+        if (!string.IsNullOrWhiteSpace(when)) count++;
+        return count is 1;
     }
 }

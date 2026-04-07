@@ -90,6 +90,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<PushNotificationService>();
         services.AddSingleton<WorkJournalParsingService>();
         services.AddSingleton<WorkJournalService>();
+        services.AddSingleton<SchedulingService>();
         services.AddSingleton<TavilyMcpToolProvider>();
         services.AddSingleton<ITavilyMcpToolProvider>(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
         services.AddHostedService(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
@@ -121,6 +122,19 @@ internal static class ServiceCollectionExtensions
                 {
                     e.Name = "personal-agent-device-push-notification-requested";
                     e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<DevicePushNotificationRequested>(_ => { }));
+                });
+            x.AddConsumer<NotificationSchedulerConsumer>(cfg =>
+                cfg.UseMessageRetry(retry => retry.Exponential(3, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1))))
+                .Endpoint(e =>
+                {
+                    e.Name = MessagingEndpointNames.NotificationScheduler;
+                    e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<NotificationRequested>(_ => { }));
+                });
+            x.AddConsumer<PushNotificationConsumer>(cfg =>
+                cfg.UseMessageRetry(retry => retry.Exponential(3, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1))))
+                .Endpoint(e =>
+                {
+                    e.Name = MessagingEndpointNames.PushNotification;
                 });
 
             x.ConfigureSharedPostgresTransport();
