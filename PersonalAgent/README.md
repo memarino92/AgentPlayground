@@ -60,12 +60,13 @@ MESSAGING_SCHEMA             -> Messaging:Schema
 PUSH_NOTIFICATIONS_ENABLED   -> PushNotifications:Enabled
 FIREBASE_PROJECT_ID          -> PushNotifications:FirebaseProjectId
 FIREBASE_SERVICE_ACCOUNT_JSON -> PushNotifications:ServiceAccountJson
+FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 -> PushNotifications:ServiceAccountJsonBase64
 FIREBASE_SERVICE_ACCOUNT_PATH -> PushNotifications:ServiceAccountPath
 ANDROID_PUSH_CHANNEL_ID      -> PushNotifications:AndroidChannelId
 ```
 
 For push notifications, set `PUSH_NOTIFICATIONS_ENABLED=true` and provide either
-`FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_PATH`.
+`FIREBASE_SERVICE_ACCOUNT_JSON`, `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64`, or `FIREBASE_SERVICE_ACCOUNT_PATH`.
 
 ## Local Run
 
