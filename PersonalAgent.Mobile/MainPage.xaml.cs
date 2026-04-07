@@ -2,6 +2,8 @@ using PersonalAgent.Mobile.Models;
 using PersonalAgent.Mobile.Services;
 using PersonalAgent.Mobile.ViewModels;
 using Microsoft.Maui.Controls.Shapes;
+using Microsoft.Extensions.Options;
+using PersonalAgent.Mobile.Configuration;
 
 namespace PersonalAgent.Mobile;
 
@@ -10,11 +12,13 @@ public partial class MainPage : ContentPage
     private readonly MainViewModel _viewModel;
     private readonly NotificationRoutingService _notificationRoutingService;
     private readonly WebView _agentWebView;
+    private readonly MobileAppOptions _options;
 
-    public MainPage(MainViewModel viewModel, NotificationRoutingService notificationRoutingService)
+    public MainPage(MainViewModel viewModel, NotificationRoutingService notificationRoutingService, IOptions<MobileAppOptions> options)
     {
         _viewModel = viewModel;
         _notificationRoutingService = notificationRoutingService;
+        _options = options.Value;
         BindingContext = _viewModel;
         _notificationRoutingService.PendingApprovalReceived += OnPendingApprovalReceived;
 
@@ -54,7 +58,7 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        if (Guid.TryParse(approvalId, out var parsedApprovalId))
+        if (_options.EnableLocalApprovalShortcut && Guid.TryParse(approvalId, out var parsedApprovalId))
             _notificationRoutingService.RoutePendingApproval(new PendingApprovalNotification(
                 parsedApprovalId,
                 "mobile-debug",

@@ -210,6 +210,16 @@ http://127.0.0.1:5100
 
 This is typically more reliable than LAN IP routing for local phone testing.
 
+For real FCM delivery in Docker, set these in `.env.compose` and keep the
+service account file at repo root as `firebase-service-account.json`:
+
+```text
+PUSH_NOTIFICATIONS_ENABLED=true
+FIREBASE_PROJECT_ID=personalagent-492423
+ANDROID_PUSH_CHANNEL_ID=agent-approval-high
+FIREBASE_SERVICE_ACCOUNT_FILE=./firebase-service-account.json
+```
+
 If you previously used an older compose/Postgres layout, run `docker compose down -v` once before the first start to reset the volume for Postgres 18.
 
 ### Messaging Secrets

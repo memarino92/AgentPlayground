@@ -82,13 +82,17 @@ internal class PushNotificationService(IOptions<PushNotificationsOptions> option
         if (_messaging is not null) return _messaging;
 
         var appName = "personal-agent-push";
-        FirebaseApp app;
-
+        FirebaseApp? app = null;
         try
         {
             app = FirebaseApp.GetInstance(appName);
         }
         catch
+        {
+            // Create below when no named instance exists.
+        }
+
+        if (app is null)
         {
             var credential = BuildCredential();
             app = FirebaseApp.Create(new AppOptions

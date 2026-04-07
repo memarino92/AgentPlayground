@@ -32,6 +32,9 @@ services:
       AGENT_MEMORY_CONNECTION_STRING: "${AGENT_MEMORY_CONNECTION_STRING:-Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground}"
       MESSAGING_SCHEMA: "transport"
       ALLOWED_ORIGINS: "http://localhost:5000"
+      FIREBASE_SERVICE_ACCOUNT_PATH: "/run/secrets/firebase-service-account.json"
+    volumes:
+      - ./firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
     ports:
       - "5100:5100"
     depends_on:
