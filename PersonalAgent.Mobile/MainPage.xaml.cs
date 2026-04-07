@@ -51,6 +51,12 @@ public partial class MainPage : ContentPage
         await DisplayAlertAsync("Profile", _viewModel.StatusMessage, "OK");
     }
 
+    private async void OnSaveConnectionClicked(object? sender, EventArgs e)
+    {
+        await _viewModel.SaveConnectionSettingsAsync();
+        await DisplayAlertAsync("Connection", _viewModel.StatusMessage, "OK");
+    }
+
     private async void OnPendingApprovalReceived(object? sender, PendingApprovalNotification notification)
     {
         await MainThread.InvokeOnMainThreadAsync(OpenApprovalSheetAsync);
@@ -152,6 +158,42 @@ public partial class MainPage : ContentPage
         };
         profileEntry.SetBinding(Entry.TextProperty, nameof(MainViewModel.ProfileId), mode: BindingMode.TwoWay);
 
+        var apiUrlEntry = new Entry
+        {
+            Placeholder = "API base URL (https://api.example.com)",
+            BackgroundColor = Colors.White,
+            TextColor = Color.FromArgb("#0f172a")
+        };
+        apiUrlEntry.SetBinding(Entry.TextProperty, nameof(MainViewModel.ApiBaseUrl), mode: BindingMode.TwoWay);
+
+        var webUrlEntry = new Entry
+        {
+            Placeholder = "Web URL (https://app.example.com)",
+            BackgroundColor = Colors.White,
+            TextColor = Color.FromArgb("#0f172a")
+        };
+        webUrlEntry.SetBinding(Entry.TextProperty, nameof(MainViewModel.WebAppUrl), mode: BindingMode.TwoWay);
+
+        var apiKeyEntry = new Entry
+        {
+            Placeholder = "Internal API key",
+            IsPassword = true,
+            BackgroundColor = Colors.White,
+            TextColor = Color.FromArgb("#0f172a")
+        };
+        apiKeyEntry.SetBinding(Entry.TextProperty, nameof(MainViewModel.InternalApiKey), mode: BindingMode.TwoWay);
+
+        var saveConnectionButton = new Button
+        {
+            Text = "Save Connection",
+            BackgroundColor = Color.FromArgb("#7c3aed"),
+            TextColor = Color.FromArgb("#f5f3ff"),
+            CornerRadius = 10,
+            Padding = new Thickness(14, 10),
+            FontSize = 13
+        };
+        saveConnectionButton.Clicked += OnSaveConnectionClicked;
+
         var statusLabel = new Label
         {
             VerticalOptions = LayoutOptions.Center,
@@ -215,6 +257,10 @@ public partial class MainPage : ContentPage
                 {
                     header,
                     profileRow,
+                    apiUrlEntry,
+                    webUrlEntry,
+                    apiKeyEntry,
+                    saveConnectionButton,
                     row1,
                     row2,
                     approvalStatusLabel,
