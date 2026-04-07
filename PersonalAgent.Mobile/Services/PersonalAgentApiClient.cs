@@ -10,8 +10,11 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
 {
     private readonly MobileAppOptions _options = options.Value;
     private const string ProfileIdPreferenceKey = "ProfileId";
+    private const string ApiBaseUrlPreferenceKey = "ApiBaseUrl";
+    private const string WebAppUrlPreferenceKey = "WebAppUrl";
+    private const string InternalApiKeyPreferenceKey = "InternalApiKey";
 
-    public string WebAppUrl => _options.WebAppUrl;
+    public string WebAppUrl => GetWebAppUrl();
     public string ProfileId => GetProfileId();
 
     public async Task<ApiCallResult> RegisterDeviceTokenAsync(string pushToken, CancellationToken cancellationToken = default)
@@ -25,6 +28,7 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
 
         try
         {
+            ConfigureClient();
             using var response = await httpClient.PostAsJsonAsync("api/mobile/devices/register", request, cancellationToken);
             if (response.IsSuccessStatusCode) return ApiCallResult.Success();
 
@@ -50,6 +54,7 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
             "mobile-debug",
             5);
 
+        ConfigureClient();
         using var response = await httpClient.PostAsJsonAsync("api/approvals", request, cancellationToken);
         var payload = await response.Content.ReadFromJsonAsync<ApprovalCreateResponse>(cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -64,6 +69,7 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
     public async Task SubmitApprovalDecisionAsync(Guid approvalId, bool approved, string reason, string decidedBy, CancellationToken cancellationToken = default)
     {
         var request = new CompleteAgentApprovalRequest(GetProfileId(), approved, decidedBy, reason);
+        ConfigureClient();
         using var response = await httpClient.PostAsJsonAsync($"api/approvals/{approvalId}/decision", request, cancellationToken);
         if (response.IsSuccessStatusCode) return;
 
@@ -75,6 +81,7 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
     {
         try
         {
+            ConfigureClient();
             using var response = await httpClient.GetAsync($"api/approvals/{approvalId}", cancellationToken);
             if (!response.IsSuccessStatusCode) return null;
 
@@ -100,6 +107,26 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
 
     public string GetApiBaseUrl() => httpClient.BaseAddress?.ToString() ?? _options.ApiBaseUrl;
 
+    public string GetWebAppUrl()
+    {
+        var stored = Preferences.Default.Get(WebAppUrlPreferenceKey, string.Empty);
+        return string.IsNullOrWhiteSpace(stored) ? _options.WebAppUrl : stored;
+    }
+
+    public string GetInternalApiKey()
+    {
+        var stored = Preferences.Default.Get(InternalApiKeyPreferenceKey, string.Empty);
+        return string.IsNullOrWhiteSpace(stored) ? _options.InternalApiKey : stored;
+    }
+
+    public void SetConnectionSettings(string apiBaseUrl, string webAppUrl, string internalApiKey)
+    {
+        if (!string.IsNullOrWhiteSpace(apiBaseUrl)) Preferences.Default.Set(ApiBaseUrlPreferenceKey, apiBaseUrl.Trim());
+        if (!string.IsNullOrWhiteSpace(webAppUrl)) Preferences.Default.Set(WebAppUrlPreferenceKey, webAppUrl.Trim());
+        Preferences.Default.Set(InternalApiKeyPreferenceKey, internalApiKey?.Trim() ?? string.Empty);
+        ConfigureClient();
+    }
+
     public void SetProfileId(string profileId)
     {
         if (string.IsNullOrWhiteSpace(profileId)) return;
@@ -111,6 +138,24 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
         var stored = Preferences.Default.Get(ProfileIdPreferenceKey, string.Empty);
         return string.IsNullOrWhiteSpace(stored) ? _options.ProfileId : stored;
     }
+
+    private string GetEffectiveApiBaseUrl()
+    {
+        var stored = Preferences.Default.Get(ApiBaseUrlPreferenceKey, string.Empty);
+        return string.IsNullOrWhiteSpace(stored) ? _options.ApiBaseUrl : stored;
+    }
+
+    private void ConfigureClient()
+    {
+        httpClient.BaseAddress = new Uri(EnsureTrailingSlash(GetEffectiveApiBaseUrl()));
+        httpClient.DefaultRequestHeaders.Remove("X-Internal-Api-Key");
+        var internalApiKey = GetInternalApiKey();
+        if (!string.IsNullOrWhiteSpace(internalApiKey))
+            httpClient.DefaultRequestHeaders.Add("X-Internal-Api-Key", internalApiKey);
+    }
+
+    private static string EnsureTrailingSlash(string value) =>
+        value.EndsWith("/", StringComparison.Ordinal) ? value : $"{value}/";
 
     public sealed record ApiCallResult(bool IsSuccess, string? Error)
     {

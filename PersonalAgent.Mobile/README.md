@@ -25,6 +25,10 @@ You can override `PERSONAL_AGENT_PROFILE_ID` directly inside the app using the
 preferences and used for token registration + approvals, so you do not need to
 hardcode your username in source.
 
+You can also set `API base URL`, `Web URL`, and `Internal API key` in-app with
+`Save Connection`. These values are persisted in device preferences and override
+environment defaults.
+
 Recommended Android emulator defaults for local dev:
 
 ```text
