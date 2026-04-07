@@ -10,9 +10,18 @@ public class PushTokenProvider(ILogger<PushTokenProvider> logger) : IPushTokenPr
 
     public Task<string?> GetPushTokenAsync(CancellationToken cancellationToken = default)
     {
-        if (!string.IsNullOrWhiteSpace(_cachedToken)) return Task.FromResult<string?>(_cachedToken);
+        var persisted = Preferences.Default.Get("PushToken", string.Empty);
+        if (!string.IsNullOrWhiteSpace(persisted))
+        {
+            if (!string.Equals(_cachedToken, persisted, StringComparison.Ordinal))
+            {
+                _cachedToken = persisted;
+                TokenUpdated?.Invoke(this, persisted);
+            }
 
-        _cachedToken = Preferences.Default.Get("PushToken", string.Empty);
+            return Task.FromResult<string?>(_cachedToken);
+        }
+
         if (string.IsNullOrWhiteSpace(_cachedToken))
         {
             _cachedToken = $"placeholder-{Guid.NewGuid():N}";
