@@ -6,6 +6,7 @@ using MassTransit;
 using MassTransit.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using PersonalAgent.Worker.Consumers;
+using PersonalAgent.Worker.Services;
 using Xunit;
 
 namespace PersonalAgent.Worker.Tests.Consumers;
@@ -28,6 +29,7 @@ public class AgentTaskSchedulingIntegrationTests
                     cfg.ConfigureEndpoints(context);
                 });
             })
+            .AddSingleton<IAgentTaskExecutionService, StubAgentTaskExecutionService>()
             .BuildServiceProvider(true);
 
         var harness = provider.GetRequiredService<ITestHarness>();
@@ -73,6 +75,7 @@ public class AgentTaskSchedulingIntegrationTests
                     cfg.ConfigureEndpoints(context);
                 });
             })
+            .AddSingleton<IAgentTaskExecutionService, StubAgentTaskExecutionService>()
             .BuildServiceProvider(true);
 
         var harness = provider.GetRequiredService<ITestHarness>();
@@ -99,5 +102,11 @@ public class AgentTaskSchedulingIntegrationTests
         {
             await harness.Stop();
         }
+    }
+
+    private sealed class StubAgentTaskExecutionService : IAgentTaskExecutionService
+    {
+        public Task<AgentTaskExecutionResult> ExecuteAsync(ExecuteAgentTask task, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AgentTaskExecutionResult(true, "stubbed execution result"));
     }
 }

@@ -16,6 +16,16 @@ builder.Services.AddHttpClient("GitHubWorkJournal", client =>
     client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("PersonalAgent", "1.0"));
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+builder.Services.AddPersonalAgentApiOptions(builder.Configuration);
+builder.Services.AddHttpClient("PersonalAgentApi", (sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<PersonalAgentApiOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(60);
+    if (!string.IsNullOrWhiteSpace(options.InternalApiKey))
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", options.InternalApiKey);
+});
+builder.Services.AddSingleton<IAgentTaskExecutionService, AgentTaskExecutionService>();
 
 var workJournalConfigValidation = WorkerExtensions.ValidateWorkJournalSyncConfiguration(builder.Configuration);
 var workJournalSyncEnabled = workJournalConfigValidation.IsValid;

@@ -1,10 +1,11 @@
 using AgentPlayground.Contracts.Messaging.Events;
 using AgentPlayground.Contracts.Messaging.Commands;
 using MassTransit;
+using PersonalAgent.Worker.Services;
 
 namespace PersonalAgent.Worker.Consumers;
 
-internal class AgentTaskExecutorConsumer(ILogger<AgentTaskExecutorConsumer> logger) : IConsumer<ExecuteAgentTask>
+internal class AgentTaskExecutorConsumer(IAgentTaskExecutionService taskExecutionService, ILogger<AgentTaskExecutorConsumer> logger) : IConsumer<ExecuteAgentTask>
 {
     public async Task Consume(ConsumeContext<ExecuteAgentTask> context)
     {
@@ -16,8 +17,11 @@ internal class AgentTaskExecutorConsumer(ILogger<AgentTaskExecutorConsumer> logg
             message.UserId,
             message.Instruction);
 
+        var executionResult = await taskExecutionService.ExecuteAsync(message, context.CancellationToken);
+
         if (!message.NotifyOnCompletion) return;
 
+        var title = executionResult.Succeeded ? "Scheduled task complete" : "Scheduled task failed";
         var notification = new NotificationRequested
         {
             NotificationId = Guid.NewGuid(),
@@ -26,8 +30,8 @@ internal class AgentTaskExecutorConsumer(ILogger<AgentTaskExecutorConsumer> logg
             CorrelationId = message.CorrelationId,
             RequestedAtUtc = DateTimeOffset.UtcNow,
             ExecuteAtUtc = DateTimeOffset.UtcNow,
-            Title = "Scheduled task complete",
-            Body = message.Instruction,
+            Title = title,
+            Body = executionResult.Summary,
             Source = "Worker"
         };
 
