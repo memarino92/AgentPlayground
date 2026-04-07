@@ -20,14 +20,14 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore
-        run: dotnet restore
+      - name: Restore test projects
+        run: dotnet restore AgentPlayground.Contracts.Tests/AgentPlayground.Contracts.Tests.csproj && dotnet restore PersonalAgent.Tests/PersonalAgent.Tests.csproj && dotnet restore PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj && dotnet restore PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj
 
-      - name: Build
-        run: dotnet build --no-restore
+      - name: Build test projects
+        run: dotnet build AgentPlayground.Contracts.Tests/AgentPlayground.Contracts.Tests.csproj --no-restore && dotnet build PersonalAgent.Tests/PersonalAgent.Tests.csproj --no-restore && dotnet build PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj --no-restore && dotnet build PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj --no-restore
 
       - name: Run tests
-        run: dotnet test --no-build --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test AgentPlayground.Contracts.Tests/AgentPlayground.Contracts.Tests.csproj --no-build --logger "trx;LogFileName=contracts-tests.trx" && dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj --no-build --logger "trx;LogFileName=personalagent-tests.trx" && dotnet test PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj --no-build --logger "trx;LogFileName=web-tests.trx" && dotnet test PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj --no-build --logger "trx;LogFileName=worker-tests.trx"
 
       - name: Upload test results
         if: always()
