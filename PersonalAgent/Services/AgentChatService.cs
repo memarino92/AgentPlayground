@@ -123,6 +123,10 @@ internal class AgentChatService
             if (recalledMemories.Count > 0)
                 messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.System, BuildMemoryPrompt(recalledMemories)));
 
+            messages.Add(new Microsoft.Extensions.AI.ChatMessage(
+                ChatRole.System,
+                $"Current user profileId is '{persistedSession.ProfileId}'. Use this exact value when a tool requires profileId."));
+
             messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, message));
 
             var response = await agent.RunAsync(messages, session, options: null, cancellationToken: default);
@@ -187,12 +191,14 @@ internal class AgentChatService
     {
         var publishTool = WrapTool(AIFunctionFactory.Create(_eventService.PublishGeneratedMessageToolAsync, "publish_generated_test_message",
             "Publish a generated test message to the shared MassTransit bus."));
+        var mobileNotifyTool = WrapTool(AIFunctionFactory.Create(_eventService.PublishMobileNotificationToolAsync, "publish_mobile_notification",
+            "Send a push notification event to a user's registered mobile device. Use this when the user asks to notify or ping their phone."));
         var syncJournalTool = WrapTool(AIFunctionFactory.Create(_workJournalService.SyncWorkJournalAsync, "sync_work_journal",
             "Trigger a background process to sync the work journal from GitHub. This syncs markdown files and prepares them for semantic search."));
         var searchJournalTool = WrapTool(AIFunctionFactory.Create(_workJournalService.SearchWorkJournalAsync, "search_work_journal",
             "Search the work journal for answers to user questions using RAG (Retrieval-Augmented Generation). Use this tool whenever the user asks about past work, journal entries, or questions like 'when did I work on...' or 'who did I help'."));
         var webTools = _tavilyMcpToolProvider.GetTools().Select(WrapWebTool).ToList();
-        var tools = new List<AIFunction> { publishTool, syncJournalTool, searchJournalTool };
+        var tools = new List<AIFunction> { publishTool, mobileNotifyTool, syncJournalTool, searchJournalTool };
         if (webTools.Count > 0) tools.AddRange(webTools);
 
         _logger.LogInformation(
@@ -212,6 +218,8 @@ internal class AgentChatService
             When asked to respond to a bus test event, you must call the publish_generated_test_message tool exactly once with a concise generated message describing that you received the event.
             The tool arguments must include a valid correlationId GUID string copied from context.
             This does not mean that you should respond to every user message with a bus event follow-up, only when you are specifically asked to generate a follow-up message for a bus event.
+
+            When the user asks you to send a notification to their mobile device, call the publish_mobile_notification tool once with their profileId, a short title, and concise body text.
 
             When asked about past work, past events, or anything related to the user's work journal, use the search_work_journal tool to find relevant information.
             If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
