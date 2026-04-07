@@ -197,8 +197,12 @@ internal class AgentChatService
             "Trigger a background process to sync the work journal from GitHub. This syncs markdown files and prepares them for semantic search."));
         var searchJournalTool = WrapTool(AIFunctionFactory.Create(_workJournalService.SearchWorkJournalAsync, "search_work_journal",
             "Search the work journal for answers to user questions using RAG (Retrieval-Augmented Generation). Use this tool whenever the user asks about past work, journal entries, or questions like 'when did I work on...' or 'who did I help'."));
+        var scheduleNotificationTool = WrapTool(AIFunctionFactory.Create(_eventService.ScheduleNotificationToolAsync, "schedule_notification",
+            "Schedule a mobile notification for a user profile using delay (e.g. PT5M), absolute executeAt datetime, or natural when text like 'tonight'."));
+        var scheduleAgentTaskTool = WrapTool(AIFunctionFactory.Create(_eventService.ScheduleAgentTaskToolAsync, "schedule_agent_task",
+            "Schedule a future agent task for a user profile using delay, absolute executeAt datetime, or natural when text. Use notifyOnCompletion to request follow-up notifications."));
         var webTools = _tavilyMcpToolProvider.GetTools().Select(WrapWebTool).ToList();
-        var tools = new List<AIFunction> { publishTool, mobileNotifyTool, syncJournalTool, searchJournalTool };
+        var tools = new List<AIFunction> { publishTool, mobileNotifyTool, syncJournalTool, searchJournalTool, scheduleNotificationTool, scheduleAgentTaskTool };
         if (webTools.Count > 0) tools.AddRange(webTools);
 
         _logger.LogInformation(
@@ -220,6 +224,10 @@ internal class AgentChatService
             This does not mean that you should respond to every user message with a bus event follow-up, only when you are specifically asked to generate a follow-up message for a bus event.
 
             When the user asks you to send a notification to their mobile device, call the publish_mobile_notification tool once with their profileId, a short title, and concise body text.
+
+            When the user asks for a reminder later (for example "in 5 minutes" or "at 6pm"), call schedule_notification with profileId, title, body, and one timing input.
+
+            When the user asks you to do work later and then notify them, call schedule_agent_task with profileId, instruction, and one timing input.
 
             When asked about past work, past events, or anything related to the user's work journal, use the search_work_journal tool to find relevant information.
             If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
