@@ -54,6 +54,14 @@ public partial class MainPage : ContentPage
             return;
         }
 
+        if (Guid.TryParse(approvalId, out var parsedApprovalId))
+            _notificationRoutingService.RoutePendingApproval(new PendingApprovalNotification(
+                parsedApprovalId,
+                "mobile-debug",
+                "ToolCallGuard",
+                "Approve test action from Android companion app",
+                DateTimeOffset.UtcNow.AddMinutes(5)));
+
         await DisplayAlertAsync("2FA Requested", $"Approval ID: {approvalId}", "OK");
     }
 
