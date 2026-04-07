@@ -8,7 +8,7 @@ internal class AgentTaskExecutionService(IHttpClientFactory httpClientFactory, I
 {
     public async Task<AgentTaskExecutionResult> ExecuteAsync(ExecuteAgentTask task, CancellationToken cancellationToken = default)
     {
-        var profileId = $"{task.TenantId}:{task.UserId}";
+        var profileId = BuildProfileId(task.TenantId, task.UserId);
         var client = httpClientFactory.CreateClient("PersonalAgentApi");
 
         try
@@ -70,4 +70,9 @@ internal class AgentTaskExecutionService(IHttpClientFactory httpClientFactory, I
 
     private sealed record SessionResponse(string SessionId, string ModelId, string Message);
     private sealed record MessageResponse(string SessionId, string Response);
+
+    private static string BuildProfileId(string tenantId, string userId) =>
+        string.IsNullOrWhiteSpace(tenantId) || string.Equals(tenantId, "default", StringComparison.OrdinalIgnoreCase)
+            ? userId
+            : $"{tenantId}:{userId}";
 }

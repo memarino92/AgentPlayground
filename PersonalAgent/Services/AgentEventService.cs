@@ -196,6 +196,6 @@ internal class AgentEventService
         var segments = trimmed.Split(':', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return segments.Length is 2
             ? (segments[0], segments[1])
-            : ("default", trimmed);
+            : (string.Empty, trimmed);
     }
 }

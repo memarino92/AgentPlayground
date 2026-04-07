@@ -9,8 +9,12 @@ internal class PushNotificationConsumer(IAgentApprovalStore approvalStore, PushN
     public async Task Consume(ConsumeContext<SendNotification> context)
     {
         var message = context.Message;
-        var profileId = $"{message.TenantId}:{message.UserId}";
+        var profileId = BuildProfileId(message.TenantId, message.UserId);
         var tokens = await approvalStore.GetMobileDeviceTokensAsync(profileId, context.CancellationToken);
+
+        if (tokens.Count is 0 && !string.IsNullOrWhiteSpace(message.TenantId))
+            tokens = await approvalStore.GetMobileDeviceTokensAsync(message.UserId, context.CancellationToken);
+
         var sentCount = await pushNotificationService.SendToDevicesAsync(
             profileId,
             message.Title,
@@ -26,4 +30,9 @@ internal class PushNotificationConsumer(IAgentApprovalStore approvalStore, PushN
             message.UserId,
             sentCount);
     }
+
+    private static string BuildProfileId(string tenantId, string userId) =>
+        string.IsNullOrWhiteSpace(tenantId) || string.Equals(tenantId, "default", StringComparison.OrdinalIgnoreCase)
+            ? userId
+            : $"{tenantId}:{userId}";
 }
