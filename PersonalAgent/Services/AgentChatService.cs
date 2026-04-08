@@ -200,7 +200,7 @@ internal class AgentChatService
         var scheduleNotificationTool = WrapTool(AIFunctionFactory.Create(_eventService.ScheduleNotificationToolAsync, "schedule_notification",
             "Schedule a mobile notification for a user profile using delay (e.g. PT5M), absolute executeAt datetime, or natural when text like 'tonight'."));
         var scheduleAgentTaskTool = WrapTool(AIFunctionFactory.Create(_eventService.ScheduleAgentTaskToolAsync, "schedule_agent_task",
-            "Schedule a future agent task for a user profile using delay, absolute executeAt datetime, or natural when text. Use notifyOnCompletion to request follow-up notifications."));
+            "Schedule a future agent task for a user profile. Required: profileId, instruction, and exactly one timing field (delay, executeAt, or when). Use notifyOnCompletion to request follow-up notifications."));
         var webTools = _tavilyMcpToolProvider.GetTools().Select(WrapWebTool).ToList();
         var tools = new List<AIFunction> { publishTool, mobileNotifyTool, syncJournalTool, searchJournalTool, scheduleNotificationTool, scheduleAgentTaskTool };
         if (webTools.Count > 0) tools.AddRange(webTools);
@@ -227,7 +227,7 @@ internal class AgentChatService
 
             When the user asks for a reminder later (for example "in 5 minutes" or "at 6pm"), call schedule_notification with profileId, title, body, and one timing input.
 
-            When the user asks you to do work later and then notify them, call schedule_agent_task with profileId, instruction, and one timing input.
+            When the user asks you to do work later and then notify them, call schedule_agent_task with profileId, instruction, and exactly one of: delay (ISO-8601 duration like PT5M), executeAt (ISO-8601 datetime), or when (natural text like tonight).
 
             When asked about past work, past events, or anything related to the user's work journal, use the search_work_journal tool to find relevant information.
             If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.

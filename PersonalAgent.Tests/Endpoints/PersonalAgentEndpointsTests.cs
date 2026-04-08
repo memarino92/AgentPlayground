@@ -213,6 +213,62 @@ public class PersonalAgentEndpointsTests
     }
 
     [Fact]
+    public async Task ScheduleAgentTaskToolAsync_ReturnsError_WhenNoTimingInputProvided()
+    {
+        await using var app = await BuildAppAsync();
+        var eventService = app.Services.GetRequiredService<AgentEventService>();
+
+        var result = await eventService.ScheduleAgentTaskToolAsync(
+            profileId: "test-user",
+            instruction: "do the thing");
+
+        result.Should().Contain("provide exactly one of");
+    }
+
+    [Fact]
+    public async Task ScheduleAgentTaskToolAsync_ReturnsError_WhenMultipleTimingInputsProvided()
+    {
+        await using var app = await BuildAppAsync();
+        var eventService = app.Services.GetRequiredService<AgentEventService>();
+
+        var result = await eventService.ScheduleAgentTaskToolAsync(
+            profileId: "test-user",
+            instruction: "do the thing",
+            delay: "PT5M",
+            when: "tonight");
+
+        result.Should().Contain("provide exactly one of");
+    }
+
+    [Fact]
+    public async Task ScheduleAgentTaskToolAsync_ReturnsError_WhenProfileIdMissing()
+    {
+        await using var app = await BuildAppAsync();
+        var eventService = app.Services.GetRequiredService<AgentEventService>();
+
+        var result = await eventService.ScheduleAgentTaskToolAsync(
+            profileId: "",
+            instruction: "do the thing",
+            delay: "PT5M");
+
+        result.Should().Contain("profileId is required");
+    }
+
+    [Fact]
+    public async Task ScheduleAgentTaskToolAsync_ReturnsError_WhenInstructionMissing()
+    {
+        await using var app = await BuildAppAsync();
+        var eventService = app.Services.GetRequiredService<AgentEventService>();
+
+        var result = await eventService.ScheduleAgentTaskToolAsync(
+            profileId: "test-user",
+            instruction: "",
+            delay: "PT5M");
+
+        result.Should().Contain("instruction is required");
+    }
+
+    [Fact]
     public async Task ScheduleAgentTask_ReturnsOk_WhenExactlyOneTimingInputProvided()
     {
         await using var app = await BuildAppAsync();
