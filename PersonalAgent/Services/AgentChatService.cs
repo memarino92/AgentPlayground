@@ -201,8 +201,10 @@ internal class AgentChatService
             "Schedule a mobile notification for a user profile using delay (e.g. PT5M), absolute executeAt datetime, or natural when text like 'tonight'."));
         var scheduleAgentTaskTool = WrapTool(AIFunctionFactory.Create(_eventService.ScheduleAgentTaskToolAsync, "schedule_agent_task",
             "Schedule a future agent task for a user profile. Required: profileId, instruction, and exactly one timing field (delay, executeAt, or when). Use notifyOnCompletion to request follow-up notifications."));
+        var getCurrentDateTimeTool = WrapTool(AIFunctionFactory.Create(_eventService.GetCurrentDateTimeToolAsync, "get_current_date_time",
+            "Get the current date and time, optionally in a specific IANA or Windows timezone (e.g. 'America/Chicago' or 'Central Standard Time'). Call this before scheduling when the user specifies relative times like 'at noon today', '10 PM tomorrow', or 'next Monday'."));
         var webTools = _tavilyMcpToolProvider.GetTools().Select(WrapWebTool).ToList();
-        var tools = new List<AIFunction> { publishTool, mobileNotifyTool, syncJournalTool, searchJournalTool, scheduleNotificationTool, scheduleAgentTaskTool };
+        var tools = new List<AIFunction> { publishTool, mobileNotifyTool, syncJournalTool, searchJournalTool, scheduleNotificationTool, scheduleAgentTaskTool, getCurrentDateTimeTool };
         if (webTools.Count > 0) tools.AddRange(webTools);
 
         _logger.LogInformation(
@@ -228,6 +230,8 @@ internal class AgentChatService
             When the user asks for a reminder later (for example "in 5 minutes" or "at 6pm"), call schedule_notification with profileId, title, body, and exactly one of: delay (ISO-8601 duration like PT5M), executeAt (ISO-8601 datetime), or when (natural text like tonight).
 
             When the user asks you to do work later and then notify them, call schedule_agent_task with profileId, instruction, and exactly one of: delay (ISO-8601 duration like PT5M), executeAt (ISO-8601 datetime), or when (natural text like tonight).
+
+            Before using executeAt or when for either scheduling tool, call get_current_date_time to determine the current date and time so you can accurately resolve relative times like "at noon today" or "10 PM tomorrow".
 
             When asked about past work, past events, or anything related to the user's work journal, use the search_work_journal tool to find relevant information.
             If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
