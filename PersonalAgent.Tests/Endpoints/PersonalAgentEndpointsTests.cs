@@ -287,6 +287,81 @@ public class PersonalAgentEndpointsTests
         payload.GetProperty("id").GetGuid().Should().NotBeEmpty();
     }
 
+    [Fact]
+    public async Task ScheduleNotificationToolAsync_ReturnsError_WhenNoTimingInputProvided()
+    {
+        await using var app = await BuildAppAsync();
+        var eventService = app.Services.GetRequiredService<AgentEventService>();
+
+        var result = await eventService.ScheduleNotificationToolAsync(
+            profileId: "test-user",
+            title: "Test",
+            body: "Hello");
+
+        result.Should().Contain("provide exactly one of");
+    }
+
+    [Fact]
+    public async Task ScheduleNotificationToolAsync_ReturnsError_WhenMultipleTimingInputsProvided()
+    {
+        await using var app = await BuildAppAsync();
+        var eventService = app.Services.GetRequiredService<AgentEventService>();
+
+        var result = await eventService.ScheduleNotificationToolAsync(
+            profileId: "test-user",
+            title: "Test",
+            body: "Hello",
+            delay: "PT5M",
+            when: "tonight");
+
+        result.Should().Contain("provide exactly one of");
+    }
+
+    [Fact]
+    public async Task ScheduleNotificationToolAsync_ReturnsError_WhenProfileIdMissing()
+    {
+        await using var app = await BuildAppAsync();
+        var eventService = app.Services.GetRequiredService<AgentEventService>();
+
+        var result = await eventService.ScheduleNotificationToolAsync(
+            profileId: "",
+            title: "Test",
+            body: "Hello",
+            delay: "PT5M");
+
+        result.Should().Contain("profileId is required");
+    }
+
+    [Fact]
+    public async Task ScheduleNotificationToolAsync_ReturnsError_WhenTitleMissing()
+    {
+        await using var app = await BuildAppAsync();
+        var eventService = app.Services.GetRequiredService<AgentEventService>();
+
+        var result = await eventService.ScheduleNotificationToolAsync(
+            profileId: "test-user",
+            title: "",
+            body: "Hello",
+            delay: "PT5M");
+
+        result.Should().Contain("title is required");
+    }
+
+    [Fact]
+    public async Task ScheduleNotificationToolAsync_ReturnsError_WhenBodyMissing()
+    {
+        await using var app = await BuildAppAsync();
+        var eventService = app.Services.GetRequiredService<AgentEventService>();
+
+        var result = await eventService.ScheduleNotificationToolAsync(
+            profileId: "test-user",
+            title: "Test",
+            body: "",
+            delay: "PT5M");
+
+        result.Should().Contain("body is required");
+    }
+
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response)
     {
         var content = await response.Content.ReadAsStringAsync();

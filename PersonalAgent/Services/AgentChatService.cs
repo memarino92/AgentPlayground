@@ -225,7 +225,7 @@ internal class AgentChatService
 
             When the user asks you to send a notification to their mobile device, call the publish_mobile_notification tool once with their profileId, a short title, and concise body text.
 
-            When the user asks for a reminder later (for example "in 5 minutes" or "at 6pm"), call schedule_notification with profileId, title, body, and one timing input.
+            When the user asks for a reminder later (for example "in 5 minutes" or "at 6pm"), call schedule_notification with profileId, title, body, and exactly one of: delay (ISO-8601 duration like PT5M), executeAt (ISO-8601 datetime), or when (natural text like tonight).
 
             When the user asks you to do work later and then notify them, call schedule_agent_task with profileId, instruction, and exactly one of: delay (ISO-8601 duration like PT5M), executeAt (ISO-8601 datetime), or when (natural text like tonight).
 
