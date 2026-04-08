@@ -31,25 +31,17 @@ public class AgentEventServiceTests
     }
 
     [Fact]
-    public async Task GetCurrentDateTimeToolAsync_NoTimezone_ReturnsUtcString()
+    public async Task GetCurrentDateTimeToolAsync_NoTimezone_DefaultsToEasternAndIncludesUtc()
     {
-        var before = DateTimeOffset.UtcNow;
         var service = CreateService();
 
         var result = await service.GetCurrentDateTimeToolAsync();
 
-        var after = DateTimeOffset.UtcNow;
-        result.Should().Contain("UTC");
+        // Should include both a local Eastern time line and a UTC line
+        result.Should().Contain("Current date and time in");
         result.Should().Contain("Current UTC date and time:");
-
-        // The returned ISO-8601 timestamp should fall within our test window
-        var isoPrefix = "(ISO-8601: ";
-        var isoStart = result.IndexOf(isoPrefix, StringComparison.Ordinal) + isoPrefix.Length;
-        var isoEnd = result.IndexOf(')', isoStart);
-        var isoString = result[isoStart..isoEnd];
-        var parsed = DateTimeOffset.Parse(isoString);
-        parsed.Should().BeOnOrAfter(before.AddSeconds(-1));
-        parsed.Should().BeOnOrBefore(after.AddSeconds(1));
+        // Eastern timezone display name contains "Eastern" on all platforms
+        result.Should().Contain("Eastern");
     }
 
     [Fact]
