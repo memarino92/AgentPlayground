@@ -201,6 +201,30 @@ internal class AgentEventService
             : (string.Empty, trimmed);
     }
 
+    public Task<string> GetCurrentDateTimeToolAsync(string? timeZoneId = null)
+    {
+        var utcNow = DateTimeOffset.UtcNow;
+
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+            return Task.FromResult($"Current UTC date and time: {utcNow:dddd, MMMM d, yyyy HH:mm:ss} UTC (ISO-8601: {utcNow:O})");
+
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            var localNow = TimeZoneInfo.ConvertTime(utcNow, tz);
+            return Task.FromResult(
+                $"Current date and time in {tz.DisplayName}: {localNow:dddd, MMMM d, yyyy HH:mm:ss} (ISO-8601: {localNow:O})\n" +
+                $"Current UTC date and time: {utcNow:dddd, MMMM d, yyyy HH:mm:ss} UTC (ISO-8601: {utcNow:O})");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            _logger.LogWarning("Unable to resolve timezone {TimeZoneId} for get_current_date_time, returning UTC", timeZoneId);
+            return Task.FromResult(
+                $"Current UTC date and time: {utcNow:dddd, MMMM d, yyyy HH:mm:ss} UTC (ISO-8601: {utcNow:O}) " +
+                $"(timezone '{timeZoneId}' was not recognized)");
+        }
+    }
+
     private static bool HasExactlyOneTimingInput(string? delay, string? executeAt, string? when)
     {
         var count = 0;
