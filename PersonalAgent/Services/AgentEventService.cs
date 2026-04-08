@@ -204,13 +204,11 @@ internal class AgentEventService
     public Task<string> GetCurrentDateTimeToolAsync(string? timeZoneId = null)
     {
         var utcNow = DateTimeOffset.UtcNow;
-
-        if (string.IsNullOrWhiteSpace(timeZoneId))
-            return Task.FromResult($"Current UTC date and time: {utcNow:dddd, MMMM d, yyyy HH:mm:ss} UTC (ISO-8601: {utcNow:O})");
+        var effectiveTimeZoneId = string.IsNullOrWhiteSpace(timeZoneId) ? "America/New_York" : timeZoneId;
 
         try
         {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(effectiveTimeZoneId);
             var localNow = TimeZoneInfo.ConvertTime(utcNow, tz);
             return Task.FromResult(
                 $"Current date and time in {tz.DisplayName}: {localNow:dddd, MMMM d, yyyy HH:mm:ss} (ISO-8601: {localNow:O})\n" +
@@ -218,10 +216,10 @@ internal class AgentEventService
         }
         catch (TimeZoneNotFoundException)
         {
-            _logger.LogWarning("Unable to resolve timezone {TimeZoneId} for get_current_date_time, returning UTC", timeZoneId);
+            _logger.LogWarning("Unable to resolve timezone {TimeZoneId} for get_current_date_time, returning UTC", effectiveTimeZoneId);
             return Task.FromResult(
                 $"Current UTC date and time: {utcNow:dddd, MMMM d, yyyy HH:mm:ss} UTC (ISO-8601: {utcNow:O}) " +
-                $"(timezone '{timeZoneId}' was not recognized)");
+                $"(timezone '{effectiveTimeZoneId}' was not recognized)");
         }
     }
 
