@@ -145,11 +145,12 @@ internal class AgentEventService
         return $"Published mobile notification for profile {payload.ProfileId}";
     }
 
-    public async Task<string> ScheduleNotificationToolAsync(string profileId, string title, string body, string? delay, string? executeAt, string? when, string? timeZoneId, CancellationToken cancellationToken = default)
+    public async Task<string> ScheduleNotificationToolAsync(string profileId, string title, string body, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(profileId)) return "Unable to schedule notification: profileId is required.";
         if (string.IsNullOrWhiteSpace(title)) return "Unable to schedule notification: title is required.";
         if (string.IsNullOrWhiteSpace(body)) return "Unable to schedule notification: body is required.";
+        if (!HasExactlyOneTimingInput(delay, executeAt, when)) return "Unable to schedule notification: provide exactly one of delay (e.g. PT5M), executeAt (ISO-8601 datetime), or when (natural time like tonight).";
 
         var (tenantId, userId) = ParseTenantAndUser(profileId);
         var parsedExecuteAt = DateTimeOffset.TryParse(executeAt, out var value) ? value : (DateTimeOffset?)null;
@@ -168,10 +169,11 @@ internal class AgentEventService
         return $"Scheduled notification {result.Id} at {result.ExecuteAtUtc:O}";
     }
 
-    public async Task<string> ScheduleAgentTaskToolAsync(string profileId, string instruction, string? delay, string? executeAt, string? when, string? timeZoneId, bool notifyOnCompletion = true, CancellationToken cancellationToken = default)
+    public async Task<string> ScheduleAgentTaskToolAsync(string profileId, string instruction, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, bool notifyOnCompletion = true, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(profileId)) return "Unable to schedule agent task: profileId is required.";
         if (string.IsNullOrWhiteSpace(instruction)) return "Unable to schedule agent task: instruction is required.";
+        if (!HasExactlyOneTimingInput(delay, executeAt, when)) return "Unable to schedule agent task: provide exactly one of delay (e.g. PT5M), executeAt (ISO-8601 datetime), or when (natural time like 'tonight').";
 
         var (tenantId, userId) = ParseTenantAndUser(profileId);
         var parsedExecuteAt = DateTimeOffset.TryParse(executeAt, out var value) ? value : (DateTimeOffset?)null;
@@ -197,5 +199,14 @@ internal class AgentEventService
         return segments.Length is 2
             ? (segments[0], segments[1])
             : (string.Empty, trimmed);
+    }
+
+    private static bool HasExactlyOneTimingInput(string? delay, string? executeAt, string? when)
+    {
+        var count = 0;
+        if (!string.IsNullOrWhiteSpace(delay)) count++;
+        if (!string.IsNullOrWhiteSpace(executeAt)) count++;
+        if (!string.IsNullOrWhiteSpace(when)) count++;
+        return count is 1;
     }
 }
