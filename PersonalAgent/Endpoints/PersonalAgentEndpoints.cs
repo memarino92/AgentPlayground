@@ -9,6 +9,8 @@ namespace PersonalAgent.Endpoints;
 
 internal static class PersonalAgentEndpoints
 {
+    private const string SessionDefaultModelLabel = "(session-default)";
+
     public static WebApplication MapPersonalAgentEndpoints(this WebApplication app)
     {
         app.MapGet("/", () => new { status = "healthy", service = "PersonalAgent API" });
@@ -77,7 +79,7 @@ internal static class PersonalAgentEndpoints
                 sessionId,
                 request.ProfileId,
                 request.Message.Length,
-                request.ModelId ?? "(session-default)");
+                request.ModelId ?? SessionDefaultModelLabel);
             var response = await agentService.SendMessageAsync(sessionId, request.ProfileId, request.Message, request.ModelId);
             return response is not null
                 ? Results.Ok(new { sessionId, modelId = response.Value.ModelId, response = response.Value.Response })

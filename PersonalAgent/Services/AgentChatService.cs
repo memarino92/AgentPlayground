@@ -114,7 +114,7 @@ internal class AgentChatService
             var persistedState = DeserializeSessionState(persistedSession.SessionStateJson);
             var requestedModel = string.IsNullOrWhiteSpace(modelId)
                 ? null
-                : _chatModelCatalog.FindModel(modelId) ?? throw new InvalidOperationException($"Chat model '{modelId}' is not available.");
+                : _chatModelCatalog.FindModel(modelId) ?? throw new ArgumentException($"Chat model '{modelId}' is not available.", nameof(modelId));
             var selectedModelId = requestedModel?.Id ?? persistedState.ModelId;
             var updatedSessionStateJson = JsonSerializer.Serialize(new AgentSessionState(selectedModelId));
             var agent = GetSessionAgent(selectedModelId);
