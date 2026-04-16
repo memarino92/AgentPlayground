@@ -2,6 +2,7 @@ using FluentAssertions;
 using PersonalAgent.Web.Services;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using System.Text;
 using Xunit;
 
@@ -47,6 +48,31 @@ public class PersonalAgentClientTests
         result.Should().NotBeNull();
         result!.Models.Should().ContainSingle();
         result.Models[0].Id.Should().Be("gpt-4o-mini");
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_SendsSelectedModelIdInRequestBody()
+    {
+        string? body = null;
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            body = await request.Content!.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"sessionId\":\"session-1\",\"modelId\":\"gpt-4o\",\"response\":\"hello\"}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        var client = new PersonalAgentClient(httpClient);
+
+        var response = await client.SendMessageAsync("session-1", "test-user", "hello", "gpt-4o");
+
+        response.Should().NotBeNull();
+        response!.ModelId.Should().Be("gpt-4o");
+        body.Should().NotBeNull();
+        using var json = JsonDocument.Parse(body!);
+        json.RootElement.GetProperty("modelId").GetString().Should().Be("gpt-4o");
     }
 
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler) : HttpMessageHandler

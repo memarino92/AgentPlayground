@@ -61,7 +61,7 @@ internal static class PersonalAgentEndpoints
             return Results.Ok(page);
         });
 
-        apiGroup.MapPost("/sessions/{sessionId}/messages", async (string sessionId, SendMessageRequest request, AgentService agentService) =>
+        apiGroup.MapPost("/sessions/{sessionId}/messages", async (string sessionId, SendMessageRequest request, AgentService agentService, ChatModelCatalog chatModelCatalog) =>
         {
             if (string.IsNullOrWhiteSpace(request.ProfileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
@@ -69,15 +69,18 @@ internal static class PersonalAgentEndpoints
             if (string.IsNullOrWhiteSpace(request.Message)) return Results.BadRequest(new { error = "Message is required" });
             if (request.Message.Length > PersonalAgentConstants.MaxMessageLength)
                 return Results.BadRequest(new { error = $"Message length exceeds {PersonalAgentConstants.MaxMessageLength} characters" });
+            if (!string.IsNullOrWhiteSpace(request.ModelId) && chatModelCatalog.FindModel(request.ModelId) is null)
+                return Results.BadRequest(new { error = $"Model '{request.ModelId}' is not available" });
 
             logger.LogInformation(
-                "Sending message for session {SessionId} and profile {ProfileId} with length {MessageLength}",
+                "Sending message for session {SessionId} and profile {ProfileId} with length {MessageLength} using model {ModelId}",
                 sessionId,
                 request.ProfileId,
-                request.Message.Length);
-            var response = await agentService.SendMessageAsync(sessionId, request.ProfileId, request.Message);
+                request.Message.Length,
+                request.ModelId ?? "(session-default)");
+            var response = await agentService.SendMessageAsync(sessionId, request.ProfileId, request.Message, request.ModelId);
             return response is not null
-                ? Results.Ok(new { sessionId, response })
+                ? Results.Ok(new { sessionId, modelId = response.Value.ModelId, response = response.Value.Response })
                 : Results.NotFound(new { error = "Session not found" });
         });
 

@@ -100,6 +100,21 @@ public class PersonalAgentEndpointsTests
     }
 
     [Fact]
+    public async Task SendMessage_ReturnsBadRequest_WhenRequestedModelIsNotAvailable()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var sessionResponse = await client.PostAsJsonAsync("/api/sessions", new { profileId = "test-user", modelId = "gpt-4o-mini" });
+        var sessionPayload = await ReadJsonAsync(sessionResponse);
+        var sessionId = sessionPayload.GetProperty("sessionId").GetString();
+
+        var response = await client.PostAsJsonAsync($"/api/sessions/{sessionId}/messages", new { profileId = "test-user", message = "hello", modelId = "not-a-model" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task GetMessages_ReturnsBadRequest_WhenProfileIdMissing()
     {
         await using var app = await BuildAppAsync();

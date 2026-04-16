@@ -214,9 +214,11 @@
         isSendingMessage = true;
         try
         {
-            var response = await ApiClient.SendMessageAsync(sessionId, profileId, userMessage);
+            var response = await ApiClient.SendMessageAsync(sessionId, profileId, userMessage, selectedModelId);
             if (response != null)
             {
+                activeModelId = response.ModelId;
+                selectedModelId = response.ModelId;
                 messages.Add(new ConversationMessage("assistant", response.Response));
                 UpdateSessionSummary(sessionId, userMessage, DateTimeOffset.UtcNow);
             }

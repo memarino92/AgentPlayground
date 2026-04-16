@@ -1,3 +1,3 @@
 namespace PersonalAgent.Models;
 
-internal record SendMessageRequest(string ProfileId, string Message);
+internal record SendMessageRequest(string ProfileId, string Message, string? ModelId);

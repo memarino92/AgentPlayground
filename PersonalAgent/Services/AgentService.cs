@@ -11,8 +11,8 @@ internal class AgentService(AgentChatService chatService, AgentEventService even
     public Task<SessionSummaryPage> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize) =>
         chatService.GetSessionsAsync(profileId, beforeActivityAt, beforeSessionId, pageSize);
 
-    public Task<string?> SendMessageAsync(string sessionId, string profileId, string message) =>
-        chatService.SendMessageAsync(sessionId, profileId, message);
+    public Task<(string Response, string ModelId)?> SendMessageAsync(string sessionId, string profileId, string message, string? modelId = null) =>
+        chatService.SendMessageAsync(sessionId, profileId, message, modelId);
 
     public Task<SessionConversation?> GetSessionMessagesAsync(string sessionId, string profileId) =>
         chatService.GetSessionMessagesAsync(sessionId, profileId);

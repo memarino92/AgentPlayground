@@ -34,9 +34,9 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<ModelCatalogResponse>(content, JsonOptions);
     }
 
-    public async Task<MessageResponse?> SendMessageAsync(string sessionId, string profileId, string message)
+    public async Task<MessageResponse?> SendMessageAsync(string sessionId, string profileId, string message, string? modelId = null)
     {
-        var request = new { profileId, message };
+        var request = new { profileId, message, modelId };
         var response = await httpClient.PostAsJsonAsync($"/api/sessions/{sessionId}/messages", request);
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("send message", response);
@@ -96,7 +96,7 @@ internal class PersonalAgentApiException(string operation, HttpStatusCode status
 
 public record SessionResponse(string SessionId, string ModelId, string Message);
 public record ModelCatalogResponse(List<AvailableChatModelResponse> Models);
-public record MessageResponse(string SessionId, string Response);
+public record MessageResponse(string SessionId, string ModelId, string Response);
 public record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages);
 public record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
 public record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);

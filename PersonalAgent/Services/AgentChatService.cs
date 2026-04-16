@@ -88,7 +88,7 @@ internal class AgentChatService
             hasMore);
     }
 
-    public async Task<string?> SendMessageAsync(string sessionId, string profileId, string message)
+    public async Task<(string Response, string ModelId)?> SendMessageAsync(string sessionId, string profileId, string message, string? modelId = null)
     {
         if (!Guid.TryParse(sessionId, out var parsedSessionId))
             return null;
@@ -111,8 +111,13 @@ internal class AgentChatService
                 return null;
             }
 
-            var sessionState = DeserializeSessionState(persistedSession.SessionStateJson);
-            var agent = GetSessionAgent(sessionState.ModelId);
+            var persistedState = DeserializeSessionState(persistedSession.SessionStateJson);
+            var requestedModel = string.IsNullOrWhiteSpace(modelId)
+                ? null
+                : _chatModelCatalog.FindModel(modelId) ?? throw new InvalidOperationException($"Chat model '{modelId}' is not available.");
+            var selectedModelId = requestedModel?.Id ?? persistedState.ModelId;
+            var updatedSessionStateJson = JsonSerializer.Serialize(new AgentSessionState(selectedModelId));
+            var agent = GetSessionAgent(selectedModelId);
             var session = await agent.CreateSessionAsync();
             var transcript = await _sessionStore.GetSessionMessagesAsync(parsedSessionId) ?? [];
             var recalledMemories = await _semanticMemoryService.RecallMemoriesAsync(persistedSession.ProfileId, message);
@@ -131,12 +136,12 @@ internal class AgentChatService
 
             var response = await agent.RunAsync(messages, session, options: null, cancellationToken: default);
             var responseText = response.ToString();
-            var wasSaved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, responseText, persistedSession.SessionStateJson);
+            var wasSaved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, responseText, updatedSessionStateJson);
             var citedUrlCount = CountUrls(responseText);
 
             _logger.LogInformation(
                 "Processed message for model {ModelId}; recalledMemories={RecalledMemories}; persisted={WasSaved}; responseLength={ResponseLength}; citedUrlCount={CitedUrlCount}; tavilyAvailable={TavilyAvailable}",
-                sessionState.ModelId,
+                selectedModelId,
                 recalledMemories.Count,
                 wasSaved,
                 responseText.Length,
@@ -146,7 +151,7 @@ internal class AgentChatService
             if (wasSaved)
                 await _semanticMemoryService.StoreConversationMemoriesAsync(parsedSessionId, persistedSession.ProfileId, message, responseText);
 
-            return wasSaved ? responseText : null;
+            return wasSaved ? (responseText, selectedModelId) : null;
         }
         finally
         {
