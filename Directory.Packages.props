@@ -4,9 +4,9 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Microsoft Agents Framework -->
-    <PackageVersion Include="Microsoft.Agents.AI" Version="1.0.0" />
-    <PackageVersion Include="Microsoft.Agents.AI.Abstractions" Version="1.0.0" />
-    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0" />
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.13.0" />
+    <PackageVersion Include="Microsoft.Agents.AI.Abstractions" Version="1.13.0" />
+    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.13.0" />
     <!-- ASP.NET Core -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.3" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.QuickGrid" Version="10.0.0" />
@@ -18,8 +18,8 @@
     <!-- Messaging -->
     <PackageVersion Include="MassTransit" Version="8.5.8" />
     <PackageVersion Include="MassTransit.SqlTransport.PostgreSQL" Version="8.5.8" />
-    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.4.1" />
-    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.4.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.6.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.6.0" />
     <PackageVersion Include="Npgsql" Version="8.0.7" />
     <PackageVersion Include="OpenAI" Version="2.9.1" />
     <PackageVersion Include="ModelContextProtocol" Version="1.2.0" />

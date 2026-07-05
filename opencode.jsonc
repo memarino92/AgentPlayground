@@ -1,0 +1,29 @@
+{
+	"$schema": "https://opencode.ai/config.json",
+	// Imported .NET skills and agents are auto-discovered from .opencode/skills and .opencode/agents.
+	// Enable LSP and prefer the official dotnet/skills Roslyn server configuration for C# and Razor files.
+	"lsp": {
+		"csharp": {
+			"disabled": true
+		},
+		"razor": {
+			"disabled": true
+		},
+		"dotnet-csharp": {
+			"command": [
+				"dnx",
+				"roslyn-language-server",
+				"--yes",
+				"--prerelease",
+				"--",
+				"--stdio",
+				"--autoLoadProjects"
+			],
+			"extensions": [
+				".cs",
+				".razor",
+				".cshtml"
+			]
+		}
+	}
+}
