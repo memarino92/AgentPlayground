@@ -4,6 +4,7 @@
 @rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PersonalAgentClient ApiClient
+@inject ILogger<CoachCheckins> Logger
 
 <PageTitle>PersonalAgent - Coach Check-ins</PageTitle>
 
@@ -13,6 +14,14 @@
     <div class="coach-checkins-page__upload">
         <InputFile OnChange="HandleFileSelected" accept=".m4a,audio/mp4" />
         <button class="btn btn-primary" @onclick="UploadAsync" disabled="@(selectedBytes is null || isUploading)">Upload call</button>
+        @if (isUploading)
+        {
+            <span>Uploading...</span>
+        }
+        else if (isPolling)
+        {
+            <span>Processing...</span>
+        }
     </div>
 
     @if (!string.IsNullOrWhiteSpace(statusMessage))
@@ -47,6 +56,7 @@
     private string selectedFileName = "call.m4a";
     private string selectedContentType = "audio/m4a";
     private bool isUploading;
+    private bool isPolling;
     private string? statusMessage;
     private CoachCheckinStatusResponse? latestStatus;
     private string? summaryMarkdown;
@@ -73,6 +83,7 @@
         isUploading = true;
         statusMessage = null;
         summaryMarkdown = null;
+        Logger.LogInformation("Starting coach check-in upload for profile {ProfileId}", profileId);
 
         try
         {
@@ -83,11 +94,15 @@
                 return;
             }
 
-            statusMessage = $"Uploaded {upload.UploadId}. Waiting for processing...";
+            statusMessage = upload.IsDuplicate
+                ? $"Duplicate detected. Reusing upload {upload.UploadId}."
+                : $"Uploaded {upload.UploadId}. Waiting for processing...";
+            Logger.LogInformation("Coach check-in upload response {UploadId}, duplicate={IsDuplicate}", upload.UploadId, upload.IsDuplicate);
             await PollStatusAsync(upload.UploadId);
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Coach check-in upload failed");
             statusMessage = ex.Message;
         }
         finally
@@ -100,34 +115,45 @@
     {
         if (string.IsNullOrWhiteSpace(profileId)) return;
 
-        for (var i = 0; i < 90; i++)
+        isPolling = true;
+
+        for (var i = 0; i < 120; i++)
         {
             latestStatus = await ApiClient.GetCoachCheckinStatusAsync(uploadId, profileId);
             if (latestStatus is null)
             {
                 statusMessage = "Upload status unavailable.";
+                isPolling = false;
                 return;
             }
 
             statusMessage = $"Current status: {latestStatus.Status}";
+            Logger.LogInformation("Coach check-in {UploadId} status {Status}", uploadId, latestStatus.Status);
             if (latestStatus.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
             {
                 var summary = await ApiClient.GetCoachCheckinSummaryAsync(uploadId, profileId);
                 summaryMarkdown = summary?.SummaryMarkdown;
+                isPolling = false;
                 return;
             }
 
             if (latestStatus.Status.Equals("AwaitingSpeakerOverride", StringComparison.OrdinalIgnoreCase))
             {
                 statusMessage = "Speaker override is required before processing can continue.";
+                isPolling = false;
                 return;
             }
 
-            if (latestStatus.Status.Equals("Failed", StringComparison.OrdinalIgnoreCase)) return;
+            if (latestStatus.Status.Equals("Failed", StringComparison.OrdinalIgnoreCase))
+            {
+                isPolling = false;
+                return;
+            }
             await Task.Delay(TimeSpan.FromSeconds(4));
         }
 
         statusMessage = "Processing is still running. Refresh in a few minutes.";
+        isPolling = false;
     }
 
     private async Task<string?> ResolveProfileIdAsync()
