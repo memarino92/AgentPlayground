@@ -204,24 +204,42 @@ internal class CoachCheckinService(
             """;
         command.Parameters.AddWithValue("limit", normalizedLimit);
 
-        var items = new List<CoachCheckinAdminItem>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        var rawRows = new List<(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, CoachCallUploadStatus Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount)>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            var uploadId = reader.GetGuid(0);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                rawRows.Add((
+                    reader.GetGuid(0),
+                    reader.GetGuid(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    ParseStatus(reader.GetString(4)),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.GetFieldValue<DateTimeOffset>(6),
+                    reader.GetFieldValue<DateTimeOffset>(7),
+                    reader.GetBoolean(8),
+                    reader.GetInt32(9),
+                    reader.GetInt32(10)));
+            }
+        }
+
+        var items = new List<CoachCheckinAdminItem>(rawRows.Count);
+        foreach (var row in rawRows)
+        {
             items.Add(new CoachCheckinAdminItem(
-                uploadId,
-                reader.GetGuid(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                ParseStatus(reader.GetString(4)),
-                reader.IsDBNull(5) ? null : reader.GetString(5),
-                reader.GetFieldValue<DateTimeOffset>(6),
-                reader.GetFieldValue<DateTimeOffset>(7),
-                reader.GetBoolean(8),
-                reader.GetInt32(9),
-                reader.GetInt32(10),
-                await GetSpeakerLabelsAsync(connection, uploadId, cancellationToken)));
+                row.UploadId,
+                row.SessionId,
+                row.ProfileId,
+                row.OriginalFileName,
+                row.Status,
+                row.Error,
+                row.CreatedAtUtc,
+                row.UpdatedAtUtc,
+                row.HasAudioBlob,
+                row.UtteranceCount,
+                row.ChunkCount,
+                await GetSpeakerLabelsAsync(connection, row.UploadId, cancellationToken)));
         }
 
         return items;
