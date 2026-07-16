@@ -35,6 +35,22 @@ internal class CoachCheckinService(
         var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
+
+        var duplicateUpload = await GetExistingUploadByHashAsync(connection, profileId, hash, cancellationToken);
+        if (duplicateUpload is not null)
+        {
+            logger.LogInformation(
+                "Detected duplicate coach call upload for profile {ProfileId} with existing upload {UploadId}",
+                profileId,
+                duplicateUpload.UploadId);
+            return new CoachCallUploadResult(
+                duplicateUpload.UploadId,
+                duplicateUpload.CorrelationId,
+                duplicateUpload.Status,
+                duplicateUpload.CreatedAtUtc,
+                true);
+        }
+
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         await using (var uploadCommand = connection.CreateCommand())
@@ -130,7 +146,63 @@ internal class CoachCheckinService(
         await bus.Publish(new TranscribeCoachCallCommand(uploadId, profileId, correlationId), cancellationToken);
         logger.LogInformation("Created coach call upload {UploadId} for profile {ProfileId}", uploadId, profileId);
 
-        return new CoachCallUploadResult(uploadId, correlationId, CoachCallUploadStatus.Uploaded, createdAt);
+        return new CoachCallUploadResult(uploadId, correlationId, CoachCallUploadStatus.Uploaded, createdAt, false);
+    }
+
+    public async Task<IReadOnlyList<CoachCheckinAdminItem>> GetRecentUploadsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        var normalizedLimit = Math.Clamp(limit, 1, 500);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT u.upload_id,
+                   u.session_id,
+                   u.profile_id,
+                   u.original_file_name,
+                   u.status,
+                   u.error,
+                   u.created_at,
+                   u.updated_at,
+                   u.audio_bytes IS NOT NULL AS has_audio_blob,
+                   COALESCE(utterance_counts.utterance_count, 0) AS utterance_count,
+                   COALESCE(chunk_counts.chunk_count, 0) AS chunk_count
+            FROM {CoachCallUploadsTable} u
+            LEFT JOIN
+            (
+                SELECT session_id, COUNT(*)::integer AS utterance_count
+                FROM {CoachCallUtterancesTable}
+                GROUP BY session_id
+            ) AS utterance_counts ON utterance_counts.session_id = u.session_id
+            LEFT JOIN
+            (
+                SELECT session_id, COUNT(*)::integer AS chunk_count
+                FROM {CoachCallChunksTable}
+                GROUP BY session_id
+            ) AS chunk_counts ON chunk_counts.session_id = u.session_id
+            ORDER BY u.created_at DESC
+            LIMIT @limit;
+            """;
+        command.Parameters.AddWithValue("limit", normalizedLimit);
+
+        var items = new List<CoachCheckinAdminItem>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new CoachCheckinAdminItem(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                ParseStatus(reader.GetString(4)),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.GetFieldValue<DateTimeOffset>(6),
+                reader.GetFieldValue<DateTimeOffset>(7),
+                reader.GetBoolean(8),
+                reader.GetInt32(9),
+                reader.GetInt32(10)));
+        }
+
+        return items;
     }
 
     public async Task<CoachCheckinStatusResponse?> GetStatusAsync(Guid uploadId, string profileId, CancellationToken cancellationToken = default)
@@ -283,6 +355,31 @@ internal class CoachCheckinService(
         ? status
         : CoachCallUploadStatus.Failed;
 
+    private async Task<CoachCallUploadResult?> GetExistingUploadByHashAsync(NpgsqlConnection connection, string profileId, string hash, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT upload_id, correlation_id, status, created_at
+            FROM {CoachCallUploadsTable}
+            WHERE profile_id = @profileId
+              AND file_hash = @fileHash
+            ORDER BY created_at DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("profileId", profileId);
+        command.Parameters.AddWithValue("fileHash", hash);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+
+        return new CoachCallUploadResult(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            ParseStatus(reader.GetString(2)),
+            reader.GetFieldValue<DateTimeOffset>(3),
+            true);
+    }
+
     private Task<NpgsqlConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {
         var connection = new NpgsqlConnection(_connectionString);
@@ -300,6 +397,7 @@ internal class CoachCheckinService(
     private string CoachCallUploadsTable => QualifiedTableName("coach_call_uploads");
     private string CoachCallSessionsTable => QualifiedTableName("coach_call_sessions");
     private string CoachCallChunksTable => QualifiedTableName("coach_call_chunks");
+    private string CoachCallUtterancesTable => QualifiedTableName("coach_call_utterances");
     private string CoachCallSpeakerOverridesTable => QualifiedTableName("coach_call_speaker_overrides");
 
     private static string FormatTimestamp(int milliseconds) => TimeSpan.FromMilliseconds(milliseconds).ToString(@"mm\:ss");

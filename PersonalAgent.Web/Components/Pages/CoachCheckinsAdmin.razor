@@ -1,0 +1,86 @@
+@page "/coach-checkins/admin"
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@rendermode InteractiveServer
+@inject PersonalAgentClient ApiClient
+@inject ILogger<CoachCheckinsAdmin> Logger
+
+<PageTitle>PersonalAgent - Coach Check-ins Admin</PageTitle>
+
+<section class="coach-admin-page">
+    <h2>Coach Check-ins Admin</h2>
+    <button class="btn btn-secondary" @onclick="LoadAsync" disabled="@isLoading">Refresh</button>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <p>@errorMessage</p>
+    }
+
+    @if (isLoading)
+    {
+        <p>Loading requests...</p>
+    }
+    else if (items.Count is 0)
+    {
+        <p>No coach check-in requests found.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Created</th>
+                    <th>Profile</th>
+                    <th>File</th>
+                    <th>Status</th>
+                    <th>Utterances</th>
+                    <th>Chunks</th>
+                    <th>Audio Blob</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in items)
+                {
+                    <tr>
+                        <td>@item.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                        <td>@item.ProfileId</td>
+                        <td>@item.OriginalFileName</td>
+                        <td>@item.Status</td>
+                        <td>@item.UtteranceCount</td>
+                        <td>@item.ChunkCount</td>
+                        <td>@(item.HasAudioBlob ? "Yes" : "No")</td>
+                        <td>@item.Error</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    private bool isLoading;
+    private string? errorMessage;
+    private List<CoachCheckinAdminItemResponse> items = [];
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+        try
+        {
+            items = await ApiClient.GetCoachCheckinAdminItemsAsync();
+            Logger.LogInformation("Loaded {Count} coach check-in admin items", items.Count);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load coach check-in admin items");
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

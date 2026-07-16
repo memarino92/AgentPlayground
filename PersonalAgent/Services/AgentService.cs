@@ -54,4 +54,7 @@ internal class AgentService(
 
     public Task ApplyCoachSpeakerOverridesAsync(Guid uploadId, string profileId, IReadOnlyList<CoachSpeakerOverrideItem> overrides, CancellationToken cancellationToken = default) =>
         coachCheckinService.ApplySpeakerOverridesAsync(uploadId, profileId, overrides, cancellationToken);
+
+    public Task<IReadOnlyList<CoachCheckinAdminItem>> GetCoachCheckinAdminItemsAsync(int limit = 100, CancellationToken cancellationToken = default) =>
+        coachCheckinService.GetRecentUploadsAsync(limit, cancellationToken);
 }

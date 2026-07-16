@@ -125,6 +125,16 @@ internal class PersonalAgentClient(HttpClient httpClient)
             throw await CreateRequestExceptionAsync("apply speaker overrides", response);
     }
 
+    public async Task<List<CoachCheckinAdminItemResponse>> GetCoachCheckinAdminItemsAsync(int limit = 100)
+    {
+        var response = await httpClient.GetAsync($"/api/coach-checkins/admin?limit={limit}");
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("load coach check-in admin items", response);
+
+        var content = await response.Content.ReadAsStreamAsync();
+        return await JsonSerializer.DeserializeAsync<List<CoachCheckinAdminItemResponse>>(content, JsonOptions) ?? [];
+    }
+
     private static async Task<PersonalAgentApiException> CreateRequestExceptionAsync(string operation, HttpResponseMessage response)
     {
         var body = await response.Content.ReadAsStringAsync();
@@ -150,7 +160,8 @@ public record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset
 public record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
 public record ConversationMessage(string Role, string Content);
 public record AvailableChatModelResponse(string Id, string DisplayName, bool IsDefault);
-public record CoachCheckinUploadResponse(Guid UploadId, Guid CorrelationId, string Status, DateTimeOffset CreatedAtUtc);
+public record CoachCheckinUploadResponse(Guid UploadId, Guid CorrelationId, string Status, DateTimeOffset CreatedAtUtc, bool IsDuplicate);
 public record CoachCheckinStatusResponse(Guid UploadId, Guid SessionId, string ProfileId, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
 public record CoachCheckinSummaryResponse(Guid UploadId, Guid SessionId, string SummaryMarkdown, string SummaryJson, DateTimeOffset UpdatedAtUtc);
 public record SpeakerOverrideItem(int SpeakerLabel, string Role);
+public record CoachCheckinAdminItemResponse(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount);

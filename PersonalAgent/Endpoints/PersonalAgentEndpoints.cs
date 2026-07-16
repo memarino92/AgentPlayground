@@ -231,7 +231,8 @@ internal static class PersonalAgentEndpoints
                 uploadId = result.UploadId,
                 correlationId = result.CorrelationId,
                 status = result.Status.ToString(),
-                createdAtUtc = result.CreatedAtUtc
+                createdAtUtc = result.CreatedAtUtc,
+                isDuplicate = result.IsDuplicate
             });
         });
 
@@ -284,6 +285,25 @@ internal static class PersonalAgentEndpoints
 
             await agentService.ApplyCoachSpeakerOverridesAsync(uploadId, request.ProfileId, request.Overrides);
             return Results.Ok(new { message = "Speaker overrides applied. Processing restarted." });
+        });
+
+        apiGroup.MapGet("/coach-checkins/admin", async (int? limit, AgentService agentService) =>
+        {
+            var items = await agentService.GetCoachCheckinAdminItemsAsync(limit ?? 100);
+            return Results.Ok(items.Select(item => new
+            {
+                uploadId = item.UploadId,
+                sessionId = item.SessionId,
+                profileId = item.ProfileId,
+                originalFileName = item.OriginalFileName,
+                status = item.Status.ToString(),
+                error = item.Error,
+                createdAtUtc = item.CreatedAtUtc,
+                updatedAtUtc = item.UpdatedAtUtc,
+                hasAudioBlob = item.HasAudioBlob,
+                utteranceCount = item.UtteranceCount,
+                chunkCount = item.ChunkCount
+            }));
         });
 
         return app;
