@@ -106,10 +106,16 @@
             items = await ApiClient.GetCoachCheckinAdminItemsAsync();
             Logger.LogInformation("Loaded {Count} coach check-in admin items", items.Count);
 
+            overrideSelections.Clear();
             foreach (var item in items)
             {
-                if (!overrideSelections.ContainsKey(item.UploadId))
-                    overrideSelections[item.UploadId] = item.SpeakerLabels.ToDictionary(label => label.SpeakerLabel, label => NormalizeRole(label.SpeakerRole));
+                overrideSelections[item.UploadId] = item.SpeakerLabels
+                    .GroupBy(label => label.SpeakerLabel)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.Select(label => NormalizeRole(label.SpeakerRole)).Distinct().Count() == 1
+                            ? group.Select(label => NormalizeRole(label.SpeakerRole)).First()
+                            : "unknown");
             }
         }
         catch (Exception ex)

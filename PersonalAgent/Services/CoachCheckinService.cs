@@ -399,14 +399,20 @@ internal class CoachCheckinService(
     {
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT u.speaker_label,
-                   COALESCE(NULLIF(TRIM(u.speaker_role), ''), 'unknown') AS speaker_role,
+            WITH normalized AS
+            (
+                SELECT u.speaker_label,
+                       COALESCE(NULLIF(TRIM(u.speaker_role), ''), 'unknown') AS speaker_role
+                FROM {CoachCallUtterancesTable} u
+                JOIN {CoachCallUploadsTable} uploads ON uploads.session_id = u.session_id
+                WHERE uploads.upload_id = @uploadId
+            )
+            SELECT speaker_label,
+                   CASE WHEN COUNT(DISTINCT speaker_role) = 1 THEN MAX(speaker_role) ELSE 'unknown' END AS speaker_role,
                    COUNT(*)::integer AS utterance_count
-            FROM {CoachCallUtterancesTable} u
-            JOIN {CoachCallUploadsTable} uploads ON uploads.session_id = u.session_id
-            WHERE uploads.upload_id = @uploadId
-            GROUP BY u.speaker_label, COALESCE(NULLIF(TRIM(u.speaker_role), ''), 'unknown')
-            ORDER BY u.speaker_label;
+            FROM normalized
+            GROUP BY speaker_label
+            ORDER BY speaker_label;
             """;
         command.Parameters.AddWithValue("uploadId", uploadId);
 
