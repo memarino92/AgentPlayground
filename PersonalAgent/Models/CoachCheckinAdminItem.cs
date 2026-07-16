@@ -11,4 +11,7 @@ internal record CoachCheckinAdminItem(
     DateTimeOffset UpdatedAtUtc,
     bool HasAudioBlob,
     int UtteranceCount,
-    int ChunkCount);
+    int ChunkCount,
+    List<CoachCheckinSpeakerLabelInfo> SpeakerLabels);
+
+internal record CoachCheckinSpeakerLabelInfo(int SpeakerLabel, string SpeakerRole, int UtteranceCount);
