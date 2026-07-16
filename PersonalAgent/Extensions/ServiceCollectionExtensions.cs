@@ -76,6 +76,17 @@ internal static class ServiceCollectionExtensions
         services.AddOptions<ChatModelCatalogOptions>()
             .Bind(configuration.GetSection(ChatModelCatalogOptions.SectionName));
 
+        services.AddOptions<CoachCheckinOptions>()
+            .Configure(opts =>
+            {
+                configuration.GetSection(CoachCheckinOptions.SectionName).Bind(opts);
+                opts.MaxUploadMb = ConfigurationValueResolver.ResolveInt(configuration, "COACH_CHECKINS_MAX_UPLOAD_MB", $"{CoachCheckinOptions.SectionName}:MaxUploadMb", opts.MaxUploadMb, value => value > 0);
+                opts.FailedUploadRetentionDays = ConfigurationValueResolver.ResolveInt(configuration, "COACH_CHECKINS_FAILED_UPLOAD_RETENTION_DAYS", $"{CoachCheckinOptions.SectionName}:FailedUploadRetentionDays", opts.FailedUploadRetentionDays, value => value > 0);
+            })
+            .Validate(opts => opts.MaxUploadMb > 0, $"{CoachCheckinOptions.SectionName}:MaxUploadMb must be greater than zero")
+            .Validate(opts => opts.FailedUploadRetentionDays > 0, $"{CoachCheckinOptions.SectionName}:FailedUploadRetentionDays must be greater than zero")
+            .ValidateOnStart();
+
         services.AddOptions<SecurityOptions>()
             .Configure(opts => CopySecurityOptions(securityOptions, opts));
         services.AddHostedService<AgentMemorySchemaInitializer>();
@@ -90,6 +101,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<PushNotificationService>();
         services.AddSingleton<WorkJournalParsingService>();
         services.AddSingleton<WorkJournalService>();
+        services.AddSingleton<CoachCheckinService>();
         services.AddSingleton<SchedulingService>();
         services.AddSingleton<TavilyMcpToolProvider>();
         services.AddSingleton<ITavilyMcpToolProvider>(sp => sp.GetRequiredService<TavilyMcpToolProvider>());

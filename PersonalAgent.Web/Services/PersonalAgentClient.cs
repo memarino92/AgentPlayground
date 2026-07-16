@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -77,6 +78,53 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<SessionPageResponse>(content, JsonOptions);
     }
 
+    public async Task<CoachCheckinUploadResponse?> UploadCoachCheckinAsync(string profileId, string fileName, string contentType, byte[] bytes)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(profileId), "profileId");
+        using var fileContent = new ByteArrayContent(bytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(contentType) ? "audio/m4a" : contentType);
+        form.Add(fileContent, "file", fileName);
+
+        var response = await httpClient.PostAsync("/api/coach-checkins/uploads", form);
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("upload coach check-in", response);
+
+        var content = await response.Content.ReadAsStreamAsync();
+        return await JsonSerializer.DeserializeAsync<CoachCheckinUploadResponse>(content, JsonOptions);
+    }
+
+    public async Task<CoachCheckinStatusResponse?> GetCoachCheckinStatusAsync(Guid uploadId, string profileId)
+    {
+        var response = await httpClient.GetAsync($"/api/coach-checkins/{uploadId}?profileId={Uri.EscapeDataString(profileId)}");
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("load coach check-in status", response);
+
+        var content = await response.Content.ReadAsStreamAsync();
+        return await JsonSerializer.DeserializeAsync<CoachCheckinStatusResponse>(content, JsonOptions);
+    }
+
+    public async Task<CoachCheckinSummaryResponse?> GetCoachCheckinSummaryAsync(Guid uploadId, string profileId)
+    {
+        var response = await httpClient.GetAsync($"/api/coach-checkins/{uploadId}/summary?profileId={Uri.EscapeDataString(profileId)}");
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("load coach check-in summary", response);
+
+        var content = await response.Content.ReadAsStreamAsync();
+        return await JsonSerializer.DeserializeAsync<CoachCheckinSummaryResponse>(content, JsonOptions);
+    }
+
+    public async Task ApplySpeakerOverridesAsync(Guid uploadId, string profileId, IReadOnlyList<SpeakerOverrideItem> overrides)
+    {
+        var response = await httpClient.PostAsJsonAsync($"/api/coach-checkins/{uploadId}/speaker-overrides", new
+        {
+            profileId,
+            overrides
+        });
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("apply speaker overrides", response);
+    }
+
     private static async Task<PersonalAgentApiException> CreateRequestExceptionAsync(string operation, HttpResponseMessage response)
     {
         var body = await response.Content.ReadAsStringAsync();
@@ -102,3 +150,7 @@ public record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset
 public record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
 public record ConversationMessage(string Role, string Content);
 public record AvailableChatModelResponse(string Id, string DisplayName, bool IsDefault);
+public record CoachCheckinUploadResponse(Guid UploadId, Guid CorrelationId, string Status, DateTimeOffset CreatedAtUtc);
+public record CoachCheckinStatusResponse(Guid UploadId, Guid SessionId, string ProfileId, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+public record CoachCheckinSummaryResponse(Guid UploadId, Guid SessionId, string SummaryMarkdown, string SummaryJson, DateTimeOffset UpdatedAtUtc);
+public record SpeakerOverrideItem(int SpeakerLabel, string Role);

@@ -1,0 +1,139 @@
+@page "/coach-checkins"
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using System.Security.Claims
+@rendermode InteractiveServer
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject PersonalAgentClient ApiClient
+
+<PageTitle>PersonalAgent - Coach Check-ins</PageTitle>
+
+<section class="coach-checkins-page">
+    <h2>Coach Check-ins</h2>
+
+    <div class="coach-checkins-page__upload">
+        <InputFile OnChange="HandleFileSelected" accept=".m4a,audio/mp4" />
+        <button class="btn btn-primary" @onclick="UploadAsync" disabled="@(selectedBytes is null || isUploading)">Upload call</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <p>@statusMessage</p>
+    }
+
+    @if (latestStatus is not null)
+    {
+        <div class="coach-checkins-page__status">
+            <p>Upload: @latestStatus.UploadId</p>
+            <p>Status: @latestStatus.Status</p>
+            @if (!string.IsNullOrWhiteSpace(latestStatus.Error))
+            {
+                <p>Error: @latestStatus.Error</p>
+            }
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(summaryMarkdown))
+    {
+        <article class="coach-checkins-page__summary">
+            <h3>Summary</h3>
+            <pre>@summaryMarkdown</pre>
+        </article>
+    }
+</section>
+
+@code {
+    private string? profileId;
+    private byte[]? selectedBytes;
+    private string selectedFileName = "call.m4a";
+    private string selectedContentType = "audio/m4a";
+    private bool isUploading;
+    private string? statusMessage;
+    private CoachCheckinStatusResponse? latestStatus;
+    private string? summaryMarkdown;
+
+    protected override async Task OnInitializedAsync() => profileId = await ResolveProfileIdAsync();
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs args)
+    {
+        if (args.FileCount == 0) return;
+        var file = args.File;
+        selectedFileName = file.Name;
+        selectedContentType = string.IsNullOrWhiteSpace(file.ContentType) ? "audio/m4a" : file.ContentType;
+        await using var stream = file.OpenReadStream(25 * 1024 * 1024);
+        await using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+        selectedBytes = memory.ToArray();
+        statusMessage = $"Selected {file.Name} ({selectedBytes.Length / 1024} KB)";
+    }
+
+    private async Task UploadAsync()
+    {
+        if (selectedBytes is null || string.IsNullOrWhiteSpace(profileId)) return;
+
+        isUploading = true;
+        statusMessage = null;
+        summaryMarkdown = null;
+
+        try
+        {
+            var upload = await ApiClient.UploadCoachCheckinAsync(profileId, selectedFileName, selectedContentType, selectedBytes);
+            if (upload is null)
+            {
+                statusMessage = "Upload failed.";
+                return;
+            }
+
+            statusMessage = $"Uploaded {upload.UploadId}. Waiting for processing...";
+            await PollStatusAsync(upload.UploadId);
+        }
+        catch (Exception ex)
+        {
+            statusMessage = ex.Message;
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task PollStatusAsync(Guid uploadId)
+    {
+        if (string.IsNullOrWhiteSpace(profileId)) return;
+
+        for (var i = 0; i < 90; i++)
+        {
+            latestStatus = await ApiClient.GetCoachCheckinStatusAsync(uploadId, profileId);
+            if (latestStatus is null)
+            {
+                statusMessage = "Upload status unavailable.";
+                return;
+            }
+
+            statusMessage = $"Current status: {latestStatus.Status}";
+            if (latestStatus.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                var summary = await ApiClient.GetCoachCheckinSummaryAsync(uploadId, profileId);
+                summaryMarkdown = summary?.SummaryMarkdown;
+                return;
+            }
+
+            if (latestStatus.Status.Equals("AwaitingSpeakerOverride", StringComparison.OrdinalIgnoreCase))
+            {
+                statusMessage = "Speaker override is required before processing can continue.";
+                return;
+            }
+
+            if (latestStatus.Status.Equals("Failed", StringComparison.OrdinalIgnoreCase)) return;
+            await Task.Delay(TimeSpan.FromSeconds(4));
+        }
+
+        statusMessage = "Processing is still running. Refresh in a few minutes.";
+    }
+
+    private async Task<string?> ResolveProfileIdAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.FindFirst("urn:github:login")?.Value
+            ?? authState.User.FindFirst(ClaimTypes.Name)?.Value;
+    }
+}

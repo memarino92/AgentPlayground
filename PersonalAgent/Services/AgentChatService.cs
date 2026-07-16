@@ -23,6 +23,7 @@ internal class AgentChatService
     private readonly OpenAIClient _openAiClient;
     private readonly AgentEventService _eventService;
     private readonly WorkJournalService _workJournalService;
+    private readonly CoachCheckinService _coachCheckinService;
     private readonly ITavilyMcpToolProvider _tavilyMcpToolProvider;
     private readonly ILogger<AgentChatService> _logger;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
@@ -36,6 +37,7 @@ internal class AgentChatService
         SemanticMemoryService semanticMemoryService,
         AgentEventService eventService,
         WorkJournalService workJournalService,
+        CoachCheckinService coachCheckinService,
         ITavilyMcpToolProvider tavilyMcpToolProvider,
         ILogger<AgentChatService> logger)
     {
@@ -48,6 +50,7 @@ internal class AgentChatService
         _semanticMemoryService = semanticMemoryService;
         _eventService = eventService;
         _workJournalService = workJournalService;
+        _coachCheckinService = coachCheckinService;
         _tavilyMcpToolProvider = tavilyMcpToolProvider;
         _logger = logger;
 
@@ -197,6 +200,8 @@ internal class AgentChatService
             "Trigger a background process to sync the work journal from GitHub. This syncs markdown files and prepares them for semantic search."));
         var searchJournalTool = WrapTool(AIFunctionFactory.Create(_workJournalService.SearchWorkJournalAsync, "search_work_journal",
             "Search the work journal for answers to user questions using RAG (Retrieval-Augmented Generation). Use this tool whenever the user asks about past work, journal entries, or questions like 'when did I work on...' or 'who did I help'."));
+        var searchCoachCheckinsTool = WrapTool(AIFunctionFactory.Create(_coachCheckinService.SearchCoachCheckinsAsync, "search_coach_checkins",
+            "Search transcribed coach check-ins for exercise cues, notes, and attributed coaching advice. Provide query and profileId, optionally an exerciseTag like squat or bench."));
         var scheduleNotificationTool = WrapTool(AIFunctionFactory.Create(_eventService.ScheduleNotificationToolAsync, "schedule_notification",
             "Schedule a mobile notification for a user profile using delay (e.g. PT5M), absolute executeAt datetime, or natural when text like 'tonight'."));
         var scheduleAgentTaskTool = WrapTool(AIFunctionFactory.Create(_eventService.ScheduleAgentTaskToolAsync, "schedule_agent_task",
@@ -204,7 +209,7 @@ internal class AgentChatService
         var getCurrentDateTimeTool = WrapTool(AIFunctionFactory.Create(_eventService.GetCurrentDateTimeToolAsync, "get_current_date_time",
             "Get the current date and time, optionally in a specific IANA or Windows timezone (e.g. 'America/Chicago' or 'Central Standard Time'). Call this before scheduling when the user specifies relative times like 'at noon today', '10 PM tomorrow', or 'next Monday'."));
         var webTools = _tavilyMcpToolProvider.GetTools().Select(WrapWebTool).ToList();
-        var tools = new List<AIFunction> { publishTool, mobileNotifyTool, syncJournalTool, searchJournalTool, scheduleNotificationTool, scheduleAgentTaskTool, getCurrentDateTimeTool };
+        var tools = new List<AIFunction> { publishTool, mobileNotifyTool, syncJournalTool, searchJournalTool, searchCoachCheckinsTool, scheduleNotificationTool, scheduleAgentTaskTool, getCurrentDateTimeTool };
         if (webTools.Count > 0) tools.AddRange(webTools);
 
         _logger.LogInformation(
@@ -235,6 +240,8 @@ internal class AgentChatService
 
             When asked about past work, past events, or anything related to the user's work journal, use the search_work_journal tool to find relevant information.
             If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
+
+            When the user asks about strongman coaching calls, cues by exercise, or prior check-in guidance, use search_coach_checkins with profileId and query.
             """);
 
         if (webTools.Count > 0)

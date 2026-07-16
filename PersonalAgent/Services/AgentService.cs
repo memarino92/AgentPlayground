@@ -3,7 +3,12 @@ using PersonalAgent.Models;
 
 namespace PersonalAgent.Services;
 
-internal class AgentService(AgentChatService chatService, AgentEventService eventService, AgentApprovalService approvalService, SchedulingService schedulingService)
+internal class AgentService(
+    AgentChatService chatService,
+    AgentEventService eventService,
+    AgentApprovalService approvalService,
+    SchedulingService schedulingService,
+    CoachCheckinService coachCheckinService)
 {
     public Task<(string SessionId, string ModelId)> CreateSessionAsync(string profileId, string modelId) =>
         chatService.CreateSessionAsync(profileId, modelId);
@@ -37,4 +42,16 @@ internal class AgentService(AgentChatService chatService, AgentEventService even
 
     public Task<ScheduleResult> ScheduleAgentTaskAsync(ScheduleAgentTaskRequest request, CancellationToken cancellationToken = default) =>
         schedulingService.ScheduleAgentTaskAsync(request, cancellationToken);
+
+    public Task<CoachCallUploadResult> CreateCoachCheckinUploadAsync(string profileId, string originalFileName, string mimeType, byte[] bytes, CancellationToken cancellationToken = default) =>
+        coachCheckinService.CreateUploadAsync(profileId, originalFileName, mimeType, bytes, cancellationToken);
+
+    public Task<CoachCheckinStatusResponse?> GetCoachCheckinStatusAsync(Guid uploadId, string profileId, CancellationToken cancellationToken = default) =>
+        coachCheckinService.GetStatusAsync(uploadId, profileId, cancellationToken);
+
+    public Task<CoachCheckinSummaryResponse?> GetCoachCheckinSummaryAsync(Guid uploadId, string profileId, CancellationToken cancellationToken = default) =>
+        coachCheckinService.GetSummaryAsync(uploadId, profileId, cancellationToken);
+
+    public Task ApplyCoachSpeakerOverridesAsync(Guid uploadId, string profileId, IReadOnlyList<CoachSpeakerOverrideItem> overrides, CancellationToken cancellationToken = default) =>
+        coachCheckinService.ApplySpeakerOverridesAsync(uploadId, profileId, overrides, cancellationToken);
 }
