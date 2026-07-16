@@ -14,6 +14,7 @@ using PersonalAgent.Endpoints;
 using PersonalAgent.Models;
 using PersonalAgent.Services;
 using System.Net;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Xunit;
@@ -269,6 +270,43 @@ public class PersonalAgentEndpointsTests
     }
 
     [Fact]
+    public async Task CoachCheckinsUpload_ReturnsBadRequest_WhenRequestIsNotMultipart()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/api/coach-checkins/uploads", new { profileId = "test-user" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CoachCheckinsStatus_ReturnsBadRequest_WhenProfileIdMissing()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var response = await client.GetAsync($"/api/coach-checkins/{Guid.NewGuid()}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CoachCheckinsSpeakerOverrides_ReturnsBadRequest_WhenOverridesMissing()
+    {
+        await using var app = await BuildAppAsync();
+        var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync($"/api/coach-checkins/{Guid.NewGuid()}/speaker-overrides", new
+        {
+            profileId = "test-user",
+            overrides = Array.Empty<object>()
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task ScheduleAgentTask_ReturnsOk_WhenExactlyOneTimingInputProvided()
     {
         await using var app = await BuildAppAsync();
@@ -400,6 +438,11 @@ public class PersonalAgentEndpointsTests
         {
             Models = [new ChatModelOption { Id = "gpt-4o-mini", DisplayName = "GPT-4o mini", IsDefault = true }]
         }));
+        builder.Services.AddSingleton<IOptions<CoachCheckinOptions>>(Options.Create(new CoachCheckinOptions()));
+        builder.Services.AddSingleton<IOptions<AgentMemoryOptions>>(Options.Create(new AgentMemoryOptions
+        {
+            ConnectionString = "Host=localhost;Database=test;Username=postgres;Password=postgres"
+        }));
 
         builder.Services.AddSingleton<IOptions<MassTransit.SqlTransportOptions>>(Options.Create(new MassTransit.SqlTransportOptions
         {
@@ -419,6 +462,7 @@ public class PersonalAgentEndpointsTests
         builder.Services.AddSingleton<ITavilyMcpToolProvider, TestTavilyMcpToolProvider>();
         builder.Services.AddSingleton<PushNotificationService>();
         builder.Services.AddSingleton<IOptions<PushNotificationsOptions>>(Options.Create(new PushNotificationsOptions()));
+        builder.Services.AddSingleton<CoachCheckinService>();
         builder.Services.AddSingleton<AgentChatService>();
         builder.Services.AddSingleton<AgentService>();
         builder.Services.AddSingleton(_ => Mock.Of<IBus>());

@@ -8,4 +8,6 @@ public static class MessagingEndpointNames
     public const string PushNotification = "personal-agent-push-notification";
     public const string AgentTaskScheduler = "personal-agent-worker-agent-task-scheduler";
     public const string AgentTaskExecutor = "personal-agent-worker-agent-task-executor";
+    public const string CoachCallTranscription = "personal-agent-worker-coach-call-transcription";
+    public const string CoachCallProcessing = "personal-agent-worker-coach-call-processing";
 }

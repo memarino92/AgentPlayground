@@ -4,6 +4,7 @@ using PersonalAgent.Models;
 using PersonalAgent.Security;
 using PersonalAgent.Services;
 using Microsoft.Extensions.Logging;
+using System.Net.Mime;
 
 namespace PersonalAgent.Endpoints;
 
@@ -193,6 +194,96 @@ internal static class PersonalAgentEndpoints
             return approval is null
                 ? Results.NotFound(new { error = "Approval not found" })
                 : Results.Ok(approval);
+        });
+
+        apiGroup.MapPost("/coach-checkins/uploads", async (HttpRequest request, AgentService agentService, IOptions<CoachCheckinOptions> options) =>
+        {
+            if (!request.HasFormContentType)
+                return Results.BadRequest(new { error = "Expected multipart form data" });
+
+            var form = await request.ReadFormAsync();
+            var profileId = form["profileId"].ToString();
+            if (string.IsNullOrWhiteSpace(profileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+
+            var file = form.Files.GetFile("file");
+            if (file is null)
+                return Results.BadRequest(new { error = "File is required" });
+
+            if (!file.FileName.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "Only .m4a files are supported" });
+
+            var maxSizeBytes = options.Value.MaxUploadMb * 1024L * 1024L;
+            if (file.Length > maxSizeBytes)
+                return Results.BadRequest(new { error = $"File size exceeds {options.Value.MaxUploadMb}MB limit" });
+
+            await using var stream = file.OpenReadStream();
+            await using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            var result = await agentService.CreateCoachCheckinUploadAsync(
+                profileId,
+                file.FileName,
+                string.IsNullOrWhiteSpace(file.ContentType) ? MediaTypeNames.Application.Octet : file.ContentType,
+                memory.ToArray());
+
+            return Results.Ok(new
+            {
+                uploadId = result.UploadId,
+                correlationId = result.CorrelationId,
+                status = result.Status.ToString(),
+                createdAtUtc = result.CreatedAtUtc
+            });
+        });
+
+        apiGroup.MapGet("/coach-checkins/{uploadId:guid}", async (Guid uploadId, string profileId, AgentService agentService) =>
+        {
+            if (string.IsNullOrWhiteSpace(profileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+
+            var status = await agentService.GetCoachCheckinStatusAsync(uploadId, profileId);
+            return status is null
+                ? Results.NotFound(new { error = "Coach check-in upload not found" })
+                : Results.Ok(new
+                {
+                    uploadId = status.UploadId,
+                    sessionId = status.SessionId,
+                    profileId = status.ProfileId,
+                    status = status.Status.ToString(),
+                    error = status.Error,
+                    createdAtUtc = status.CreatedAtUtc,
+                    updatedAtUtc = status.UpdatedAtUtc
+                });
+        });
+
+        apiGroup.MapGet("/coach-checkins/{uploadId:guid}/summary", async (Guid uploadId, string profileId, AgentService agentService) =>
+        {
+            if (string.IsNullOrWhiteSpace(profileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+
+            var summary = await agentService.GetCoachCheckinSummaryAsync(uploadId, profileId);
+            return summary is null
+                ? Results.NotFound(new { error = "Coach check-in summary not found" })
+                : Results.Ok(new
+                {
+                    uploadId = summary.UploadId,
+                    sessionId = summary.SessionId,
+                    summaryMarkdown = summary.SummaryMarkdown,
+                    summaryJson = summary.SummaryJson,
+                    updatedAtUtc = summary.UpdatedAtUtc
+                });
+        });
+
+        apiGroup.MapPost("/coach-checkins/{uploadId:guid}/speaker-overrides", async (Guid uploadId, CoachSpeakerOverrideRequest request, AgentService agentService) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.ProfileId))
+                return Results.BadRequest(new { error = "ProfileId is required" });
+            if (request.Overrides.Count is 0)
+                return Results.BadRequest(new { error = "At least one speaker override is required" });
+            if (request.Overrides.Any(ovr => string.IsNullOrWhiteSpace(ovr.Role)))
+                return Results.BadRequest(new { error = "Each override role is required" });
+
+            await agentService.ApplyCoachSpeakerOverridesAsync(uploadId, request.ProfileId, request.Overrides);
+            return Results.Ok(new { message = "Speaker overrides applied. Processing restarted." });
         });
 
         return app;
