@@ -41,7 +41,7 @@ internal class CoachCheckinService(
         {
             logger.LogInformation(
                 "Detected duplicate coach call upload for profile {ProfileId} with existing upload {UploadId}",
-                profileId,
+                profileId.ReplaceLineEndings(""),
                 duplicateUpload.UploadId);
             return new CoachCallUploadResult(
                 duplicateUpload.UploadId,
@@ -53,6 +53,7 @@ internal class CoachCheckinService(
 
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
+        int uploadRowsInserted;
         await using (var uploadCommand = connection.CreateCommand())
         {
             uploadCommand.Transaction = transaction;
@@ -88,7 +89,8 @@ internal class CoachCheckinService(
                     NULL,
                     @createdAt,
                     @updatedAt
-                );
+                )
+                ON CONFLICT (profile_id, file_hash) DO NOTHING;
                 """;
             uploadCommand.Parameters.AddWithValue("uploadId", uploadId);
             uploadCommand.Parameters.AddWithValue("profileId", profileId);
@@ -102,7 +104,25 @@ internal class CoachCheckinService(
             uploadCommand.Parameters.AddWithValue("status", CoachCallUploadStatus.Uploaded.ToString());
             uploadCommand.Parameters.AddWithValue("createdAt", createdAt);
             uploadCommand.Parameters.AddWithValue("updatedAt", createdAt);
-            await uploadCommand.ExecuteNonQueryAsync(cancellationToken);
+            uploadRowsInserted = await uploadCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (uploadRowsInserted == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            var concurrentDuplicate = await GetExistingUploadByHashAsync(connection, profileId, hash, cancellationToken);
+            logger.LogInformation(
+                "Detected concurrent duplicate coach call upload for profile {ProfileId} with existing upload {UploadId}",
+                profileId.ReplaceLineEndings(""),
+                concurrentDuplicate?.UploadId);
+            if (concurrentDuplicate is null)
+                throw new InvalidOperationException($"Insert for upload with file hash {hash} was a no-op but no conflicting row was found for profile {profileId.ReplaceLineEndings("")}.");
+            return new CoachCallUploadResult(
+                concurrentDuplicate.UploadId,
+                concurrentDuplicate.CorrelationId,
+                concurrentDuplicate.Status,
+                concurrentDuplicate.CreatedAtUtc,
+                true);
         }
 
         await using (var sessionCommand = connection.CreateCommand())

@@ -164,6 +164,7 @@ internal class AgentMemorySchemaInitializer(IOptions<AgentMemoryOptions> options
                 updated_at timestamptz NOT NULL
             );
 
+            CREATE UNIQUE INDEX IF NOT EXISTS {QuoteIdentifier("ux_coach_call_uploads_profile_file_hash")} ON {coachCallUploadsTable} (profile_id, file_hash);
             CREATE INDEX IF NOT EXISTS {QuoteIdentifier("ix_coach_call_uploads_profile_created")} ON {coachCallUploadsTable} (profile_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS {QuoteIdentifier("ix_coach_call_uploads_status_updated")} ON {coachCallUploadsTable} (status, updated_at DESC);
 
