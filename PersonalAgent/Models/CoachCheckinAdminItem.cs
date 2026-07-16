@@ -14,4 +14,4 @@ internal record CoachCheckinAdminItem(
     int ChunkCount,
     List<CoachCheckinSpeakerLabelInfo> SpeakerLabels);
 
-internal record CoachCheckinSpeakerLabelInfo(int SpeakerLabel, string SpeakerRole, int UtteranceCount);
+internal record CoachCheckinSpeakerLabelInfo(int SpeakerLabel, string SpeakerRole, int UtteranceCount, List<string> SampleTexts);
