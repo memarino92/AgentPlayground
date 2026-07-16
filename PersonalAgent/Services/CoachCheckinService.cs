@@ -208,8 +208,9 @@ internal class CoachCheckinService(
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
+            var uploadId = reader.GetGuid(0);
             items.Add(new CoachCheckinAdminItem(
-                reader.GetGuid(0),
+                uploadId,
                 reader.GetGuid(1),
                 reader.GetString(2),
                 reader.GetString(3),
@@ -219,7 +220,8 @@ internal class CoachCheckinService(
                 reader.GetFieldValue<DateTimeOffset>(7),
                 reader.GetBoolean(8),
                 reader.GetInt32(9),
-                reader.GetInt32(10)));
+                reader.GetInt32(10),
+                await GetSpeakerLabelsAsync(connection, uploadId, cancellationToken)));
         }
 
         return items;
@@ -374,6 +376,29 @@ internal class CoachCheckinService(
     private static CoachCallUploadStatus ParseStatus(string value) => Enum.TryParse<CoachCallUploadStatus>(value, true, out var status)
         ? status
         : CoachCallUploadStatus.Failed;
+
+    private async Task<List<CoachCheckinSpeakerLabelInfo>> GetSpeakerLabelsAsync(NpgsqlConnection connection, Guid uploadId, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT u.speaker_label,
+                   COALESCE(NULLIF(TRIM(u.speaker_role), ''), 'unknown') AS speaker_role,
+                   COUNT(*)::integer AS utterance_count
+            FROM {CoachCallUtterancesTable} u
+            JOIN {CoachCallUploadsTable} uploads ON uploads.session_id = u.session_id
+            WHERE uploads.upload_id = @uploadId
+            GROUP BY u.speaker_label, COALESCE(NULLIF(TRIM(u.speaker_role), ''), 'unknown')
+            ORDER BY u.speaker_label;
+            """;
+        command.Parameters.AddWithValue("uploadId", uploadId);
+
+        var results = new List<CoachCheckinSpeakerLabelInfo>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            results.Add(new CoachCheckinSpeakerLabelInfo(reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2)));
+
+        return results;
+    }
 
     private async Task<CoachCallUploadResult?> GetExistingUploadByHashAsync(NpgsqlConnection connection, string profileId, string hash, CancellationToken cancellationToken)
     {

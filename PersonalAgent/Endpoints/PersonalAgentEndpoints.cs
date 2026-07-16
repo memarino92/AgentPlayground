@@ -302,7 +302,13 @@ internal static class PersonalAgentEndpoints
                 updatedAtUtc = item.UpdatedAtUtc,
                 hasAudioBlob = item.HasAudioBlob,
                 utteranceCount = item.UtteranceCount,
-                chunkCount = item.ChunkCount
+                chunkCount = item.ChunkCount,
+                speakerLabels = item.SpeakerLabels.Select(label => new
+                {
+                    speakerLabel = label.SpeakerLabel,
+                    speakerRole = label.SpeakerRole,
+                    utteranceCount = label.UtteranceCount
+                })
             }));
         });
 
