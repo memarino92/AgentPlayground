@@ -67,14 +67,25 @@
                                 <div>
                                     @foreach (var label in item.SpeakerLabels.OrderBy(label => label.SpeakerLabel))
                                     {
-                                        <label>
-                                            @label.SpeakerLabel:
-                                            <select value="@GetOverrideSelection(item.UploadId, label)" @onchange="(args) => SetOverrideSelection(item.UploadId, label.SpeakerLabel, args.Value?.ToString())" disabled="@isApplyingOverride">
-                                                <option value="coach">coach</option>
-                                                <option value="athlete">athlete</option>
-                                                <option value="unknown">unknown</option>
-                                            </select>
-                                        </label>
+                                        <div class="speaker-override-row">
+                                            <label>
+                                                @label.SpeakerLabel:
+                                                <select value="@GetOverrideSelection(item.UploadId, label)" @onchange="(args) => SetOverrideSelection(item.UploadId, label.SpeakerLabel, args.Value?.ToString())" disabled="@isApplyingOverride">
+                                                    <option value="coach">coach</option>
+                                                    <option value="athlete">athlete</option>
+                                                    <option value="unknown">unknown</option>
+                                                </select>
+                                            </label>
+                                            @if (label.SampleTexts.Count > 0)
+                                            {
+                                                <ul class="speaker-sample-texts">
+                                                    @foreach (var sample in label.SampleTexts)
+                                                    {
+                                                        <li>@sample</li>
+                                                    }
+                                                </ul>
+                                            }
+                                        </div>
                                     }
                                     <button class="btn btn-primary" @onclick="() => ApplyOverrideAsync(item)" disabled="@isApplyingOverride">Apply</button>
                                 </div>

@@ -399,18 +399,21 @@ internal class CoachCheckinService(
     {
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            WITH normalized AS
+            WITH numbered AS
             (
                 SELECT u.speaker_label,
-                       COALESCE(NULLIF(TRIM(u.speaker_role), ''), 'unknown') AS speaker_role
+                       COALESCE(NULLIF(TRIM(u.speaker_role), ''), 'unknown') AS speaker_role,
+                       u.content,
+                       ROW_NUMBER() OVER (PARTITION BY u.speaker_label ORDER BY u.start_ms) AS rn
                 FROM {CoachCallUtterancesTable} u
                 JOIN {CoachCallUploadsTable} uploads ON uploads.session_id = u.session_id
                 WHERE uploads.upload_id = @uploadId
             )
             SELECT speaker_label,
                    CASE WHEN COUNT(DISTINCT speaker_role) = 1 THEN MAX(speaker_role) ELSE 'unknown' END AS speaker_role,
-                   COUNT(*)::integer AS utterance_count
-            FROM normalized
+                   COUNT(*)::integer AS utterance_count,
+                   ARRAY_AGG(content ORDER BY rn) FILTER (WHERE rn <= 3) AS sample_texts
+            FROM numbered
             GROUP BY speaker_label
             ORDER BY speaker_label;
             """;
@@ -419,7 +422,10 @@ internal class CoachCheckinService(
         var results = new List<CoachCheckinSpeakerLabelInfo>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            results.Add(new CoachCheckinSpeakerLabelInfo(reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2)));
+        {
+            var sampleTexts = reader.IsDBNull(3) ? [] : reader.GetFieldValue<string[]>(3).ToList();
+            results.Add(new CoachCheckinSpeakerLabelInfo(reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2), sampleTexts));
+        }
 
         return results;
     }

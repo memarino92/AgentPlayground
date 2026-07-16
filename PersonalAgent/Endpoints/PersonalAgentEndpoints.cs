@@ -307,7 +307,8 @@ internal static class PersonalAgentEndpoints
                 {
                     speakerLabel = label.SpeakerLabel,
                     speakerRole = label.SpeakerRole,
-                    utteranceCount = label.UtteranceCount
+                    utteranceCount = label.UtteranceCount,
+                    sampleTexts = label.SampleTexts
                 })
             }));
         });
