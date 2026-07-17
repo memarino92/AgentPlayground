@@ -307,6 +307,17 @@ public class PersonalAgentEndpointsTests
     }
 
     [Fact]
+    public async Task CoachCheckinsTranscript_RequiresInternalApiKey_WhenConfigured()
+    {
+        await using var app = await BuildAppAsync(internalApiKey: "test-key");
+        var client = app.GetTestClient();
+
+        var response = await client.GetAsync($"/api/coach-checkins/{Guid.NewGuid()}/transcript");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task ScheduleAgentTask_ReturnsOk_WhenExactlyOneTimingInputProvided()
     {
         await using var app = await BuildAppAsync();

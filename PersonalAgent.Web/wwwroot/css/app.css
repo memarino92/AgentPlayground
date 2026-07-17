@@ -299,6 +299,80 @@ body {
   max-width: min(100%, 48rem);
 }
 
+.coach-admin-transcript-row td {
+  background: #f8fafc;
+}
+
+.coach-admin-transcript-viewer {
+  border: 1px solid var(--border-color);
+  border-radius: 0.25rem;
+  background: white;
+  padding: 0.75rem;
+}
+
+.coach-admin-transcript-viewer__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.coach-admin-transcript-viewer__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 20rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.coach-admin-transcript-viewer__item {
+  border: 1px solid var(--border-color);
+  border-radius: 0.25rem;
+  padding: 0.625rem;
+}
+
+.coach-admin-transcript-viewer__item p {
+  margin: 0.35rem 0 0;
+  white-space: pre-wrap;
+}
+
+.coach-admin-transcript-viewer__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.coach-admin-transcript-viewer__role {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: capitalize;
+}
+
+.coach-admin-transcript-viewer__role--coach {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.coach-admin-transcript-viewer__role--athlete {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.coach-admin-transcript-viewer__role--unknown {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .message-list__item strong,
 .message-list__item p,
 .message-list__content {
@@ -378,5 +452,10 @@ body {
 
   .message-list__item {
     max-width: 100%;
+  }
+
+  .coach-admin-transcript-viewer__header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
