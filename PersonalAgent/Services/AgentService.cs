@@ -52,6 +52,9 @@ internal class AgentService(
     public Task<CoachCheckinSummaryResponse?> GetCoachCheckinSummaryAsync(Guid uploadId, string profileId, CancellationToken cancellationToken = default) =>
         coachCheckinService.GetSummaryAsync(uploadId, profileId, cancellationToken);
 
+    public Task<CoachCheckinTranscriptResponse?> GetCoachCheckinTranscriptAsync(Guid uploadId, CancellationToken cancellationToken = default) =>
+        coachCheckinService.GetTranscriptAsync(uploadId, cancellationToken);
+
     public Task ApplyCoachSpeakerOverridesAsync(Guid uploadId, string profileId, IReadOnlyList<CoachSpeakerOverrideItem> overrides, CancellationToken cancellationToken = default) =>
         coachCheckinService.ApplySpeakerOverridesAsync(uploadId, profileId, overrides, cancellationToken);
 

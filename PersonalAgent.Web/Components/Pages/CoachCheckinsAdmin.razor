@@ -36,6 +36,7 @@
                     <th>Chunks</th>
                     <th>Audio Blob</th>
                     <th>Speakers</th>
+                    <th>Transcript</th>
                     <th>Override</th>
                     <th>Error</th>
                 </tr>
@@ -60,6 +61,14 @@
                             {
                                 @string.Join(", ", item.SpeakerLabels.Select(label => $"{label.SpeakerLabel}:{label.SpeakerRole} ({label.UtteranceCount})"))
                             }
+                        </td>
+                        <td>
+                            <button
+                                class="btn btn-secondary"
+                                @onclick="() => ToggleTranscriptAsync(item)"
+                                disabled="@loadingTranscriptUploadIds.Contains(item.UploadId)">
+                                @GetTranscriptButtonText(item.UploadId)
+                            </button>
                         </td>
                         <td>
                             @if (item.SpeakerLabels.Count > 0)
@@ -93,6 +102,52 @@
                         </td>
                         <td>@item.Error</td>
                     </tr>
+
+                    @if (expandedTranscriptUploadIds.Contains(item.UploadId))
+                    {
+                        <tr class="coach-admin-transcript-row">
+                            <td colspan="11">
+                                @if (loadingTranscriptUploadIds.Contains(item.UploadId))
+                                {
+                                    <p>Loading transcript...</p>
+                                }
+                                else if (transcriptErrorsByUploadId.TryGetValue(item.UploadId, out var transcriptError) && !string.IsNullOrWhiteSpace(transcriptError))
+                                {
+                                    <p>@transcriptError</p>
+                                }
+                                else if (transcriptsByUploadId.TryGetValue(item.UploadId, out var transcript))
+                                {
+                                    <section class="coach-admin-transcript-viewer">
+                                        <header class="coach-admin-transcript-viewer__header">
+                                            <strong>Transcript timeline</strong>
+                                            <span>Updated @transcript.UpdatedAtUtc.ToLocalTime().ToString("g")</span>
+                                        </header>
+
+                                        @if (transcript.Utterances.Count is 0)
+                                        {
+                                            <p>No utterances available yet.</p>
+                                        }
+                                        else
+                                        {
+                                            <div class="coach-admin-transcript-viewer__list">
+                                                @foreach (var utterance in transcript.Utterances)
+                                                {
+                                                    <article class="coach-admin-transcript-viewer__item">
+                                                        <div class="coach-admin-transcript-viewer__meta">
+                                                            <span class="coach-admin-transcript-viewer__role @GetRoleClass(utterance.SpeakerRole)">@NormalizeRole(utterance.SpeakerRole)</span>
+                                                            <span>Label @utterance.SpeakerLabel</span>
+                                                            <span>@FormatTimestampRange(utterance.StartMs, utterance.EndMs)</span>
+                                                        </div>
+                                                        <p>@utterance.Text</p>
+                                                    </article>
+                                                }
+                                            </div>
+                                        }
+                                    </section>
+                                }
+                            </td>
+                        </tr>
+                    }
                 }
             </tbody>
         </table>
@@ -105,6 +160,10 @@
     private string? errorMessage;
     private List<CoachCheckinAdminItemResponse> items = [];
     private readonly Dictionary<Guid, Dictionary<int, string>> overrideSelections = [];
+    private readonly HashSet<Guid> expandedTranscriptUploadIds = [];
+    private readonly HashSet<Guid> loadingTranscriptUploadIds = [];
+    private readonly Dictionary<Guid, string> transcriptErrorsByUploadId = [];
+    private readonly Dictionary<Guid, CoachCheckinTranscriptResponse> transcriptsByUploadId = [];
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -208,4 +267,63 @@
         if (string.Equals(role, "athlete", StringComparison.OrdinalIgnoreCase)) return "athlete";
         return "unknown";
     }
+
+    private async Task ToggleTranscriptAsync(CoachCheckinAdminItemResponse item)
+    {
+        transcriptErrorsByUploadId.Remove(item.UploadId);
+
+        if (expandedTranscriptUploadIds.Contains(item.UploadId))
+        {
+            expandedTranscriptUploadIds.Remove(item.UploadId);
+            return;
+        }
+
+        expandedTranscriptUploadIds.Add(item.UploadId);
+        if (transcriptsByUploadId.ContainsKey(item.UploadId)) return;
+        await LoadTranscriptAsync(item.UploadId);
+    }
+
+    private async Task LoadTranscriptAsync(Guid uploadId)
+    {
+        if (loadingTranscriptUploadIds.Contains(uploadId)) return;
+
+        loadingTranscriptUploadIds.Add(uploadId);
+        transcriptErrorsByUploadId.Remove(uploadId);
+        try
+        {
+            var transcript = await ApiClient.GetCoachCheckinTranscriptAsync(uploadId);
+            if (transcript is null)
+            {
+                transcriptErrorsByUploadId[uploadId] = "Transcript not found.";
+                return;
+            }
+
+            transcriptsByUploadId[uploadId] = transcript;
+        }
+        catch (Exception ex)
+        {
+            transcriptErrorsByUploadId[uploadId] = ex.Message;
+            Logger.LogError(ex, "Failed to load transcript for upload {UploadId}", uploadId);
+        }
+        finally
+        {
+            loadingTranscriptUploadIds.Remove(uploadId);
+        }
+    }
+
+    private string GetTranscriptButtonText(Guid uploadId)
+    {
+        if (loadingTranscriptUploadIds.Contains(uploadId)) return "Loading...";
+        return expandedTranscriptUploadIds.Contains(uploadId) ? "Hide transcript" : "View transcript";
+    }
+
+    private static string FormatTimestampRange(int startMs, int endMs) => $"{FormatTimestamp(startMs)} - {FormatTimestamp(endMs)}";
+    private static string FormatTimestamp(int milliseconds) => TimeSpan.FromMilliseconds(milliseconds).ToString(@"mm\:ss");
+
+    private static string GetRoleClass(string role) => NormalizeRole(role) switch
+    {
+        "coach" => "coach-admin-transcript-viewer__role--coach",
+        "athlete" => "coach-admin-transcript-viewer__role--athlete",
+        _ => "coach-admin-transcript-viewer__role--unknown"
+    };
 }

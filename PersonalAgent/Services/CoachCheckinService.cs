@@ -296,6 +296,45 @@ internal class CoachCheckinService(
             reader.GetFieldValue<DateTimeOffset>(4));
     }
 
+    public async Task<CoachCheckinTranscriptResponse?> GetTranscriptAsync(Guid uploadId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+
+        Guid sessionId;
+        string profileId;
+        CoachCallUploadStatus status;
+        string transcriptText;
+        DateTimeOffset updatedAtUtc;
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = $"""
+                SELECT u.upload_id,
+                       u.session_id,
+                       u.profile_id,
+                       u.status,
+                       s.transcript_text,
+                       s.updated_at
+                FROM {CoachCallUploadsTable} u
+                JOIN {CoachCallSessionsTable} s ON s.upload_id = u.upload_id
+                WHERE u.upload_id = @uploadId;
+                """;
+            command.Parameters.AddWithValue("uploadId", uploadId);
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) return null;
+
+            sessionId = reader.GetGuid(1);
+            profileId = reader.GetString(2);
+            status = ParseStatus(reader.GetString(3));
+            transcriptText = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
+            updatedAtUtc = reader.GetFieldValue<DateTimeOffset>(5);
+        }
+
+        var utterances = await GetTranscriptUtterancesAsync(connection, sessionId, cancellationToken);
+        return new CoachCheckinTranscriptResponse(uploadId, sessionId, profileId, status, transcriptText, updatedAtUtc, utterances);
+    }
+
     public async Task ApplySpeakerOverridesAsync(Guid uploadId, string profileId, IReadOnlyList<CoachSpeakerOverrideItem> overrides, CancellationToken cancellationToken = default)
     {
         if (overrides.Count is 0) return;
@@ -428,6 +467,36 @@ internal class CoachCheckinService(
         }
 
         return results;
+    }
+
+    private async Task<List<CoachCheckinTranscriptUtterance>> GetTranscriptUtterancesAsync(NpgsqlConnection connection, Guid sessionId, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT speaker_label,
+                   COALESCE(NULLIF(TRIM(speaker_role), ''), 'unknown') AS speaker_role,
+                   start_ms,
+                   end_ms,
+                   content,
+                   confidence
+            FROM {CoachCallUtterancesTable}
+            WHERE session_id = @sessionId
+            ORDER BY start_ms, end_ms;
+            """;
+        command.Parameters.AddWithValue("sessionId", sessionId);
+
+        var utterances = new List<CoachCheckinTranscriptUtterance>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            utterances.Add(new CoachCheckinTranscriptUtterance(
+                reader.GetInt32(0),
+                reader.GetString(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.GetString(4),
+                reader.GetDouble(5)));
+
+        return utterances;
     }
 
     private async Task<CoachCallUploadResult?> GetExistingUploadByHashAsync(NpgsqlConnection connection, string profileId, string hash, CancellationToken cancellationToken)

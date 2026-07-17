@@ -274,6 +274,31 @@ internal static class PersonalAgentEndpoints
                 });
         });
 
+        apiGroup.MapGet("/coach-checkins/{uploadId:guid}/transcript", async (Guid uploadId, AgentService agentService) =>
+        {
+            var transcript = await agentService.GetCoachCheckinTranscriptAsync(uploadId);
+            return transcript is null
+                ? Results.NotFound(new { error = "Coach check-in transcript not found" })
+                : Results.Ok(new
+                {
+                    uploadId = transcript.UploadId,
+                    sessionId = transcript.SessionId,
+                    profileId = transcript.ProfileId,
+                    status = transcript.Status.ToString(),
+                    transcriptText = transcript.TranscriptText,
+                    updatedAtUtc = transcript.UpdatedAtUtc,
+                    utterances = transcript.Utterances.Select(utterance => new
+                    {
+                        speakerLabel = utterance.SpeakerLabel,
+                        speakerRole = utterance.SpeakerRole,
+                        startMs = utterance.StartMs,
+                        endMs = utterance.EndMs,
+                        text = utterance.Text,
+                        confidence = utterance.Confidence
+                    })
+                });
+        });
+
         apiGroup.MapPost("/coach-checkins/{uploadId:guid}/speaker-overrides", async (Guid uploadId, CoachSpeakerOverrideRequest request, AgentService agentService) =>
         {
             if (string.IsNullOrWhiteSpace(request.ProfileId))
