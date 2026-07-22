@@ -8,47 +8,65 @@
 
 <PageTitle>PersonalAgent - Coach Check-ins</PageTitle>
 
-<section class="coach-checkins-page">
-    <h2>Coach Check-ins</h2>
+<MudContainer MaxWidth="MaxWidth.Large" Class="coach-upload-page">
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.h5">Coach Check-ins</MudText>
+            <MudText Typo="Typo.body2">Upload a call recording and track processing until summary generation completes.</MudText>
 
-    <div class="coach-checkins-page__upload">
-        <InputFile OnChange="HandleFileSelected" accept=".m4a,audio/mp4" />
-        <button class="btn btn-primary" @onclick="UploadAsync" disabled="@(selectedBytes is null || isUploading)">Upload call</button>
-        @if (isUploading)
-        {
-            <span>Uploading...</span>
-        }
-        else if (isPolling)
-        {
-            <span>Processing...</span>
-        }
-    </div>
+            <div class="coach-upload-page__picker">
+                <InputFile OnChange="HandleFileSelected" accept=".m4a,audio/mp4" />
+            </div>
 
-    @if (!string.IsNullOrWhiteSpace(statusMessage))
-    {
-        <p>@statusMessage</p>
-    }
-
-    @if (latestStatus is not null)
-    {
-        <div class="coach-checkins-page__status">
-            <p>Upload: @latestStatus.UploadId</p>
-            <p>Status: @latestStatus.Status</p>
-            @if (!string.IsNullOrWhiteSpace(latestStatus.Error))
+            @if (!string.IsNullOrWhiteSpace(selectedFileName) && selectedBytes is not null)
             {
-                <p>Error: @latestStatus.Error</p>
+                <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined">@selectedFileName (@FormatKb(selectedBytes.Length) KB)</MudChip>
             }
-        </div>
-    }
 
-    @if (!string.IsNullOrWhiteSpace(summaryMarkdown))
-    {
-        <article class="coach-checkins-page__summary">
-            <h3>Summary</h3>
-            <pre>@summaryMarkdown</pre>
-        </article>
-    }
-</section>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="UploadAsync"
+                           Disabled="@(selectedBytes is null || IsUploadLocked)">
+                    @GetUploadButtonText()
+                </MudButton>
+
+                @if (isUploading || isPolling)
+                {
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" />
+                }
+            </MudStack>
+
+            @if (!string.IsNullOrWhiteSpace(statusMessage))
+            {
+                <MudAlert Severity="@GetStatusSeverity()" Dense="true">@statusMessage</MudAlert>
+            }
+
+            @if (latestStatus is not null)
+            {
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.subtitle2">Current Upload Status</MudText>
+                        <MudText Typo="Typo.body2">Upload: @latestStatus.UploadId</MudText>
+                        <MudText Typo="Typo.body2">Status: @latestStatus.Status</MudText>
+                        @if (!string.IsNullOrWhiteSpace(latestStatus.Error))
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true">@latestStatus.Error</MudAlert>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(summaryMarkdown))
+            {
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudText Typo="Typo.subtitle1">Summary</MudText>
+                    <pre class="coach-upload-page__summary">@summaryMarkdown</pre>
+                </MudPaper>
+            }
+        </MudStack>
+    </MudPaper>
+</MudContainer>
 
 @code {
     private string? profileId;
@@ -57,9 +75,12 @@
     private string selectedContentType = "audio/m4a";
     private bool isUploading;
     private bool isPolling;
+    private bool hasUploadSubmitted;
     private string? statusMessage;
     private CoachCheckinStatusResponse? latestStatus;
     private string? summaryMarkdown;
+
+    private bool IsUploadLocked => isUploading || isPolling || hasUploadSubmitted;
 
     protected override async Task OnInitializedAsync() => profileId = await ResolveProfileIdAsync();
 
@@ -73,6 +94,9 @@
         await using var memory = new MemoryStream();
         await stream.CopyToAsync(memory);
         selectedBytes = memory.ToArray();
+        hasUploadSubmitted = false;
+        latestStatus = null;
+        summaryMarkdown = null;
         statusMessage = $"Selected {file.Name} ({selectedBytes.Length / 1024} KB)";
     }
 
@@ -81,6 +105,7 @@
         if (selectedBytes is null || string.IsNullOrWhiteSpace(profileId)) return;
 
         isUploading = true;
+        hasUploadSubmitted = true;
         statusMessage = null;
         summaryMarkdown = null;
         Logger.LogInformation("Starting coach check-in upload for profile {ProfileId}", profileId);
@@ -133,6 +158,7 @@
             {
                 var summary = await ApiClient.GetCoachCheckinSummaryAsync(uploadId, profileId);
                 summaryMarkdown = summary?.SummaryMarkdown;
+                hasUploadSubmitted = false;
                 isPolling = false;
                 return;
             }
@@ -140,12 +166,14 @@
             if (latestStatus.Status.Equals("AwaitingSpeakerOverride", StringComparison.OrdinalIgnoreCase))
             {
                 statusMessage = "Speaker override is required before processing can continue.";
+                hasUploadSubmitted = false;
                 isPolling = false;
                 return;
             }
 
             if (latestStatus.Status.Equals("Failed", StringComparison.OrdinalIgnoreCase))
             {
+                hasUploadSubmitted = false;
                 isPolling = false;
                 return;
             }
@@ -153,6 +181,7 @@
         }
 
         statusMessage = "Processing is still running. Refresh in a few minutes.";
+        hasUploadSubmitted = false;
         isPolling = false;
     }
 
@@ -162,4 +191,22 @@
         return authState.User.FindFirst("urn:github:login")?.Value
             ?? authState.User.FindFirst(ClaimTypes.Name)?.Value;
     }
+
+    private string GetUploadButtonText()
+    {
+        if (isUploading) return "Uploading...";
+        if (isPolling) return "Processing...";
+        if (hasUploadSubmitted) return "Working...";
+        return "Upload call";
+    }
+
+    private Severity GetStatusSeverity()
+    {
+        if (latestStatus?.Status.Equals("Failed", StringComparison.OrdinalIgnoreCase) is true) return Severity.Error;
+        if (latestStatus?.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase) is true) return Severity.Success;
+        if (latestStatus?.Status.Equals("AwaitingSpeakerOverride", StringComparison.OrdinalIgnoreCase) is true) return Severity.Warning;
+        return Severity.Info;
+    }
+
+    private static int FormatKb(int sizeBytes) => sizeBytes / 1024;
 }

@@ -1,11 +1,11 @@
 <div class="composer">
-    <input class="composer__input"
-           type="text"
-           value="@CurrentMessage"
-           @oninput="HandleInput"
-           @onkeydown="OnKeyDown"
-           disabled="@IsBusy"
-           placeholder="Type a message..." />
+    <textarea class="composer__input"
+              value="@CurrentMessage"
+              @oninput="HandleInput"
+              @onkeydown="OnKeyDown"
+              disabled="@IsBusy"
+              rows="3"
+              placeholder="Type a message. Enter to send, Shift+Enter for newline."></textarea>
     <select class="composer__model"
             value="@SelectedModelId"
             @onchange="HandleModelChanged"
@@ -15,7 +15,7 @@
             <option value="@model.Id">@model.DisplayName</option>
         }
     </select>
-    <button class="btn btn-primary composer__send" @onclick="OnSendMessage" disabled="@(IsBusy || string.IsNullOrWhiteSpace(CurrentMessage))">Send</button>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="composer__send" OnClick="OnSendMessage" Disabled="@(IsBusy || string.IsNullOrWhiteSpace(CurrentMessage))">Send</MudButton>
 </div>
 
 @code {

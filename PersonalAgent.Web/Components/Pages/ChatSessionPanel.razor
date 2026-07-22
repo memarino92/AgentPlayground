@@ -1,40 +1,44 @@
-<aside class="session-panel" id="chat-drawer">
-    <div class="session-panel__summary">
-        <span>Previous chats</span>
-        <button class="session-panel__close" @onclick="OnCloseDrawer">Close</button>
+<MudPaper Class="pa-3 session-panel" Elevation="1" id="chat-drawer">
+    <MudStack Spacing="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h6">Previous chats</MudText>
+            <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="OnCloseDrawer">Close</MudButton>
+        </MudStack>
+
         @if (IsLoadingSessions)
         {
-            <span class="session-panel__status">Loading...</span>
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
         }
-    </div>
 
-    @if (Sessions.Count == 0 && !IsLoadingSessions)
-    {
-        <p class="session-panel__empty">No chats yet.</p>
-    }
-    else
-    {
-        <ul class="session-panel__list">
-            @foreach (var session in Sessions)
-            {
-                <li class="session-panel__item">
-                    <button class="session-panel__button session-panel__button--@(session.SessionId == SelectedSessionOption ? "active" : "inactive")"
+        @if (Sessions.Count == 0 && !IsLoadingSessions)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">No chats yet.</MudAlert>
+        }
+        else
+        {
+            <div class="session-panel__list">
+                @foreach (var session in Sessions)
+                {
+                    var isSelected = session.SessionId == SelectedSessionOption;
+                    <button type="button"
+                            class="session-panel__entry @(isSelected ? "session-panel__entry--active" : string.Empty)"
                             @onclick="() => OnSessionSelectionChanged.InvokeAsync(session.SessionId)"
                             disabled="@IsBusy">
-                        @FormatSessionOption(session)
+                        <strong>@session.Snippet</strong>
+                        <span>@session.LastActivityAt.ToLocalTime().ToString("g")</span>
                     </button>
-                </li>
-            }
-        </ul>
+                }
+            </div>
 
-        @if (HasMoreSessions)
-        {
-            <button class="session-panel__more" @onclick="OnLoadMoreSessions" disabled="@(IsBusy || IsLoadingSessions)">
-                Load more
-            </button>
+            @if (HasMoreSessions)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="OnLoadMoreSessions" Disabled="@(IsBusy || IsLoadingSessions)">
+                    Load more
+                </MudButton>
+            }
         }
-    }
-</aside>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Parameter] public required List<SessionListItem> Sessions { get; set; }
@@ -42,7 +46,6 @@
     [Parameter] public required bool IsBusy { get; set; }
     [Parameter] public required bool HasMoreSessions { get; set; }
     [Parameter] public required string SelectedSessionOption { get; set; }
-    [Parameter] public required Func<SessionListItem, string> FormatSessionOption { get; set; }
     [Parameter] public required EventCallback<string?> OnSessionSelectionChanged { get; set; }
     [Parameter] public required EventCallback OnLoadMoreSessions { get; set; }
     [Parameter] public required EventCallback OnCloseDrawer { get; set; }

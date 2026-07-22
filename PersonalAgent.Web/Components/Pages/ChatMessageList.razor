@@ -1,6 +1,6 @@
 @using Markdig
 
-<div class="message-list">
+<div class="message-list" id="@ContainerId">
     @foreach (var msg in Messages)
     {
         <div class="message-list__item message-list__item--@msg.Role" data-role="@msg.Role">
@@ -34,6 +34,7 @@
 
     [Parameter] public required List<ConversationMessage> Messages { get; set; }
     [Parameter] public required bool IsSendingMessage { get; set; }
+    [Parameter] public required string ContainerId { get; set; }
 
     private static string RenderMarkdown(string content) => Markdown.ToHtml(content, MarkdownPipeline).Trim();
 }

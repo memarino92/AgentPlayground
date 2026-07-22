@@ -1,4 +1,5 @@
 using AgentPlayground.Contracts.Hosting;
+using MudBlazor.Services;
 using PersonalAgent.Web.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,7 @@ builder.Services.AddPersonalAgentWebMessaging(builder.Configuration);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddMudServices();
 
 var app = builder.Build();
 app.UsePersonalAgentWebPipeline();

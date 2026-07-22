@@ -5,6 +5,7 @@ using PersonalAgent.Security;
 using PersonalAgent.Services;
 using Microsoft.Extensions.Logging;
 using System.Net.Mime;
+using System.Text;
 
 namespace PersonalAgent.Endpoints;
 
@@ -297,6 +298,20 @@ internal static class PersonalAgentEndpoints
                         confidence = utterance.Confidence
                     })
                 });
+        });
+
+        apiGroup.MapGet("/coach-checkins/{uploadId:guid}/transcript.txt", async (Guid uploadId, AgentService agentService) =>
+        {
+            var transcript = await agentService.GetCoachCheckinTranscriptAsync(uploadId);
+            if (transcript is null)
+                return Results.NotFound(new { error = "Coach check-in transcript not found" });
+
+            var content = string.IsNullOrWhiteSpace(transcript.TranscriptText)
+                ? string.Join(Environment.NewLine, transcript.Utterances.Select(utterance => $"[{TimeSpan.FromMilliseconds(utterance.StartMs):mm\\:ss}-{TimeSpan.FromMilliseconds(utterance.EndMs):mm\\:ss}] {utterance.SpeakerRole}: {utterance.Text}"))
+                : transcript.TranscriptText;
+
+            var fileName = $"coach-checkin-{uploadId}.txt";
+            return Results.File(Encoding.UTF8.GetBytes(content), MediaTypeNames.Text.Plain, fileName);
         });
 
         apiGroup.MapPost("/coach-checkins/{uploadId:guid}/speaker-overrides", async (Guid uploadId, CoachSpeakerOverrideRequest request, AgentService agentService) =>

@@ -1,0 +1,131 @@
+<MudPaper Class="pa-3 coach-admin-queue" Elevation="1">
+    <MudStack Spacing="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h6">Uploads</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="OnRefresh" Disabled="@IsLoading">Refresh</MudButton>
+        </MudStack>
+
+        <MudTextField T="string"
+                      Value="@searchText"
+                      ValueChanged="HandleSearchChanged"
+                      Placeholder="Filter by file, profile, or status"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Immediate="true" />
+
+        <MudTabs Rounded="true" Elevation="0" PanelClass="pt-2" ActivePanelIndex="@activeTab" ActivePanelIndexChanged="HandleTabChanged">
+            <MudTabPanel Text="In Progress" />
+            <MudTabPanel Text="Needs Action" />
+            <MudTabPanel Text="Completed" />
+            <MudTabPanel Text="All" />
+        </MudTabs>
+
+        @if (IsLoading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            <MudText Typo="Typo.body2">Loading coach check-in requests...</MudText>
+        }
+        else if (FilteredItems.Count is 0)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">No uploads match this filter.</MudAlert>
+        }
+        else
+        {
+            <div class="coach-admin-queue__list" role="listbox" aria-label="Coach check-in uploads">
+                @foreach (var item in FilteredItems)
+                {
+                    var isSelected = item.UploadId == SelectedUploadId;
+                    <button type="button"
+                            class="coach-admin-queue__item @(isSelected ? "coach-admin-queue__item--active" : string.Empty)"
+                            @onclick="() => OnSelectUpload.InvokeAsync(item.UploadId)">
+                        <div class="coach-admin-queue__item-head">
+                            <strong>@item.OriginalFileName</strong>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetStatusColor(item.Status)">@item.Status</MudChip>
+                        </div>
+                        <div class="coach-admin-queue__item-meta">
+                            <span>@item.ProfileId</span>
+                            <span>@item.CreatedAtUtc.ToLocalTime().ToString("g")</span>
+                            <span>Utterances: @item.UtteranceCount</span>
+                            <span>Chunks: @item.ChunkCount</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(item.Error))
+                        {
+                            <div class="coach-admin-queue__error">@item.Error</div>
+                        }
+                    </button>
+                }
+            </div>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    private const int InProgressTab = 0;
+    private const int NeedsActionTab = 1;
+    private const int CompletedTab = 2;
+    private const int AllTab = 3;
+
+    private int activeTab;
+    private string searchText = string.Empty;
+
+    [Parameter] public required List<CoachCheckinAdminItemResponse> Items { get; set; }
+    [Parameter] public required bool IsLoading { get; set; }
+    [Parameter] public required Guid? SelectedUploadId { get; set; }
+    [Parameter] public required EventCallback<Guid> OnSelectUpload { get; set; }
+    [Parameter] public required EventCallback OnRefresh { get; set; }
+
+    private List<CoachCheckinAdminItemResponse> FilteredItems => Items
+        .Where(IsInSelectedTab)
+        .Where(MatchesSearch)
+        .OrderByDescending(item => item.UpdatedAtUtc)
+        .ThenByDescending(item => item.CreatedAtUtc)
+        .ToList();
+
+    private Task HandleTabChanged(int index)
+    {
+        activeTab = index;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleSearchChanged(string value)
+    {
+        searchText = value;
+        return Task.CompletedTask;
+    }
+
+    private bool IsInSelectedTab(CoachCheckinAdminItemResponse item) => activeTab switch
+    {
+        InProgressTab => IsInProgress(item.Status),
+        NeedsActionTab => IsNeedsAction(item.Status),
+        CompletedTab => IsCompleted(item.Status),
+        AllTab => true,
+        _ => true
+    };
+
+    private bool MatchesSearch(CoachCheckinAdminItemResponse item)
+    {
+        if (string.IsNullOrWhiteSpace(searchText)) return true;
+
+        return item.OriginalFileName.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+            || item.ProfileId.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+            || item.Status.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+            || item.UploadId.ToString().Contains(searchText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCompleted(string status) =>
+        string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsNeedsAction(string status) =>
+        string.Equals(status, "AwaitingSpeakerOverride", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsInProgress(string status) => !IsCompleted(status) && !IsNeedsAction(status);
+
+    private static Color GetStatusColor(string status)
+    {
+        if (IsCompleted(status)) return Color.Success;
+        if (string.Equals(status, "AwaitingSpeakerOverride", StringComparison.OrdinalIgnoreCase)) return Color.Warning;
+        if (string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase)) return Color.Error;
+        return Color.Info;
+    }
+}
