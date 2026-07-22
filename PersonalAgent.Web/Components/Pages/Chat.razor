@@ -1,10 +1,8 @@
 @page "/"
-@using static Microsoft.AspNetCore.Components.Web.RenderMode
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @using Microsoft.AspNetCore.WebUtilities
 @using System.Security.Claims
 @implements IDisposable
-@rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ProtectedSessionStorage SessionStorage
 @inject PersonalAgentClient ApiClient
