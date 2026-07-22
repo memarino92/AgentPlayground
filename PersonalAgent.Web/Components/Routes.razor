@@ -1,7 +1,16 @@
 @using System.Reflection
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="typeof(Layout)" />
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="typeof(Layout)">
+            <NotAuthorized>
+                <LayoutView Layout="typeof(Layout)">
+                    <div class="login-prompt">
+                        <h2>Please log in to continue</h2>
+                        <p>Use your GitHub account to access PersonalAgent.</p>
+                    </div>
+                </LayoutView>
+            </NotAuthorized>
+        </AuthorizeRouteView>
     </Found>
     <NotFound>
         <PageTitle>Not Found</PageTitle>
