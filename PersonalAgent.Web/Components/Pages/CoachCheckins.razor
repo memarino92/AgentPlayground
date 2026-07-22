@@ -80,7 +80,7 @@
     private CoachCheckinStatusResponse? latestStatus;
     private string? summaryMarkdown;
 
-    private bool IsUploadLocked => isUploading || isPolling || hasUploadSubmitted;
+private bool IsUploadLocked => isUploading || isPolling;
 
     protected override async Task OnInitializedAsync() => profileId = await ResolveProfileIdAsync();
 
@@ -194,8 +194,8 @@
 
     private string GetUploadButtonText()
     {
-        if (isUploading) return "Uploading...";
         if (isPolling) return "Processing...";
+        if (isUploading) return "Uploading...";
         if (hasUploadSubmitted) return "Working...";
         return "Upload call";
     }
