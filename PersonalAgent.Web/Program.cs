@@ -12,6 +12,7 @@ builder.Services.AddPersonalAgentWebMessaging(builder.Configuration);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddMudServices();
 
 var app = builder.Build();
