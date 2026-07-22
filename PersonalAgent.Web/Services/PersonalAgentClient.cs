@@ -124,6 +124,19 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<CoachCheckinTranscriptResponse>(content, JsonOptions);
     }
 
+    public async Task<TranscriptDownloadResponse> DownloadCoachCheckinTranscriptAsync(Guid uploadId)
+    {
+        var response = await httpClient.GetAsync($"/api/coach-checkins/{uploadId}/transcript.txt");
+        if (!response.IsSuccessStatusCode)
+            throw await CreateRequestExceptionAsync("download coach check-in transcript", response);
+
+        var fileName = response.Content.Headers.ContentDisposition?.FileNameStar
+            ?? response.Content.Headers.ContentDisposition?.FileName
+            ?? $"coach-checkin-{uploadId}.txt";
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        return new TranscriptDownloadResponse(fileName.Trim('"'), bytes);
+    }
+
     public async Task ApplySpeakerOverridesAsync(Guid uploadId, string profileId, IReadOnlyList<SpeakerOverrideItem> overrides)
     {
         var response = await httpClient.PostAsJsonAsync($"/api/coach-checkins/{uploadId}/speaker-overrides", new
@@ -178,3 +191,4 @@ public record CoachCheckinTranscriptUtteranceResponse(int SpeakerLabel, string S
 public record SpeakerOverrideItem(int SpeakerLabel, string Role);
 public record CoachCheckinSpeakerLabelInfoResponse(int SpeakerLabel, string SpeakerRole, int UtteranceCount, List<string> SampleTexts);
 public record CoachCheckinAdminItemResponse(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount, List<CoachCheckinSpeakerLabelInfoResponse> SpeakerLabels);
+public record TranscriptDownloadResponse(string FileName, byte[] Bytes);

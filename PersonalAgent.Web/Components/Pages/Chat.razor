@@ -10,10 +10,11 @@
 @inject PersonalAgentClient ApiClient
 @inject TestEventPublisher TestEventPublisher
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JsRuntime
 
 <PageTitle>PersonalAgent - Chat</PageTitle>
 
-<div class="chat-page">
+<MudContainer MaxWidth="MaxWidth.False" Class="chat-page">
     <div class="chat-shell">
         @if (isSessionDrawerOpen)
         {
@@ -22,24 +23,44 @@
                               IsBusy="isBusy"
                               HasMoreSessions="hasMoreSessions"
                               SelectedSessionOption="@GetSelectedSessionOption()"
-                              FormatSessionOption="FormatSessionOption"
                               OnSessionSelectionChanged="HandleSessionSelectionChanged"
                               OnLoadMoreSessions="LoadMoreSessionsAsync"
                               OnCloseDrawer="CloseSessionDrawer" />
         }
 
-        <section class="chat-panel">
+        <MudPaper Class="chat-panel" Elevation="1">
+            <MudStack Spacing="2" Class="chat-panel__header">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                    <MudText Typo="Typo.h6">Agent Chat</MudText>
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ToggleSessionDrawer">Sessions</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="PublishTestEvent" Disabled="@isPublishingTestEvent">Test event</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateSession" Disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">New chat</MudButton>
+                    </MudStack>
+                </MudStack>
+
+                @if (!string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@errorMessage</MudAlert>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(testEventStatus))
+                {
+                    <MudAlert Severity="Severity.Success" Dense="true">@testEventStatus</MudAlert>
+                }
+            </MudStack>
+
             @if (sessionId is null)
             {
                 <div class="chat-panel__empty">
-                    <h2>No Session Selected</h2>
-                    <p>Select a prior session or start a new chat.</p>
-                    <button class="btn btn-primary" @onclick="CreateSession" disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">New chat</button>
+                    <MudText Typo="Typo.h6">No Session Selected</MudText>
+                    <MudText Typo="Typo.body2">Select a prior session or start a new chat.</MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateSession" Disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">New chat</MudButton>
                 </div>
             }
             else
             {
-                <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" />
+                <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" ContainerId="@MessageListContainerId" />
 
                 <ChatComposer CurrentMessage="@currentMessage"
                               CurrentMessageChanged="HandleCurrentMessageChanged"
@@ -51,23 +72,22 @@
                               OnSendMessage="SendMessage" />
 
                 <div class="chat-panel__footer">
-                    <span class="chat-panel__session-id">@sessionId</span>
+                    <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small">Session: @sessionId</MudChip>
                     @if (!string.IsNullOrWhiteSpace(activeModelDisplayName))
                     {
-                        <span class="chat-panel__session-id">Model: @activeModelDisplayName</span>
+                        <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small">Model: @activeModelDisplayName</MudChip>
                     }
-                    <button class="btn btn-secondary" @onclick="ResetSelectionAsync" disabled="@isBusy">Clear</button>
-                    <button class="btn btn-secondary" @onclick="PublishTestEvent" disabled="@isPublishingTestEvent">Test event</button>
-                    <button class="btn btn-primary" @onclick="CreateSession" disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">New chat</button>
+                    <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="ResetSelectionAsync" Disabled="@isBusy">Clear</MudButton>
                 </div>
             }
-        </section>
+        </MudPaper>
     </div>
-</div>
+</MudContainer>
 
 @code {
     private const string SessionStorageKey = "personal-agent-session-id";
     private const string ProfileStorageKey = "personal-agent-profile-id";
+    private const string MessageListContainerId = "chat-message-list";
     private const int SessionPageSize = 20;
     private string? sessionId;
     private string? profileId;
@@ -90,18 +110,25 @@
     private DateTimeOffset? nextBeforeActivityAt;
     private Guid? nextBeforeSessionId;
     private bool hasMoreSessions;
+    private bool shouldScrollToBottom;
 
     private bool isBusy => isLoadingHistory || isSendingMessage || isCreatingSession;
     private string? activeModelDisplayName => availableModels.FirstOrDefault(model => model.Id == activeModelId)?.DisplayName ?? activeModelId;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || hasAttemptedRestore) return;
+        if (firstRender && !hasAttemptedRestore)
+        {
+            hasAttemptedRestore = true;
+            NavigationManager.LocationChanged += HandleLocationChanged;
+            await InitializeAsync();
+            StateHasChanged();
+            return;
+        }
 
-        hasAttemptedRestore = true;
-        NavigationManager.LocationChanged += HandleLocationChanged;
-        await InitializeAsync();
-        StateHasChanged();
+        if (!shouldScrollToBottom) return;
+        shouldScrollToBottom = false;
+        await JsRuntime.InvokeVoidAsync("scrollToChatBottom", MessageListContainerId);
     }
 
     private async Task InitializeAsync()
@@ -206,10 +233,12 @@
         if (string.IsNullOrWhiteSpace(currentMessage) || sessionId == null || profileId == null) return;
 
         errorMessage = null;
+        var isNearBottom = await JsRuntime.InvokeAsync<bool>("isNearChatBottom", MessageListContainerId, 90);
         var userMessage = currentMessage;
         currentMessage = string.Empty;
         
         messages.Add(new ConversationMessage("user", userMessage));
+        shouldScrollToBottom = true;
         
         isSendingMessage = true;
         try
@@ -219,6 +248,7 @@
             {
                 messages.Add(new ConversationMessage("assistant", response.Response));
                 UpdateSessionSummary(sessionId, userMessage, DateTimeOffset.UtcNow);
+                shouldScrollToBottom = isNearBottom;
             }
         }
         catch (Exception ex)
@@ -256,6 +286,7 @@
         if (knownMessages is not null)
         {
             messages = [.. knownMessages];
+            shouldScrollToBottom = true;
             return;
         }
 
@@ -295,6 +326,7 @@
             activeModelId = history.ModelId;
             selectedModelId = history.ModelId;
             messages = [.. history.Messages];
+            shouldScrollToBottom = true;
         }
         catch (PersonalAgentApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -315,7 +347,7 @@
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter" && !isBusy && !string.IsNullOrWhiteSpace(currentMessage))
+        if (e.Key == "Enter" && !e.ShiftKey && !isBusy && !string.IsNullOrWhiteSpace(currentMessage))
         {
             await SendMessage();
         }
@@ -334,6 +366,8 @@
     }
 
     private void CloseSessionDrawer() => isSessionDrawerOpen = false;
+
+    private void ToggleSessionDrawer() => isSessionDrawerOpen = !isSessionDrawerOpen;
 
     private async void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
@@ -438,8 +472,6 @@
     }
 
     private string GetSelectedSessionOption() => sessionId ?? string.Empty;
-
-    private static string FormatSessionOption(SessionListItem session) => $"{session.Snippet} ({FormatTimestamp(session.LastActivityAt)})";
 
     private static string CreateSnippet(string message)
     {
