@@ -41,17 +41,19 @@
         </div>
     </header>
     <main class="main">
-        <AuthorizeView>
-            <Authorized>
-                @Body
-            </Authorized>
-            <NotAuthorized>
-                <div class="login-prompt">
-                    <h2>Please log in to continue</h2>
-                    <p>Use your GitHub account to access PersonalAgent.</p>
-                </div>
-            </NotAuthorized>
-        </AuthorizeView>
+        <CascadingAuthenticationState>
+            <AuthorizeView>
+                <Authorized>
+                    @Body
+                </Authorized>
+                <NotAuthorized>
+                    <div class="login-prompt">
+                        <h2>Please log in to continue</h2>
+                        <p>Use your GitHub account to access PersonalAgent.</p>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </CascadingAuthenticationState>
     </main>
 </div>
 
