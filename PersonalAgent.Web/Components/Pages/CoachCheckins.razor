@@ -16,16 +16,16 @@
                 <InputFile OnChange="HandleFileSelected" accept=".m4a,audio/mp4" />
             </div>
 
-            @if (!string.IsNullOrWhiteSpace(selectedFileName) && selectedBytes is not null)
+            @if (selectedFile is not null)
             {
-                <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined">@selectedFileName (@FormatKb(selectedBytes.Length) KB)</MudChip>
+                <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined">@selectedFileName (@FormatKb(selectedFile.Size) KB)</MudChip>
             }
 
             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
                            OnClick="UploadAsync"
-                           Disabled="@(selectedBytes is null || IsUploadLocked)">
+                           Disabled="@(selectedFile is null || IsUploadLocked)">
                     @GetUploadButtonText()
                 </MudButton>
 
@@ -68,7 +68,7 @@
 
 @code {
     private string? profileId;
-    private byte[]? selectedBytes;
+    private IBrowserFile? selectedFile;
     private string selectedFileName = "call.m4a";
     private string selectedContentType = "audio/m4a";
     private bool isUploading;
@@ -78,29 +78,25 @@
     private CoachCheckinStatusResponse? latestStatus;
     private string? summaryMarkdown;
 
-private bool IsUploadLocked => isUploading || isPolling;
+    private bool IsUploadLocked => isUploading || isPolling;
 
     protected override async Task OnInitializedAsync() => profileId = await ResolveProfileIdAsync();
 
     private async Task HandleFileSelected(InputFileChangeEventArgs args)
     {
         if (args.FileCount == 0) return;
-        var file = args.File;
-        selectedFileName = file.Name;
-        selectedContentType = string.IsNullOrWhiteSpace(file.ContentType) ? "audio/m4a" : file.ContentType;
-        await using var stream = file.OpenReadStream(25 * 1024 * 1024);
-        await using var memory = new MemoryStream();
-        await stream.CopyToAsync(memory);
-        selectedBytes = memory.ToArray();
+        selectedFile = args.File;
+        selectedFileName = selectedFile.Name;
+        selectedContentType = string.IsNullOrWhiteSpace(selectedFile.ContentType) ? "audio/m4a" : selectedFile.ContentType;
         hasUploadSubmitted = false;
         latestStatus = null;
         summaryMarkdown = null;
-        statusMessage = $"Selected {file.Name} ({selectedBytes.Length / 1024} KB)";
+        statusMessage = $"Selected {selectedFile.Name} ({FormatKb(selectedFile.Size)} KB)";
     }
 
     private async Task UploadAsync()
     {
-        if (selectedBytes is null || string.IsNullOrWhiteSpace(profileId)) return;
+        if (selectedFile is null || string.IsNullOrWhiteSpace(profileId)) return;
 
         isUploading = true;
         hasUploadSubmitted = true;
@@ -110,7 +106,10 @@ private bool IsUploadLocked => isUploading || isPolling;
 
         try
         {
-            var upload = await ApiClient.UploadCoachCheckinAsync(profileId, selectedFileName, selectedContentType, selectedBytes);
+            await using var stream = selectedFile.OpenReadStream(Math.Max(selectedFile.Size, 1));
+            await using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            var upload = await ApiClient.UploadCoachCheckinAsync(profileId, selectedFileName, selectedContentType, memory.ToArray());
             if (upload is null)
             {
                 statusMessage = "Upload failed.";
@@ -206,5 +205,5 @@ private bool IsUploadLocked => isUploading || isPolling;
         return Severity.Info;
     }
 
-    private static int FormatKb(int sizeBytes) => sizeBytes / 1024;
+    private static long FormatKb(long sizeBytes) => sizeBytes / 1024;
 }
