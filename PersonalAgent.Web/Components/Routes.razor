@@ -1,7 +1,8 @@
 @using System.Reflection
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="typeof(Layout)" />
+        <RouteView RouteData="@routeData" DefaultLayout="typeof(Layout)" @rendermode="InteractiveServer" />
     </Found>
     <NotFound>
         <PageTitle>Not Found</PageTitle>
