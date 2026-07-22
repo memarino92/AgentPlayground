@@ -307,11 +307,11 @@ internal static class PersonalAgentEndpoints
                 return Results.NotFound(new { error = "Coach check-in transcript not found" });
 
             var content = string.IsNullOrWhiteSpace(transcript.TranscriptText)
-                ? string.Join(Environment.NewLine, transcript.Utterances.Select(utterance => $"[{TimeSpan.FromMilliseconds(utterance.StartMs):mm\\:ss}-{TimeSpan.FromMilliseconds(utterance.EndMs):mm\\:ss}] {utterance.SpeakerRole}: {utterance.Text}"))
+                ? string.Join(Environment.NewLine, transcript.Utterances.Select(utterance => $"[{TimeSpan.FromMilliseconds(utterance.StartMs):hh\\:mm\\:ss}-{TimeSpan.FromMilliseconds(utterance.EndMs):hh\\:mm\\:ss}] {utterance.SpeakerRole}: {utterance.Text}"))
                 : transcript.TranscriptText;
 
             var fileName = $"coach-checkin-{uploadId}.txt";
-            return Results.File(Encoding.UTF8.GetBytes(content), MediaTypeNames.Text.Plain, fileName);
+            return Results.File(Encoding.UTF8.GetBytes(content), "text/plain; charset=utf-8", fileName);
         });
 
         apiGroup.MapPost("/coach-checkins/{uploadId:guid}/speaker-overrides", async (Guid uploadId, CoachSpeakerOverrideRequest request, AgentService agentService) =>
