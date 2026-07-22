@@ -14,10 +14,10 @@
                       Immediate="true" />
 
         <MudTabs Rounded="true" Elevation="0" PanelClass="pt-2" ActivePanelIndex="@activeTab" ActivePanelIndexChanged="HandleTabChanged">
+            <MudTabPanel Text="All" />
             <MudTabPanel Text="In Progress" />
             <MudTabPanel Text="Needs Action" />
             <MudTabPanel Text="Completed" />
-            <MudTabPanel Text="All" />
         </MudTabs>
 
         @if (IsLoading)
@@ -60,12 +60,12 @@
 </MudPaper>
 
 @code {
-    private const int InProgressTab = 0;
-    private const int NeedsActionTab = 1;
-    private const int CompletedTab = 2;
-    private const int AllTab = 3;
+    private const int AllTab = 0;
+    private const int InProgressTab = 1;
+    private const int NeedsActionTab = 2;
+    private const int CompletedTab = 3;
 
-    private int activeTab;
+    private int activeTab = AllTab;
     private string searchText = string.Empty;
 
     [Parameter] public required List<CoachCheckinAdminItemResponse> Items { get; set; }
