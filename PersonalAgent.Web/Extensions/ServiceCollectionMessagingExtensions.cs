@@ -28,8 +28,6 @@ internal static class ServiceCollectionMessagingExtensions
 
         services.AddScoped<ProtectedSessionStorage>();
         services.AddMassTransit(x => x.ConfigureSharedPostgresTransport());
-        services.AddScoped<TestEventPublisher>();
-
         return services;
     }
 }

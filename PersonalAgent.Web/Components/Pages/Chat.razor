@@ -6,14 +6,13 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ProtectedSessionStorage SessionStorage
 @inject PersonalAgentClient ApiClient
-@inject TestEventPublisher TestEventPublisher
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JsRuntime
 
 <PageTitle>PersonalAgent - Chat</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.False" Class="chat-page">
-    <div class="chat-shell">
+    <div class="chat-shell @(isSessionDrawerOpen ? "chat-shell--drawer-open" : "chat-shell--drawer-closed")">
         @if (isSessionDrawerOpen)
         {
             <ChatSessionPanel Sessions="sessions"
@@ -29,10 +28,9 @@
         <MudPaper Class="chat-panel" Elevation="1">
             <MudStack Spacing="2" Class="chat-panel__header">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
-                    <MudText Typo="Typo.h6">Agent Chat</MudText>
-                    <MudStack Row="true" Spacing="1">
-                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ToggleSessionDrawer">Sessions</MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="PublishTestEvent" Disabled="@isPublishingTestEvent">Test event</MudButton>
+                    <MudText Typo="Typo.h6">Agent chat</MudText>
+                    <MudStack Row="true" Spacing="1" Class="chat-panel__actions">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ToggleSessionDrawer">@(isSessionDrawerOpen ? "Hide sessions" : "Show sessions")</MudButton>
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateSession" Disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">New chat</MudButton>
                     </MudStack>
                 </MudStack>
@@ -42,10 +40,6 @@
                     <MudAlert Severity="Severity.Error" Dense="true">@errorMessage</MudAlert>
                 }
 
-                @if (!string.IsNullOrWhiteSpace(testEventStatus))
-                {
-                    <MudAlert Severity="Severity.Success" Dense="true">@testEventStatus</MudAlert>
-                }
             </MudStack>
 
             @if (sessionId is null)
@@ -99,11 +93,8 @@
     private bool isSendingMessage;
     private bool isCreatingSession;
     private bool isLoadingSessions;
-    private bool isPublishingTestEvent;
-    private string? testEventStatus;
     private string? errorMessage;
     private bool hasAttemptedRestore;
-    private bool hasHandledQueryActions;
     private bool isSessionDrawerOpen;
     private DateTimeOffset? nextBeforeActivityAt;
     private Guid? nextBeforeSessionId;
@@ -153,41 +144,13 @@
         }
     }
 
-    private async Task PublishTestEvent()
-    {
-        isPublishingTestEvent = true;
-        testEventStatus = null;
-
-        try
-        {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var requestedBy = authState.User.FindFirst("urn:github:login")?.Value
-                ?? authState.User.FindFirst(ClaimTypes.Name)?.Value
-                ?? "anonymous";
-
-            var correlationId = await TestEventPublisher.PublishAsync(requestedBy);
-            testEventStatus = $"Published test event {correlationId}";
-        }
-        finally
-        {
-            isPublishingTestEvent = false;
-        }
-    }
-
-    private async Task HandleQueryActionsAsync()
+    private Task HandleQueryActionsAsync()
     {
         var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
         var query = QueryHelpers.ParseQuery(uri.Query);
         if (query.TryGetValue("drawer", out var drawerValue) && drawerValue.Count > 0 && drawerValue[0] == "1")
             isSessionDrawerOpen = true;
-
-        if (query.TryGetValue("testEvent", out var value) && value.Count > 0 && value[0] == "1")
-        {
-            if (hasHandledQueryActions) return;
-
-            hasHandledQueryActions = true;
-            await PublishTestEvent();
-        }
+        return Task.CompletedTask;
     }
 
     private async Task CreateSession()
@@ -231,14 +194,13 @@
         if (string.IsNullOrWhiteSpace(currentMessage) || sessionId == null || profileId == null) return;
 
         errorMessage = null;
-        var isNearBottom = await JsRuntime.InvokeAsync<bool>("isNearChatBottom", MessageListContainerId, 90);
         var userMessage = currentMessage;
         currentMessage = string.Empty;
-        
         messages.Add(new ConversationMessage("user", userMessage));
-shouldScrollToBottom = isNearBottom;
-        
+        shouldScrollToBottom = true;
         isSendingMessage = true;
+        await InvokeAsync(StateHasChanged);
+
         try
         {
             var response = await ApiClient.SendMessageAsync(sessionId, profileId, userMessage);
@@ -246,7 +208,7 @@ shouldScrollToBottom = isNearBottom;
             {
                 messages.Add(new ConversationMessage("assistant", response.Response));
                 UpdateSessionSummary(sessionId, userMessage, DateTimeOffset.UtcNow);
-                shouldScrollToBottom = isNearBottom;
+                shouldScrollToBottom = true;
             }
         }
         catch (Exception ex)
@@ -369,7 +331,6 @@ shouldScrollToBottom = isNearBottom;
 
     private async void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
-        hasHandledQueryActions = false;
         await InvokeAsync(async () =>
         {
             await HandleQueryActionsAsync();
