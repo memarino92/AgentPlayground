@@ -1,4 +1,6 @@
 @page "/coach-checkins/admin"
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PersonalAgentClient ApiClient
 @inject ILogger<CoachCheckinsAdmin> Logger
 @inject IJSRuntime JsRuntime
@@ -6,6 +8,23 @@
 <PageTitle>PersonalAgent - Coach Check-ins Admin</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.False" Class="coach-admin-page">
+    <MudPaper Class="pa-3 mb-3 coach-admin-upload" Elevation="1">
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" AlignItems="AlignItems.Center">
+            <InputFile OnChange="HandleFileSelected" accept=".m4a,audio/mp4" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="UploadAsync" Disabled="@(selectedFile is null || isUploading)">
+                @(isUploading ? "Uploading..." : "Upload recording")
+            </MudButton>
+            @if (selectedFile is not null)
+            {
+                <MudText Typo="Typo.caption">@selectedFile.Name</MudText>
+            }
+        </MudStack>
+        @if (!string.IsNullOrWhiteSpace(uploadStatus))
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">@uploadStatus</MudAlert>
+        }
+    </MudPaper>
+
     <MudGrid>
         <MudItem xs="12" md="4" lg="4">
             <UploadQueuePanel Items="items"
@@ -39,7 +58,10 @@
     private bool isLoading;
     private bool isApplyingOverride;
     private bool isDownloadingTranscript;
+    private bool isUploading;
     private string? errorMessage;
+    private string? uploadStatus;
+    private IBrowserFile? selectedFile;
     private List<CoachCheckinAdminItemResponse> items = [];
     private readonly Dictionary<Guid, Dictionary<int, string>> overrideSelections = [];
     private Guid? selectedUploadId;
@@ -204,6 +226,48 @@
         finally
         {
             isDownloadingTranscript = false;
+        }
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs args)
+    {
+        if (args.FileCount > 0)
+            selectedFile = args.File;
+    }
+
+    private async Task UploadAsync()
+    {
+        if (selectedFile is null) return;
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var profileId = authState.User.FindFirst("urn:github:login")?.Value
+            ?? authState.User.FindFirst(ClaimTypes.Name)?.Value;
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            uploadStatus = "Unable to determine the signed-in profile.";
+            return;
+        }
+
+        isUploading = true;
+        uploadStatus = null;
+        try
+        {
+            await using var stream = selectedFile.OpenReadStream(Math.Max(selectedFile.Size, 1));
+            await using var content = new MemoryStream();
+            await stream.CopyToAsync(content);
+            var upload = await ApiClient.UploadCoachCheckinAsync(profileId, selectedFile.Name, selectedFile.ContentType, content.ToArray());
+            uploadStatus = upload is null ? "Upload failed." : $"Uploaded {selectedFile.Name}. It will appear in the queue as processing progresses.";
+            selectedFile = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to upload coach check-in recording");
+            uploadStatus = ex.Message;
+        }
+        finally
+        {
+            isUploading = false;
         }
     }
 

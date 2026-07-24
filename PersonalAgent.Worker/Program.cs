@@ -36,7 +36,7 @@ builder.Services.AddHttpClient("AssemblyAi", (sp, client) =>
 });
 builder.Services.AddSingleton<IAgentTaskExecutionService, AgentTaskExecutionService>();
 builder.Services.AddSingleton<ITranscriptionService, AssemblyAiTranscriptionService>();
-builder.Services.AddSingleton<CoachTranscriptProcessingService>();
+builder.Services.AddScoped<CoachTranscriptProcessingService>();
 builder.Services.AddHostedService<CoachCallCleanupService>();
 
 var workJournalConfigValidation = WorkerExtensions.ValidateWorkJournalSyncConfiguration(builder.Configuration);
