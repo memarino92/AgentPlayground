@@ -1,6 +1,7 @@
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using MudBlazor.Services;
 using PersonalAgent.Web.Components.Pages;
 using PersonalAgent.Web.Services;
 using Xunit;
@@ -9,6 +10,8 @@ namespace PersonalAgent.Web.Tests.Components;
 
 public class ChatSessionPanelTests : TestContext
 {
+    public ChatSessionPanelTests() => Services.AddMudServices();
+
     [Fact]
     public void SessionPanel_ShowsEmptyState_WhenNoSessionsExist()
     {
@@ -18,7 +21,6 @@ public class ChatSessionPanelTests : TestContext
             .Add(component => component.IsBusy, false)
             .Add(component => component.HasMoreSessions, false)
             .Add(component => component.SelectedSessionOption, string.Empty)
-            .Add(component => component.FormatSessionOption, new Func<SessionListItem, string>(session => session.Snippet))
             .Add(component => component.OnSessionSelectionChanged, EventCallback.Factory.Create<string?>(this, _ => Task.CompletedTask))
             .Add(component => component.OnLoadMoreSessions, EventCallback.Factory.Create(this, () => Task.CompletedTask))
             .Add(component => component.OnCloseDrawer, EventCallback.Factory.Create(this, () => Task.CompletedTask)));
@@ -35,13 +37,12 @@ public class ChatSessionPanelTests : TestContext
             .Add(component => component.IsBusy, false)
             .Add(component => component.HasMoreSessions, false)
             .Add(component => component.SelectedSessionOption, string.Empty)
-            .Add(component => component.FormatSessionOption, new Func<SessionListItem, string>(session => session.Snippet))
             .Add(component => component.OnSessionSelectionChanged, EventCallback.Factory.Create<string?>(this, _ => Task.CompletedTask))
             .Add(component => component.OnLoadMoreSessions, EventCallback.Factory.Create(this, () => Task.CompletedTask))
             .Add(component => component.OnCloseDrawer, EventCallback.Factory.Create(this, () => Task.CompletedTask)));
 
-        cut.Find("ul.session-panel__list").Should().NotBeNull();
-        cut.Find("button.session-panel__button").TextContent.Should().Contain("First chat");
+        cut.Find(".session-panel__list").Should().NotBeNull();
+        cut.Find("button.session-panel__entry").TextContent.Should().Contain("First chat");
     }
 
     [Fact]
@@ -55,12 +56,11 @@ public class ChatSessionPanelTests : TestContext
             .Add(component => component.IsBusy, false)
             .Add(component => component.HasMoreSessions, true)
             .Add(component => component.SelectedSessionOption, string.Empty)
-            .Add(component => component.FormatSessionOption, new Func<SessionListItem, string>(session => session.Snippet))
             .Add(component => component.OnSessionSelectionChanged, EventCallback.Factory.Create<string?>(this, value => selectedSessionId = value))
             .Add(component => component.OnLoadMoreSessions, EventCallback.Factory.Create(this, () => Task.CompletedTask))
             .Add(component => component.OnCloseDrawer, EventCallback.Factory.Create(this, () => Task.CompletedTask)));
 
-        cut.Find("button.session-panel__button").Click();
+        cut.Find("button.session-panel__entry").Click();
         selectedSessionId.Should().Be("session-1");
         cut.Markup.Should().Contain("Load more");
     }
@@ -76,12 +76,11 @@ public class ChatSessionPanelTests : TestContext
             .Add(component => component.IsBusy, false)
             .Add(component => component.HasMoreSessions, false)
             .Add(component => component.SelectedSessionOption, string.Empty)
-            .Add(component => component.FormatSessionOption, new Func<SessionListItem, string>(session => session.Snippet))
             .Add(component => component.OnSessionSelectionChanged, EventCallback.Factory.Create<string?>(this, _ => Task.CompletedTask))
             .Add(component => component.OnLoadMoreSessions, EventCallback.Factory.Create(this, () => Task.CompletedTask))
             .Add(component => component.OnCloseDrawer, EventCallback.Factory.Create(this, () => closed = true)));
 
-        cut.Find("button.session-panel__close").Click();
+        cut.FindAll("button").Single(button => button.TextContent == "Close").Click();
         closed.Should().BeTrue();
     }
 }

@@ -2,6 +2,7 @@ using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using MudBlazor.Services;
 using PersonalAgent.Web.Components.Pages;
 using PersonalAgent.Web.Services;
 using Xunit;
@@ -10,6 +11,8 @@ namespace PersonalAgent.Web.Tests.Components;
 
 public class ChatComposerTests : TestContext
 {
+    public ChatComposerTests() => Services.AddMudServices();
+
     [Fact]
     public void Composer_RendersMessageInputModelDropdownAndSendButton()
     {
@@ -23,8 +26,8 @@ public class ChatComposerTests : TestContext
             .Add(component => component.OnKeyDown, EventCallback.Factory.Create<KeyboardEventArgs>(this, _ => Task.CompletedTask))
             .Add(component => component.OnSendMessage, EventCallback.Factory.Create(this, () => Task.CompletedTask)));
 
-        cut.Find("input.composer__input").Should().NotBeNull();
-        cut.Find("input.composer__input").GetAttribute("value").Should().BeEmpty();
+        cut.Find("textarea.composer__input").Should().NotBeNull();
+        cut.Find("textarea.composer__input").TextContent.Should().BeEmpty();
         cut.Find("select.composer__model").Should().NotBeNull();
         cut.Find("select.composer__model").GetAttribute("value").Should().Be("gpt-4o-mini");
         cut.Find("button").TextContent.Should().Be("Send");
@@ -51,8 +54,9 @@ public class ChatComposerTests : TestContext
             .Add(component => component.OnKeyDown, EventCallback.Factory.Create<KeyboardEventArgs>(this, _ => Task.CompletedTask))
             .Add(component => component.OnSendMessage, EventCallback.Factory.Create(this, () => sendCount++)));
 
-        cut.Find("input").Input("hello");
+        cut.Find("textarea").Input("hello");
         message.Should().Be("hello");
+        cut.SetParametersAndRender(parameters => parameters.Add(component => component.CurrentMessage, message));
 
         cut.Find("select").Change("gpt-4o");
         modelId.Should().Be("gpt-4o");
@@ -61,6 +65,6 @@ public class ChatComposerTests : TestContext
         sendCount.Should().Be(1);
 
         cut.SetParametersAndRender(parameters => parameters.Add(component => component.CurrentMessage, string.Empty));
-        cut.Find("input").GetAttribute("value").Should().BeEmpty();
+        cut.Find("textarea").TextContent.Should().BeEmpty();
     }
 }

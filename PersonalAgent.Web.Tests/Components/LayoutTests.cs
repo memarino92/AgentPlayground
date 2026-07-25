@@ -4,7 +4,9 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor.Services;
 using PersonalAgent.Web.Components;
+using PersonalAgent.Web.Extensions;
 using System.Security.Claims;
 using Xunit;
 
@@ -12,10 +14,21 @@ namespace PersonalAgent.Web.Tests.Components;
 
 public class LayoutTests : TestContext
 {
+    public LayoutTests()
+    {
+        Services.AddMudServices();
+        Services.AddAuthorizationCore(options =>
+        {
+            options.AddPolicy(ServiceCollectionAuthenticationExtensions.OwnerPolicy, policy => policy.RequireRole("Owner"));
+            options.AddPolicy(ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy, policy => policy.RequireRole("Owner", "Coach"));
+        });
+        JSInterop.Setup<int>("mudpopoverHelper.countProviders").SetResult(1);
+        JSInterop.SetupVoid("watchDarkThemeMedia", _ => true);
+    }
+
     [Fact]
     public void Layout_ShowsLoginPrompt_WhenUserIsAnonymous()
     {
-        Services.AddAuthorizationCore();
         Services.AddCascadingAuthenticationState();
         var authContext = this.AddTestAuthorization();
         authContext.SetNotAuthorized();
@@ -29,18 +42,18 @@ public class LayoutTests : TestContext
             })));
 
         cut.Markup.Should().Contain("Please log in to continue");
-        cut.Markup.Should().Contain("Send test event");
-        cut.Markup.Should().Contain("Sessions");
+        cut.Markup.Should().Contain("Log in with GitHub");
+        cut.Markup.Should().Contain("Log in with Google");
     }
 
     [Fact]
     public void Layout_ShowsBody_WhenUserIsAuthorized()
     {
-        Services.AddAuthorizationCore();
         Services.AddCascadingAuthenticationState();
         var authContext = this.AddTestAuthorization();
         authContext.SetAuthorized("michael");
         authContext.SetClaims(new Claim(ClaimTypes.Name, "Michael"));
+        authContext.SetRoles("Owner");
 
         var cut = RenderComponent<Layout>(parameters => parameters
             .Add(layout => layout.Body, (RenderFragment)(builder =>
@@ -54,7 +67,5 @@ public class LayoutTests : TestContext
         cut.Find("#authorized-body").TextContent.Should().Be("body");
         cut.Markup.Should().Contain("michael");
         cut.Markup.Should().Contain("Log out");
-        cut.Markup.Should().Contain("Send test event");
-        cut.Markup.Should().Contain("Sessions");
     }
 }

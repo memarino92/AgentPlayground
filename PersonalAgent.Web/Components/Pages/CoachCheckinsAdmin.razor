@@ -1,4 +1,5 @@
 @page "/coach-checkins/admin"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
 @using System.Security.Claims
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PersonalAgentClient ApiClient
