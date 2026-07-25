@@ -4,10 +4,19 @@
         <AuthorizeRouteView RouteData="@routeData" DefaultLayout="typeof(Layout)">
             <NotAuthorized>
                 <LayoutView Layout="typeof(Layout)">
-                    <div class="login-prompt">
-                        <h2>Please log in to continue</h2>
-                        <p>Use your GitHub account to access PersonalAgent.</p>
-                    </div>
+                    @if (context.User.Identity?.IsAuthenticated == true)
+                    {
+                        <div class="login-prompt">
+                            <h2>You do not have access to this page</h2>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="login-prompt">
+                            <h2>Please log in to continue</h2>
+                            <p>Use GitHub or Google to access PersonalAgent.</p>
+                        </div>
+                    }
                 </LayoutView>
             </NotAuthorized>
         </AuthorizeRouteView>

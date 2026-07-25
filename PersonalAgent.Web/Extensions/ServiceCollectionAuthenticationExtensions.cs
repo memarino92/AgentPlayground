@@ -1,5 +1,6 @@
 using AgentPlayground.Contracts.Configuration;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using System.Security.Claims;
 using System.Text.Json;
@@ -8,6 +9,9 @@ namespace PersonalAgent.Web.Extensions;
 
 internal static class ServiceCollectionAuthenticationExtensions
 {
+    public const string OwnerPolicy = "Owner";
+    public const string CoachTranscriptPolicy = "CoachTranscriptReader";
+
     public static IServiceCollection AddGitHubAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddAuthentication(options =>
@@ -82,6 +86,7 @@ internal static class ServiceCollectionAuthenticationExtensions
                         context.Identity?.AddClaim(new Claim(ClaimTypes.Name, name.GetString()!));
 
                     context.Identity?.AddClaim(new Claim("urn:github:login", githubLogin));
+                    context.Identity?.AddClaim(new Claim(ClaimTypes.Role, "Owner"));
 
                     if (root.TryGetProperty("email", out var email) && !string.IsNullOrEmpty(email.GetString()))
                         context.Identity?.AddClaim(new Claim(ClaimTypes.Email, email.GetString()!));
@@ -92,6 +97,38 @@ internal static class ServiceCollectionAuthenticationExtensions
                     if (root.TryGetProperty("avatar_url", out var avatar))
                         context.Identity?.AddClaim(new Claim("urn:github:avatar", avatar.GetString()!));
                 }
+            };
+        })
+        .AddGoogle("Google", options =>
+        {
+            var authConfig = configuration.GetSection("Authentication:Schemes:Google");
+            var clientId = ConfigurationValueResolver.ResolveString(configuration, "GOOGLE_CLIENT_ID", "Authentication:Schemes:Google:ClientId", authConfig["ClientId"]);
+            var clientSecret = ConfigurationValueResolver.ResolveString(configuration, "GOOGLE_CLIENT_SECRET", "Authentication:Schemes:Google:ClientSecret", authConfig["ClientSecret"]);
+            var callbackPath = ConfigurationValueResolver.ResolveString(configuration, "GOOGLE_CALLBACK_PATH", "Authentication:Schemes:Google:CallbackPath", authConfig["CallbackPath"])
+                ?? "/signin-google";
+            var allowedEmailsString = ConfigurationValueResolver.ResolveString(configuration, "GOOGLE_ALLOWED_EMAILS", "Authentication:Schemes:Google:AllowedEmails", authConfig["AllowedEmails"])
+                ?? string.Empty;
+
+            options.ClientId = clientId ?? throw new InvalidOperationException("Missing GOOGLE_CLIENT_ID or Authentication:Schemes:Google:ClientId");
+            options.ClientSecret = clientSecret ?? throw new InvalidOperationException("Missing GOOGLE_CLIENT_SECRET or Authentication:Schemes:Google:ClientSecret");
+            options.CallbackPath = callbackPath;
+            options.SaveTokens = true;
+            options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+            options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+
+            var allowedEmails = allowedEmailsString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            options.Events.OnCreatingTicket = context =>
+            {
+                var email = context.Principal?.FindFirstValue(ClaimTypes.Email);
+                var emailVerified = context.User.TryGetProperty("verified_email", out var verifiedEmailElement) && verifiedEmailElement.GetBoolean();
+                if (string.IsNullOrWhiteSpace(email) || !emailVerified || !allowedEmails.Contains(email))
+                {
+                    context.Fail("This Google account is not authorized to access coach transcripts.");
+                    return Task.CompletedTask;
+                }
+
+                context.Identity?.AddClaim(new Claim(ClaimTypes.Role, "Coach"));
+                return Task.CompletedTask;
             };
         });
 
@@ -106,7 +143,11 @@ internal static class ServiceCollectionAuthenticationExtensions
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         });
 
-        services.AddAuthorization();
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(OwnerPolicy, policy => policy.RequireRole("Owner"));
+            options.AddPolicy(CoachTranscriptPolicy, policy => policy.RequireRole("Owner", "Coach"));
+        });
         return services;
     }
 }

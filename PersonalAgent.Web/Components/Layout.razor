@@ -13,8 +13,17 @@
             <details class="navbar-menu">
                 <summary aria-label="Open menu">☰</summary>
                 <div class="navbar-menu__items">
-                    <a href="/?drawer=1" class="navbar-menu__link">Sessions</a>
-                    <a href="/coach-checkins/admin" class="navbar-menu__link">Coach check-ins</a>
+                    <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.OwnerPolicy">
+                        <Authorized>
+                            <a href="/?drawer=1" class="navbar-menu__link">Sessions</a>
+                            <a href="/coach-checkins/admin" class="navbar-menu__link">Coach check-ins</a>
+                        </Authorized>
+                    </AuthorizeView>
+                    <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy">
+                        <Authorized>
+                            <a href="/coach-transcripts" class="navbar-menu__link">Transcripts</a>
+                        </Authorized>
+                    </AuthorizeView>
                 </div>
             </details>
 
@@ -33,7 +42,8 @@
                     </form>
                 </Authorized>
                 <NotAuthorized>
-                    <a href="login" class="btn btn-login">Log in</a>
+                    <a href="login" class="btn btn-login">Log in with GitHub</a>
+                    <a href="login?provider=Google" class="btn btn-login">Log in with Google</a>
                 </NotAuthorized>
             </AuthorizeView>
         </div>
@@ -46,7 +56,8 @@
             <NotAuthorized>
                 <div class="login-prompt">
                     <h2>Please log in to continue</h2>
-                    <p>Use your GitHub account to access PersonalAgent.</p>
+                    <p>Use GitHub or Google to access PersonalAgent.</p>
+                    <p><a href="login">Log in with GitHub</a> or <a href="login?provider=Google">Log in with Google</a>.</p>
                 </div>
             </NotAuthorized>
         </AuthorizeView>

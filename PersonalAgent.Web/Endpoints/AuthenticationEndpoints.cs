@@ -7,8 +7,10 @@ public static class AuthenticationEndpoints
 {
     public static void MapAuthenticationEndpoints(this WebApplication app)
     {
-        app.MapGet("/login", (string? returnUrl) =>
-            Results.Challenge(
+        app.MapGet("/login", (string? returnUrl, string? provider) =>
+        {
+            var scheme = string.Equals(provider, "Google", StringComparison.OrdinalIgnoreCase) ? "Google" : "GitHub";
+            return Results.Challenge(
                 new AuthenticationProperties
                 {
                     RedirectUri = returnUrl ?? "/",
@@ -16,9 +18,9 @@ public static class AuthenticationEndpoints
                     AllowRefresh = true,
                     ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
                 },
-                ["GitHub"]
-            )
-        ).WithName("Login");
+                [scheme]
+            );
+        }).WithName("Login");
 
         app.MapPost("/logout", async (HttpContext context) =>
         {
@@ -29,5 +31,7 @@ public static class AuthenticationEndpoints
 
         app.MapGet("/signin-github", () => Results.Redirect("/"))
             .WithName("SignInCallback");
+        app.MapGet("/signin-google", () => Results.Redirect("/"))
+            .WithName("GoogleSignInCallback");
     }
 }

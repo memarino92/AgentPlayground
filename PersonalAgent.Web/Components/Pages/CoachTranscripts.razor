@@ -1,0 +1,143 @@
+@page "/coach-transcripts"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy)]
+@inject PersonalAgentClient ApiClient
+@inject IJSRuntime JsRuntime
+
+<PageTitle>PersonalAgent - Transcripts</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="coach-admin-page">
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="4">
+            <UploadQueuePanel Items="items"
+                              IsLoading="isLoading"
+                              SelectedUploadId="selectedUploadId"
+                              OnSelectUpload="SelectUploadAsync"
+                              OnRefresh="LoadAsync" />
+        </MudItem>
+        <MudItem xs="12" md="8" lg="8">
+            @if (SelectedItem is null)
+            {
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Transcript detail</MudText>
+                    <MudText Typo="Typo.body2" Class="mt-2">Select a check-in to view its transcript.</MudText>
+                </MudPaper>
+            }
+            else
+            {
+                <MudPaper Class="pa-4 coach-admin-detail" Elevation="1">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.h6">@SelectedItem.OriginalFileName</MudText>
+                        <MudText Typo="Typo.caption">Updated @SelectedItem.UpdatedAtUtc.ToLocalTime().ToString("g")</MudText>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@isDownloading" OnClick="DownloadTranscriptAsync">
+                            @(isDownloading ? "Preparing download..." : "Download .txt")
+                        </MudButton>
+                        @if (!string.IsNullOrWhiteSpace(transcriptError))
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true">@transcriptError</MudAlert>
+                        }
+                        else if (isLoadingTranscript)
+                        {
+                            <MudProgressCircular Indeterminate="true" />
+                        }
+                        else if (transcript is null)
+                        {
+                            <MudText Typo="Typo.body2">Transcript is not available yet.</MudText>
+                        }
+                        else
+                        {
+                            <div class="coach-admin-detail__timeline">
+                                @foreach (var utterance in transcript.Utterances)
+                                {
+                                    <div class="coach-admin-detail__utterance" data-role="@utterance.SpeakerRole">
+                                        <div class="coach-admin-detail__utterance-meta">
+                                            <span class="coach-admin-detail__role">@utterance.SpeakerRole</span>
+                                            <span>@FormatTimestampRange(utterance.StartMs, utterance.EndMs)</span>
+                                        </div>
+                                        <div class="coach-admin-detail__utterance-text">@utterance.Text</div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private List<CoachCheckinAdminItemResponse> items = [];
+    private CoachCheckinTranscriptResponse? transcript;
+    private Guid? selectedUploadId;
+    private bool isLoading;
+    private bool isLoadingTranscript;
+    private bool isDownloading;
+    private string? transcriptError;
+
+    private CoachCheckinAdminItemResponse? SelectedItem => selectedUploadId is null ? null : items.FirstOrDefault(item => item.UploadId == selectedUploadId);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        try
+        {
+            items = await ApiClient.GetCoachCheckinAdminItemsAsync();
+            if (selectedUploadId is null || items.All(item => item.UploadId != selectedUploadId))
+                selectedUploadId = items.FirstOrDefault()?.UploadId;
+            if (selectedUploadId is not null) await LoadTranscriptAsync(selectedUploadId.Value);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SelectUploadAsync(Guid uploadId)
+    {
+        selectedUploadId = uploadId;
+        await LoadTranscriptAsync(uploadId);
+    }
+
+    private async Task LoadTranscriptAsync(Guid uploadId)
+    {
+        isLoadingTranscript = true;
+        transcript = null;
+        transcriptError = null;
+        try
+        {
+            transcript = await ApiClient.GetCoachCheckinTranscriptAsync(uploadId);
+        }
+        catch (Exception ex)
+        {
+            transcriptError = ex.Message;
+        }
+        finally
+        {
+            isLoadingTranscript = false;
+        }
+    }
+
+    private async Task DownloadTranscriptAsync()
+    {
+        if (selectedUploadId is null) return;
+
+        isDownloading = true;
+        try
+        {
+            var download = await ApiClient.DownloadCoachCheckinTranscriptAsync(selectedUploadId.Value);
+            await JsRuntime.InvokeVoidAsync("downloadTextFileFromBase64", download.FileName, Convert.ToBase64String(download.Bytes), "text/plain;charset=utf-8");
+        }
+        catch (Exception ex)
+        {
+            transcriptError = ex.Message;
+        }
+        finally
+        {
+            isDownloading = false;
+        }
+    }
+
+    private static string FormatTimestampRange(int startMs, int endMs) => $"{TimeSpan.FromMilliseconds(startMs):mm\\:ss} - {TimeSpan.FromMilliseconds(endMs):mm\\:ss}";
+}
