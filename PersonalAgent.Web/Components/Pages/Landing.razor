@@ -21,7 +21,9 @@
             ? "/login"
             : authState.User.IsInRole("Owner")
                 ? "/chat"
-                : "/coach-transcripts";
+                : authState.User.IsInRole("Coach")
+                    ? "/coach-transcripts"
+                    : "/access-denied";
 
         NavigationManager.NavigateTo(destination, forceLoad: true);
     }
