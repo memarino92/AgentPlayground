@@ -113,6 +113,7 @@ internal static class ServiceCollectionAuthenticationExtensions
             options.ClientSecret = clientSecret ?? throw new InvalidOperationException("Missing GOOGLE_CLIENT_SECRET or Authentication:Schemes:Google:ClientSecret");
             options.CallbackPath = callbackPath;
             options.SaveTokens = true;
+            options.Scope.Add("email");
             options.CorrelationCookie.SameSite = SameSiteMode.Lax;
             options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
 
@@ -129,6 +130,7 @@ internal static class ServiceCollectionAuthenticationExtensions
 
                 context.Identity?.AddClaim(new Claim(ClaimTypes.Email, email));
                 context.Identity?.AddClaim(new Claim(ClaimTypes.Role, "Coach"));
+                context.Identity?.AddClaim(new Claim("urn:personal-agent:access", "coach"));
                 return Task.CompletedTask;
             };
         });
