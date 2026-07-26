@@ -27,7 +27,7 @@ public class LayoutTests : TestContext
     }
 
     [Fact]
-    public void Layout_ShowsLoginPrompt_WhenUserIsAnonymous()
+    public void Layout_ShowsBody_WhenUserIsAnonymous()
     {
         Services.AddCascadingAuthenticationState();
         var authContext = this.AddTestAuthorization();
@@ -41,9 +41,7 @@ public class LayoutTests : TestContext
                 builder.CloseElement();
             })));
 
-        cut.Markup.Should().Contain("Please log in to continue");
-        cut.Markup.Should().Contain("Log in with GitHub");
-        cut.Markup.Should().Contain("Log in with Google");
+        cut.Markup.Should().Contain("body");
     }
 
     [Fact]

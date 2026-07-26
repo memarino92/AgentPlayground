@@ -1,0 +1,28 @@
+@page "/"
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>PersonalAgent</PageTitle>
+
+<div class="login-prompt">
+    <MudProgressCircular Indeterminate="true" />
+</div>
+
+@code {
+    private bool hasRedirected;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || hasRedirected) return;
+
+        hasRedirected = true;
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var destination = authState.User.Identity?.IsAuthenticated != true
+            ? "/login"
+            : authState.User.IsInRole("Owner")
+                ? "/chat"
+                : "/coach-transcripts";
+
+        NavigationManager.NavigateTo(destination, forceLoad: true);
+    }
+}
