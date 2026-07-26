@@ -119,7 +119,7 @@ internal static class ServiceCollectionAuthenticationExtensions
             var allowedEmails = allowedEmailsString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
             options.Events.OnCreatingTicket = context =>
             {
-                var email = context.Principal?.FindFirstValue(ClaimTypes.Email);
+                var email = context.User.TryGetProperty("email", out var emailElement) ? emailElement.GetString() : null;
                 var emailVerified = context.User.TryGetProperty("verified_email", out var verifiedEmailElement) && verifiedEmailElement.GetBoolean();
                 if (string.IsNullOrWhiteSpace(email) || !emailVerified || !allowedEmails.Contains(email))
                 {
@@ -127,6 +127,7 @@ internal static class ServiceCollectionAuthenticationExtensions
                     return Task.CompletedTask;
                 }
 
+                context.Identity?.AddClaim(new Claim(ClaimTypes.Email, email));
                 context.Identity?.AddClaim(new Claim(ClaimTypes.Role, "Coach"));
                 return Task.CompletedTask;
             };
@@ -141,6 +142,8 @@ internal static class ServiceCollectionAuthenticationExtensions
             options.Cookie.IsEssential = true;
             options.Cookie.SameSite = SameSiteMode.Lax;
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.LoginPath = "/login";
+            options.AccessDeniedPath = "/access-denied";
         });
 
         services.AddAuthorization(options =>
