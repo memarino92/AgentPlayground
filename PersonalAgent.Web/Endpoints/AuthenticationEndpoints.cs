@@ -25,7 +25,7 @@ public static class AuthenticationEndpoints
         app.MapPost("/logout", async (HttpContext context) =>
         {
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return Results.Redirect("/");
+            return Results.Redirect("/signed-out");
         }).WithName("Logout");
 
         app.MapGet("/signin-github", () => Results.Redirect("/"))
