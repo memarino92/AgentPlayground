@@ -15,7 +15,7 @@
                 <div class="navbar-menu__items">
                     <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.OwnerPolicy">
                         <Authorized>
-                            <a href="/?drawer=1" class="navbar-menu__link">Sessions</a>
+                            <a href="/chat?drawer=1" class="navbar-menu__link">Sessions</a>
                             <a href="/coach-checkins/admin" class="navbar-menu__link">Coach check-ins</a>
                         </Authorized>
                     </AuthorizeView>
@@ -49,18 +49,7 @@
         </div>
     </header>
     <main class="main">
-        <AuthorizeView>
-            <Authorized>
-                @Body
-            </Authorized>
-            <NotAuthorized>
-                <div class="login-prompt">
-                    <h2>Please log in to continue</h2>
-                    <p>Use GitHub or Google to access PersonalAgent.</p>
-                    <p><a href="login">Log in with GitHub</a> or <a href="login?provider=Google">Log in with Google</a>.</p>
-                </div>
-            </NotAuthorized>
-        </AuthorizeView>
+        @Body
     </main>
 </div>
 
