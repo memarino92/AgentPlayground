@@ -121,7 +121,7 @@ internal static class ServiceCollectionAuthenticationExtensions
             options.Events.OnCreatingTicket = context =>
             {
                 var email = context.User.TryGetProperty("email", out var emailElement) ? emailElement.GetString() : null;
-                var emailVerified = context.User.TryGetProperty("verified_email", out var verifiedEmailElement) && verifiedEmailElement.GetBoolean();
+                var emailVerified = IsVerifiedEmail(context.User);
                 if (string.IsNullOrWhiteSpace(email) || !emailVerified || !allowedEmails.Contains(email))
                 {
                     context.Fail("This Google account is not authorized to access coach transcripts.");
@@ -155,4 +155,11 @@ internal static class ServiceCollectionAuthenticationExtensions
         });
         return services;
     }
+
+    private static bool IsVerifiedEmail(JsonElement user) =>
+        IsTrue(user, "email_verified") || IsTrue(user, "verified_email");
+
+    private static bool IsTrue(JsonElement user, string propertyName) =>
+        user.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind is JsonValueKind.True;
 }
