@@ -2,6 +2,8 @@
 @attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy)]
 @inject PersonalAgentClient ApiClient
 @inject IJSRuntime JsRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@using System.Security.Claims
 
 <PageTitle>PersonalAgent - Transcripts</PageTitle>
 
@@ -73,17 +75,33 @@
     private bool isLoadingTranscript;
     private bool isDownloading;
     private string? transcriptError;
+    private string? profileId;
+    private bool isOwner;
 
     private CoachCheckinAdminItemResponse? SelectedItem => selectedUploadId is null ? null : items.FirstOrDefault(item => item.UploadId == selectedUploadId);
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        isOwner = authState.User.IsInRole("Owner");
+        if (!isOwner)
+        {
+            var subject = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+            if (!string.IsNullOrWhiteSpace(subject) && !string.IsNullOrWhiteSpace(email))
+                profileId = (await ApiClient.GetAssignedProfilesAsync($"google:{subject}", email)).FirstOrDefault();
+        }
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
         isLoading = true;
         try
         {
-            items = await ApiClient.GetCoachCheckinAdminItemsAsync();
+            items = isOwner
+                ? await ApiClient.GetCoachCheckinAdminItemsAsync()
+                : string.IsNullOrWhiteSpace(profileId) ? [] : await ApiClient.GetCoachCheckinItemsAsync(profileId);
             if (selectedUploadId is null || items.All(item => item.UploadId != selectedUploadId))
                 selectedUploadId = items.FirstOrDefault()?.UploadId;
             if (selectedUploadId is not null) await LoadTranscriptAsync(selectedUploadId.Value);
@@ -107,7 +125,7 @@
         transcriptError = null;
         try
         {
-            transcript = await ApiClient.GetCoachCheckinTranscriptAsync(uploadId);
+            transcript = await ApiClient.GetCoachCheckinTranscriptAsync(uploadId, isOwner ? null : profileId);
         }
         catch (Exception ex)
         {
@@ -126,7 +144,7 @@
         isDownloading = true;
         try
         {
-            var download = await ApiClient.DownloadCoachCheckinTranscriptAsync(selectedUploadId.Value);
+            var download = await ApiClient.DownloadCoachCheckinTranscriptAsync(selectedUploadId.Value, isOwner ? null : profileId);
             await JsRuntime.InvokeVoidAsync("downloadTextFileFromBase64", download.FileName, Convert.ToBase64String(download.Bytes), "text/plain;charset=utf-8");
         }
         catch (Exception ex)

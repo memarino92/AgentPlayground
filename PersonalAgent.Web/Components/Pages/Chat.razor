@@ -1,5 +1,5 @@
 @page "/chat"
-@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy)]
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @using Microsoft.AspNetCore.WebUtilities
 @using System.Security.Claims
@@ -84,6 +84,8 @@
     private const int SessionPageSize = 20;
     private string? sessionId;
     private string? profileId;
+    private string? actorId;
+    private string role = "Owner";
     private string? selectedModelId;
     private string? activeModelId;
     private List<SessionListItem> sessions = new();
@@ -126,7 +128,7 @@
         try
         {
             await HandleQueryActionsAsync();
-            var resolvedProfileId = await ResolveProfileIdAsync();
+            var resolvedProfileId = await ResolveAccessAsync();
             if (string.IsNullOrWhiteSpace(resolvedProfileId))
             {
                 await ClearStoredProfileIdAsync();
@@ -160,16 +162,18 @@
         errorMessage = null;
         try
         {
-            var resolvedProfileId = await ResolveProfileIdAsync();
+            var resolvedProfileId = await ResolveAccessAsync();
             if (string.IsNullOrWhiteSpace(resolvedProfileId))
             {
-                errorMessage = "Unable to determine your GitHub profile id for chat memory.";
+                errorMessage = role == "Coach"
+                    ? "No athlete profile is assigned to this coach account."
+                    : "Unable to determine your profile id for chat memory.";
                 return;
             }
 
             profileId = resolvedProfileId;
 
-            var response = await ApiClient.CreateSessionAsync(resolvedProfileId, selectedModelId);
+            var response = await ApiClient.CreateSessionAsync(resolvedProfileId, selectedModelId, actorId, role);
             if (response != null)
             {
                 activeModelId = response.ModelId;
@@ -204,7 +208,7 @@
 
         try
         {
-            var response = await ApiClient.SendMessageAsync(sessionId, profileId, userMessage);
+            var response = await ApiClient.SendMessageAsync(sessionId, profileId, userMessage, actorId, role);
             if (response != null)
             {
                 messages.Add(new ConversationMessage("assistant", response.Response));
@@ -273,7 +277,7 @@
         isLoadingHistory = true;
         try
         {
-            var history = await ApiClient.GetHistoryAsync(selectedSessionId, profileId);
+            var history = await ApiClient.GetHistoryAsync(selectedSessionId, profileId, actorId, role);
             if (history is null)
             {
                 if (sessionId == selectedSessionId)
@@ -381,7 +385,7 @@
 
         try
         {
-            var page = await ApiClient.GetSessionsAsync(profileId, append ? nextBeforeActivityAt : null, append ? nextBeforeSessionId : null, SessionPageSize);
+            var page = await ApiClient.GetSessionsAsync(profileId, append ? nextBeforeActivityAt : null, append ? nextBeforeSessionId : null, SessionPageSize, actorId, role);
             if (page is null) return;
 
             if (!append)
@@ -462,9 +466,26 @@
         await SessionStorage.DeleteAsync(ProfileStorageKey);
     }
 
-    private async Task<string?> ResolveProfileIdAsync()
+    private async Task<string?> ResolveAccessAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        return authState.User.FindFirst("urn:github:login")?.Value;
+        var user = authState.User;
+        if (user.IsInRole("Owner"))
+        {
+            role = "Owner";
+            profileId = user.FindFirst("urn:github:login")?.Value;
+            actorId = profileId;
+            return profileId;
+        }
+
+        if (!user.IsInRole("Coach")) return null;
+        role = "Coach";
+        var subject = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var email = user.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email)) return null;
+        actorId = $"google:{subject}";
+        var assignments = await ApiClient.GetAssignedProfilesAsync(actorId, email);
+        profileId = assignments.FirstOrDefault();
+        return profileId;
     }
 }

@@ -170,6 +170,9 @@ internal class CoachCheckinService(
     }
 
     public async Task<IReadOnlyList<CoachCheckinAdminItem>> GetRecentUploadsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        => await GetRecentUploadsAsync(null, limit, cancellationToken);
+
+    public async Task<IReadOnlyList<CoachCheckinAdminItem>> GetRecentUploadsAsync(string? profileId, int limit = 100, CancellationToken cancellationToken = default)
     {
         var normalizedLimit = Math.Clamp(limit, 1, 500);
         await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -199,9 +202,11 @@ internal class CoachCheckinService(
                 FROM {CoachCallChunksTable}
                 GROUP BY session_id
             ) AS chunk_counts ON chunk_counts.session_id = u.session_id
+            WHERE (@profileId IS NULL OR u.profile_id = @profileId)
             ORDER BY u.created_at DESC
             LIMIT @limit;
             """;
+        command.Parameters.Add(new NpgsqlParameter("profileId", NpgsqlDbType.Text) { Value = (object?)profileId ?? DBNull.Value });
         command.Parameters.AddWithValue("limit", normalizedLimit);
 
         var rawRows = new List<(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, CoachCallUploadStatus Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount)>();
@@ -297,6 +302,9 @@ internal class CoachCheckinService(
     }
 
     public async Task<CoachCheckinTranscriptResponse?> GetTranscriptAsync(Guid uploadId, CancellationToken cancellationToken = default)
+        => await GetTranscriptAsync(uploadId, null, cancellationToken);
+
+    public async Task<CoachCheckinTranscriptResponse?> GetTranscriptAsync(Guid uploadId, string? profileIdFilter, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
 
@@ -317,9 +325,11 @@ internal class CoachCheckinService(
                        s.updated_at
                 FROM {CoachCallUploadsTable} u
                 JOIN {CoachCallSessionsTable} s ON s.upload_id = u.upload_id
-                WHERE u.upload_id = @uploadId;
+                WHERE u.upload_id = @uploadId
+                  AND (@profileId IS NULL OR u.profile_id = @profileId);
                 """;
             command.Parameters.AddWithValue("uploadId", uploadId);
+            command.Parameters.Add(new NpgsqlParameter("profileId", NpgsqlDbType.Text) { Value = (object?)profileIdFilter ?? DBNull.Value });
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken)) return null;

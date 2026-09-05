@@ -27,9 +27,16 @@ internal static class ServiceCollectionApiClientExtensions
                     $"{PersonalAgentApiOptions.SectionName}:InternalApiKey",
                     opts.InternalApiKey)
                     ?? opts.InternalApiKey;
+                opts.ActorSigningKey = ConfigurationValueResolver.ResolveString(
+                    configuration,
+                    "WEB_ACTOR_SIGNING_KEY",
+                    $"{PersonalAgentApiOptions.SectionName}:ActorSigningKey",
+                    opts.ActorSigningKey)
+                    ?? opts.ActorSigningKey;
             })
             .Validate(opts => Uri.TryCreate(opts.BaseUrl, UriKind.Absolute, out _), $"{PersonalAgentApiOptions.SectionName}:BaseUrl must be an absolute URI")
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.InternalApiKey), $"{PersonalAgentApiOptions.SectionName}:InternalApiKey is required")
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.ActorSigningKey), $"{PersonalAgentApiOptions.SectionName}:ActorSigningKey is required")
             .ValidateOnStart();
 
         services.AddHttpClient<PersonalAgentClient>((serviceProvider, client) =>

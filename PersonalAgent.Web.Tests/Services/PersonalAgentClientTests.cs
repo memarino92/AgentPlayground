@@ -1,4 +1,7 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Options;
+using PersonalAgent.Web.Configuration;
 using PersonalAgent.Web.Services;
 using System.Net;
 using System.Net.Http;
@@ -20,7 +23,7 @@ public class PersonalAgentClientTests
             }));
 
         using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
-        var client = new PersonalAgentClient(httpClient);
+        var client = CreateClient(httpClient);
 
         var action = async () => await client.GetModelsAsync();
 
@@ -40,7 +43,7 @@ public class PersonalAgentClientTests
             }));
 
         using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
-        var client = new PersonalAgentClient(httpClient);
+        var client = CreateClient(httpClient);
 
         var result = await client.GetModelsAsync();
 
@@ -53,5 +56,16 @@ public class PersonalAgentClientTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             handler(request);
+    }
+
+    private static PersonalAgentClient CreateClient(HttpClient httpClient) => new(
+        httpClient,
+        new TestAuthenticationStateProvider(),
+        Options.Create(new PersonalAgentApiOptions { ActorSigningKey = "test-signing-key" }));
+
+    private sealed class TestAuthenticationStateProvider : AuthenticationStateProvider
+    {
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
+            Task.FromResult(new AuthenticationState(new System.Security.Claims.ClaimsPrincipal()));
     }
 }

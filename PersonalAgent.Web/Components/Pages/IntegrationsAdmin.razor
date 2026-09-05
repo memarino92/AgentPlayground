@@ -1,0 +1,184 @@
+@page "/admin/integrations"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject PersonalAgentClient ApiClient
+
+<PageTitle>PersonalAgent - Integration access</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
+    <MudStack Spacing="3">
+        <div>
+            <MudText Typo="Typo.h4">Integration access</MudText>
+            <MudText Typo="Typo.body2">Control which agent tools each defined role can invoke. Enforcement occurs again when a tool executes.</MudText>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <MudAlert Severity="Severity.Error">@errorMessage</MudAlert>
+        }
+        @if (!string.IsNullOrWhiteSpace(successMessage))
+        {
+            <MudAlert Severity="Severity.Success">@successMessage</MudAlert>
+        }
+
+        @if (isLoading)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else
+        {
+            @foreach (var integration in tools.GroupBy(tool => tool.Integration).OrderBy(group => group.Key))
+            {
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">@integration.Key</MudText>
+                    <MudTable Items="integration" Dense="true" Hover="true" Class="mt-2">
+                        <HeaderContent>
+                            <MudTh>Tool</MudTh>
+                            <MudTh>Availability</MudTh>
+                            <MudTh>Owner</MudTh>
+                            <MudTh>Coach</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Tool">
+                                <MudText Typo="Typo.body1">@context.DisplayName</MudText>
+                                <MudText Typo="Typo.caption">@context.Description</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Availability">@(context.IsAvailable ? "Available" : "Unavailable")</MudTd>
+                            <MudTd DataLabel="Owner">
+                                <MudSwitch T="bool" Value="@GetPermission("Owner", context.Key)" ValueChanged="@(value => SetPermission("Owner", context.Key, value))" Disabled="@(!context.IsAvailable)" />
+                            </MudTd>
+                            <MudTd DataLabel="Coach">
+                                <MudSwitch T="bool" Value="@GetPermission("Coach", context.Key)" ValueChanged="@(value => SetPermission("Coach", context.Key, value))" Disabled="@(!context.IsAvailable)" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudPaper>
+            }
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDirty || isSaving)" OnClick="SaveToolAccessAsync">
+                @(isSaving ? "Saving..." : "Save tool access")
+            </MudButton>
+
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6">Coach assignments</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">Assign a verified Google email to your athlete profile. Revocation applies to chat and transcript data.</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.End" Spacing="2">
+                    <MudTextField @bind-Value="coachEmail" Label="Coach email" InputType="InputType.Email" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(isSavingAssignment || string.IsNullOrWhiteSpace(coachEmail))" OnClick="AddCoachAsync">Assign coach</MudButton>
+                </MudStack>
+                <MudList T="CoachProfileAssignmentResponse" Class="mt-3">
+                    @foreach (var assignment in assignments)
+                    {
+                        <MudListItem T="CoachProfileAssignmentResponse" Value="assignment">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width: 100%">
+                                <span>@assignment.CoachEmail (@(assignment.IsActive ? "active" : "revoked"))</span>
+                                <MudButton Variant="Variant.Text" Color="@(assignment.IsActive ? Color.Error : Color.Primary)" OnClick="@(() => SetAssignmentAsync(assignment, !assignment.IsActive))">
+                                    @(assignment.IsActive ? "Revoke" : "Restore")
+                                </MudButton>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private List<AgentToolDescriptorResponse> tools = [];
+    private List<CoachProfileAssignmentResponse> assignments = [];
+    private readonly Dictionary<(string Role, string ToolKey), bool> permissions = [];
+    private string? ownerProfileId;
+    private string coachEmail = string.Empty;
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool isSavingAssignment;
+    private bool isDirty;
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            ownerProfileId = authState.User.FindFirst("urn:github:login")?.Value;
+            if (string.IsNullOrWhiteSpace(ownerProfileId)) throw new InvalidOperationException("Owner profile could not be resolved.");
+
+            var catalog = await ApiClient.GetToolAccessAsync();
+            tools = catalog.Tools;
+            foreach (var permission in catalog.Permissions) permissions[(permission.Role, permission.ToolKey)] = permission.IsEnabled;
+            assignments = await ApiClient.GetCoachAssignmentsAsync(ownerProfileId);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private bool GetPermission(string role, string toolKey) => permissions.GetValueOrDefault((role, toolKey));
+
+    private void SetPermission(string role, string toolKey, bool enabled)
+    {
+        permissions[(role, toolKey)] = enabled;
+        isDirty = true;
+        successMessage = null;
+    }
+
+    private async Task SaveToolAccessAsync()
+    {
+        if (ownerProfileId is null) return;
+        isSaving = true;
+        errorMessage = null;
+        try
+        {
+            var updates = permissions.Select(item => new ToolRolePermissionResponse(item.Key.Role, item.Key.ToolKey, item.Value)).ToList();
+            await ApiClient.SaveToolAccessAsync(updates, ownerProfileId);
+            isDirty = false;
+            successMessage = "Tool access updated.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task AddCoachAsync()
+    {
+        if (ownerProfileId is null || string.IsNullOrWhiteSpace(coachEmail)) return;
+        await SaveAssignmentAsync(coachEmail, true);
+        coachEmail = string.Empty;
+    }
+
+    private Task SetAssignmentAsync(CoachProfileAssignmentResponse assignment, bool active) => SaveAssignmentAsync(assignment.CoachEmail, active);
+
+    private async Task SaveAssignmentAsync(string email, bool active)
+    {
+        if (ownerProfileId is null) return;
+        isSavingAssignment = true;
+        errorMessage = null;
+        try
+        {
+            await ApiClient.SaveCoachAssignmentAsync(email, ownerProfileId, active, ownerProfileId);
+            assignments = await ApiClient.GetCoachAssignmentsAsync(ownerProfileId);
+            successMessage = active ? "Coach assigned." : "Coach access revoked.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSavingAssignment = false;
+        }
+    }
+}

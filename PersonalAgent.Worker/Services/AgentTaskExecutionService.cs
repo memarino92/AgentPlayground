@@ -1,10 +1,16 @@
 using AgentPlayground.Contracts.Messaging.Commands;
 using PersonalAgent.Worker.Configuration;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.Extensions.Options;
 
 namespace PersonalAgent.Worker.Services;
 
-internal class AgentTaskExecutionService(IHttpClientFactory httpClientFactory, ILogger<AgentTaskExecutionService> logger) : IAgentTaskExecutionService
+internal class AgentTaskExecutionService(
+    IHttpClientFactory httpClientFactory,
+    IOptions<PersonalAgentApiOptions> options,
+    ILogger<AgentTaskExecutionService> logger) : IAgentTaskExecutionService
 {
     public async Task<AgentTaskExecutionResult> ExecuteAsync(ExecuteAgentTask task, CancellationToken cancellationToken = default)
     {
@@ -13,7 +19,7 @@ internal class AgentTaskExecutionService(IHttpClientFactory httpClientFactory, I
 
         try
         {
-            var sessionResponse = await client.PostAsJsonAsync("/api/sessions", new
+            var sessionResponse = await SendAsOwnerAsync(client, profileId, "/api/sessions", new
             {
                 profileId,
                 modelId = "gpt-4o-mini"
@@ -29,7 +35,7 @@ internal class AgentTaskExecutionService(IHttpClientFactory httpClientFactory, I
             if (sessionPayload?.SessionId is null)
                 return new AgentTaskExecutionResult(false, "Failed to create task session: missing session id.");
 
-            var messageResponse = await client.PostAsJsonAsync($"/api/sessions/{sessionPayload.SessionId}/messages", new
+            var messageResponse = await SendAsOwnerAsync(client, profileId, $"/api/sessions/{sessionPayload.SessionId}/messages", new
             {
                 profileId,
                 message = task.Instruction
@@ -75,4 +81,23 @@ internal class AgentTaskExecutionService(IHttpClientFactory httpClientFactory, I
         string.IsNullOrWhiteSpace(tenantId) || string.Equals(tenantId, "default", StringComparison.OrdinalIgnoreCase)
             ? userId
             : $"{tenantId}:{userId}";
+
+    private async Task<HttpResponseMessage> SendAsOwnerAsync<T>(HttpClient client, string profileId, string uri, T body, CancellationToken cancellationToken)
+    {
+        const string role = "Owner";
+        const string email = "";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var payload = $"{profileId}\n{role}\n{email}\n{timestamp}";
+        var signingKey = options.Value.ActorSigningKey;
+        var signature = Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(signingKey), Encoding.UTF8.GetBytes(payload)));
+        using var request = new HttpRequestMessage(HttpMethod.Post, uri)
+        {
+            Content = JsonContent.Create(body)
+        };
+        request.Headers.Add("X-Agent-Actor", profileId);
+        request.Headers.Add("X-Agent-Role", role);
+        request.Headers.Add("X-Agent-Timestamp", timestamp);
+        request.Headers.Add("X-Agent-Signature", signature);
+        return await client.SendAsync(request, cancellationToken);
+    }
 }
