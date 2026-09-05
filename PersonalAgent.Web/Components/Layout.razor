@@ -13,10 +13,15 @@
             <details class="navbar-menu">
                 <summary aria-label="Open menu">☰</summary>
                 <div class="navbar-menu__items">
-                    <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.OwnerPolicy">
+                    <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy">
                         <Authorized>
                             <a href="/chat?drawer=1" class="navbar-menu__link">Sessions</a>
+                        </Authorized>
+                    </AuthorizeView>
+                    <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.OwnerPolicy">
+                        <Authorized>
                             <a href="/coach-checkins/admin" class="navbar-menu__link">Coach check-ins</a>
+                            <a href="/admin/integrations" class="navbar-menu__link">Integrations</a>
                         </Authorized>
                     </AuthorizeView>
                     <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy">

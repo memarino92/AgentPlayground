@@ -88,7 +88,9 @@ internal static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services.AddOptions<SecurityOptions>()
-            .Configure(opts => CopySecurityOptions(securityOptions, opts));
+            .Configure(opts => CopySecurityOptions(securityOptions, opts))
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.ActorSigningKey), "Security:ActorSigningKey is required")
+            .ValidateOnStart();
         services.AddHostedService<AgentMemorySchemaInitializer>();
         services.AddSingleton<ChatModelCatalog>();
         services.AddSingleton<IAgentSessionStore, PostgresAgentSessionStore>();
@@ -106,6 +108,9 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<TavilyMcpToolProvider>();
         services.AddSingleton<ITavilyMcpToolProvider>(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
         services.AddHostedService(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
+        services.AddSingleton<IToolAccessStore, PostgresToolAccessStore>();
+        services.AddSingleton<ToolAccessService>();
+        services.AddSingleton<ICoachAssignmentStore, PostgresCoachAssignmentStore>();
         services.AddSingleton<AgentChatService>();
         services.AddSingleton<AgentService>();
         services.AddMassTransit(x =>
@@ -193,6 +198,8 @@ internal static class ServiceCollectionExtensions
     {
         var options = new SecurityOptions();
         configuration.GetSection("Security").Bind(options);
+        options.ActorSigningKey = ConfigurationValueResolver.ResolveString(configuration, "WEB_ACTOR_SIGNING_KEY", "Security:ActorSigningKey", options.ActorSigningKey)
+            ?? options.ActorSigningKey;
 
         var envOrigins = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS");
         if (!string.IsNullOrWhiteSpace(envOrigins))
@@ -205,6 +212,7 @@ internal static class ServiceCollectionExtensions
     {
         destination.AllowedOrigins = [.. source.AllowedOrigins];
         destination.InternalApiKey = source.InternalApiKey;
+        destination.ActorSigningKey = source.ActorSigningKey;
         destination.RateLimit = source.RateLimit with { };
     }
 }

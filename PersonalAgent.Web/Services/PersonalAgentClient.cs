@@ -2,10 +2,19 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Options;
+using PersonalAgent.Web.Configuration;
 
 namespace PersonalAgent.Web.Services;
 
-internal class PersonalAgentClient(HttpClient httpClient)
+internal class PersonalAgentClient(
+    HttpClient httpClient,
+    AuthenticationStateProvider authenticationStateProvider,
+    IOptions<PersonalAgentApiOptions> options)
 {
     private const int DefaultPageSize = 20;
 
@@ -15,9 +24,9 @@ internal class PersonalAgentClient(HttpClient httpClient)
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public async Task<SessionResponse?> CreateSessionAsync(string profileId, string? modelId = null)
+    public async Task<SessionResponse?> CreateSessionAsync(string profileId, string? modelId = null, string? actorId = null, string role = "Owner")
     {
-        var response = await httpClient.PostAsJsonAsync("/api/sessions", new { profileId, modelId });
+        var response = await SendJsonAsync(HttpMethod.Post, "/api/sessions", new { profileId, modelId, actorId, role });
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("create session", response);
 
@@ -27,7 +36,7 @@ internal class PersonalAgentClient(HttpClient httpClient)
 
     public async Task<ModelCatalogResponse?> GetModelsAsync()
     {
-        var response = await httpClient.GetAsync("/api/models");
+        var response = await SendAsync(HttpMethod.Get, "/api/models");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load models", response);
 
@@ -35,10 +44,10 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<ModelCatalogResponse>(content, JsonOptions);
     }
 
-    public async Task<MessageResponse?> SendMessageAsync(string sessionId, string profileId, string message)
+    public async Task<MessageResponse?> SendMessageAsync(string sessionId, string profileId, string message, string? actorId = null, string role = "Owner")
     {
-        var request = new { profileId, message };
-        var response = await httpClient.PostAsJsonAsync($"/api/sessions/{sessionId}/messages", request);
+        var request = new { profileId, message, actorId, role };
+        var response = await SendJsonAsync(HttpMethod.Post, $"/api/sessions/{sessionId}/messages", request);
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("send message", response);
 
@@ -46,9 +55,9 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<MessageResponse>(content, JsonOptions);
     }
 
-    public async Task<HistoryResponse?> GetHistoryAsync(string sessionId, string profileId)
+    public async Task<HistoryResponse?> GetHistoryAsync(string sessionId, string profileId, string? actorId = null, string role = "Owner")
     {
-        var response = await httpClient.GetAsync($"/api/sessions/{sessionId}/messages?profileId={Uri.EscapeDataString(profileId)}");
+        var response = await SendAsync(HttpMethod.Get, $"/api/sessions/{sessionId}/messages?profileId={Uri.EscapeDataString(profileId)}&actorId={Uri.EscapeDataString(actorId ?? profileId)}&role={Uri.EscapeDataString(role)}");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load chat history", response);
 
@@ -56,11 +65,13 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<HistoryResponse>(content, JsonOptions);
     }
 
-    public async Task<SessionPageResponse?> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt = null, Guid? beforeSessionId = null, int pageSize = DefaultPageSize)
+    public async Task<SessionPageResponse?> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt = null, Guid? beforeSessionId = null, int pageSize = DefaultPageSize, string? actorId = null, string role = "Owner")
     {
         var query = new List<string>
         {
             $"profileId={Uri.EscapeDataString(profileId)}",
+            $"actorId={Uri.EscapeDataString(actorId ?? profileId)}",
+            $"role={Uri.EscapeDataString(role)}",
             $"pageSize={pageSize}"
         };
 
@@ -70,7 +81,7 @@ internal class PersonalAgentClient(HttpClient httpClient)
         if (beforeSessionId is not null)
             query.Add($"beforeSessionId={beforeSessionId}");
 
-        var response = await httpClient.GetAsync($"/api/sessions?{string.Join("&", query)}");
+        var response = await SendAsync(HttpMethod.Get, $"/api/sessions?{string.Join("&", query)}");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load sessions", response);
 
@@ -86,7 +97,7 @@ internal class PersonalAgentClient(HttpClient httpClient)
         fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(contentType) ? "audio/m4a" : contentType);
         form.Add(fileContent, "file", fileName);
 
-        var response = await httpClient.PostAsync("/api/coach-checkins/uploads", form);
+        var response = await SendAsync(HttpMethod.Post, "/api/coach-checkins/uploads", form);
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("upload coach check-in", response);
 
@@ -96,7 +107,7 @@ internal class PersonalAgentClient(HttpClient httpClient)
 
     public async Task<CoachCheckinStatusResponse?> GetCoachCheckinStatusAsync(Guid uploadId, string profileId)
     {
-        var response = await httpClient.GetAsync($"/api/coach-checkins/{uploadId}?profileId={Uri.EscapeDataString(profileId)}");
+        var response = await SendAsync(HttpMethod.Get, $"/api/coach-checkins/{uploadId}?profileId={Uri.EscapeDataString(profileId)}");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load coach check-in status", response);
 
@@ -106,7 +117,7 @@ internal class PersonalAgentClient(HttpClient httpClient)
 
     public async Task<CoachCheckinSummaryResponse?> GetCoachCheckinSummaryAsync(Guid uploadId, string profileId)
     {
-        var response = await httpClient.GetAsync($"/api/coach-checkins/{uploadId}/summary?profileId={Uri.EscapeDataString(profileId)}");
+        var response = await SendAsync(HttpMethod.Get, $"/api/coach-checkins/{uploadId}/summary?profileId={Uri.EscapeDataString(profileId)}");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load coach check-in summary", response);
 
@@ -114,9 +125,10 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<CoachCheckinSummaryResponse>(content, JsonOptions);
     }
 
-    public async Task<CoachCheckinTranscriptResponse?> GetCoachCheckinTranscriptAsync(Guid uploadId)
+    public async Task<CoachCheckinTranscriptResponse?> GetCoachCheckinTranscriptAsync(Guid uploadId, string? profileId = null)
     {
-        var response = await httpClient.GetAsync($"/api/coach-checkins/{uploadId}/transcript");
+        var query = string.IsNullOrWhiteSpace(profileId) ? string.Empty : $"?profileId={Uri.EscapeDataString(profileId)}";
+        var response = await SendAsync(HttpMethod.Get, $"/api/coach-checkins/{uploadId}/transcript{query}");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load coach check-in transcript", response);
 
@@ -124,9 +136,10 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<CoachCheckinTranscriptResponse>(content, JsonOptions);
     }
 
-    public async Task<TranscriptDownloadResponse> DownloadCoachCheckinTranscriptAsync(Guid uploadId)
+    public async Task<TranscriptDownloadResponse> DownloadCoachCheckinTranscriptAsync(Guid uploadId, string? profileId = null)
     {
-        var response = await httpClient.GetAsync($"/api/coach-checkins/{uploadId}/transcript.txt");
+        var query = string.IsNullOrWhiteSpace(profileId) ? string.Empty : $"?profileId={Uri.EscapeDataString(profileId)}";
+        var response = await SendAsync(HttpMethod.Get, $"/api/coach-checkins/{uploadId}/transcript.txt{query}");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("download coach check-in transcript", response);
 
@@ -139,7 +152,7 @@ internal class PersonalAgentClient(HttpClient httpClient)
 
     public async Task ApplySpeakerOverridesAsync(Guid uploadId, string profileId, IReadOnlyList<SpeakerOverrideItem> overrides)
     {
-        var response = await httpClient.PostAsJsonAsync($"/api/coach-checkins/{uploadId}/speaker-overrides", new
+        var response = await SendJsonAsync(HttpMethod.Post, $"/api/coach-checkins/{uploadId}/speaker-overrides", new
         {
             profileId,
             overrides
@@ -150,7 +163,7 @@ internal class PersonalAgentClient(HttpClient httpClient)
 
     public async Task<List<CoachCheckinAdminItemResponse>> GetCoachCheckinAdminItemsAsync(int limit = 100)
     {
-        var response = await httpClient.GetAsync($"/api/coach-checkins/admin?limit={limit}");
+        var response = await SendAsync(HttpMethod.Get, $"/api/coach-checkins/admin?limit={limit}");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load coach check-in admin items", response);
 
@@ -158,10 +171,85 @@ internal class PersonalAgentClient(HttpClient httpClient)
         return await JsonSerializer.DeserializeAsync<List<CoachCheckinAdminItemResponse>>(content, JsonOptions) ?? [];
     }
 
+    public async Task<List<CoachCheckinAdminItemResponse>> GetCoachCheckinItemsAsync(string profileId, int limit = 100)
+    {
+        var response = await SendAsync(HttpMethod.Get, $"/api/coach-checkins?profileId={Uri.EscapeDataString(profileId)}&limit={limit}");
+        if (!response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("load coach check-ins", response);
+        return await response.Content.ReadFromJsonAsync<List<CoachCheckinAdminItemResponse>>(JsonOptions) ?? [];
+    }
+
+    public async Task<ToolAccessCatalogResponse> GetToolAccessAsync()
+    {
+        var response = await SendAsync(HttpMethod.Get, "/api/admin/tool-access");
+        if (!response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("load tool access", response);
+        return await response.Content.ReadFromJsonAsync<ToolAccessCatalogResponse>(JsonOptions)
+            ?? new ToolAccessCatalogResponse([], []);
+    }
+
+    public async Task SaveToolAccessAsync(IReadOnlyList<ToolRolePermissionResponse> permissions, string updatedBy)
+    {
+        var response = await SendJsonAsync(HttpMethod.Put, "/api/admin/tool-access", new { permissions, updatedBy });
+        if (!response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("save tool access", response);
+    }
+
+    public async Task<IReadOnlyList<string>> GetAssignedProfilesAsync(string actorId, string email)
+    {
+        var response = await SendAsync(HttpMethod.Get, "/api/coach-assignments");
+        if (!response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("load coach assignments", response);
+        return (await response.Content.ReadFromJsonAsync<AssignedProfilesResponse>(JsonOptions))?.Profiles ?? [];
+    }
+
+    public async Task<List<CoachProfileAssignmentResponse>> GetCoachAssignmentsAsync(string profileId)
+    {
+        var response = await SendAsync(HttpMethod.Get, $"/api/admin/coach-assignments?profileId={Uri.EscapeDataString(profileId)}");
+        if (!response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("load coach assignments", response);
+        return await response.Content.ReadFromJsonAsync<List<CoachProfileAssignmentResponse>>(JsonOptions) ?? [];
+    }
+
+    public async Task SaveCoachAssignmentAsync(string coachEmail, string subjectProfileId, bool isActive, string updatedBy)
+    {
+        var response = await SendJsonAsync(HttpMethod.Put, "/api/admin/coach-assignments", new { coachEmail, subjectProfileId, isActive, updatedBy });
+        if (!response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("save coach assignment", response);
+    }
+
     private static async Task<PersonalAgentApiException> CreateRequestExceptionAsync(string operation, HttpResponseMessage response)
     {
         var body = await response.Content.ReadAsStringAsync();
         return new PersonalAgentApiException(operation, response.StatusCode, response.ReasonPhrase, body);
+    }
+
+    private Task<HttpResponseMessage> SendJsonAsync<T>(HttpMethod method, string uri, T value) =>
+        SendAsync(method, uri, JsonContent.Create(value, options: JsonOptions));
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string uri, HttpContent? content = null)
+    {
+        using var request = new HttpRequestMessage(method, uri) { Content = content };
+        var user = (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var role = user.IsInRole("Owner") ? "Owner" : user.IsInRole("Coach") ? "Coach" : null;
+            var actorId = role switch
+            {
+                "Owner" => user.FindFirst("urn:github:login")?.Value,
+                "Coach" => user.FindFirst(ClaimTypes.NameIdentifier)?.Value is { Length: > 0 } id ? $"google:{id}" : null,
+                _ => null
+            };
+            if (!string.IsNullOrWhiteSpace(role) && !string.IsNullOrWhiteSpace(actorId))
+            {
+                var email = user.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
+                var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+                var payload = $"{actorId}\n{role}\n{email}\n{timestamp}";
+                var signingKey = options.Value.ActorSigningKey;
+                if (string.IsNullOrWhiteSpace(signingKey)) throw new InvalidOperationException("PersonalAgentApi:ActorSigningKey is required.");
+                var signature = Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(signingKey), Encoding.UTF8.GetBytes(payload)));
+                request.Headers.Add("X-Agent-Actor", actorId);
+                request.Headers.Add("X-Agent-Role", role);
+                request.Headers.Add("X-Agent-Email", email);
+                request.Headers.Add("X-Agent-Timestamp", timestamp);
+                request.Headers.Add("X-Agent-Signature", signature);
+            }
+        }
+        return await httpClient.SendAsync(request);
     }
 }
 
@@ -192,3 +280,8 @@ public record SpeakerOverrideItem(int SpeakerLabel, string Role);
 public record CoachCheckinSpeakerLabelInfoResponse(int SpeakerLabel, string SpeakerRole, int UtteranceCount, List<string> SampleTexts);
 public record CoachCheckinAdminItemResponse(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount, List<CoachCheckinSpeakerLabelInfoResponse> SpeakerLabels);
 public record TranscriptDownloadResponse(string FileName, byte[] Bytes);
+public record AgentToolDescriptorResponse(string Key, string Name, string DisplayName, string Integration, string Description, bool IsAvailable, bool OwnerDefault, bool CoachDefault);
+public record ToolRolePermissionResponse(string Role, string ToolKey, bool IsEnabled);
+public record ToolAccessCatalogResponse(List<AgentToolDescriptorResponse> Tools, List<ToolRolePermissionResponse> Permissions);
+public record AssignedProfilesResponse(List<string> Profiles);
+public record CoachProfileAssignmentResponse(string CoachEmail, string? CoachActorId, string SubjectProfileId, bool IsActive, DateTimeOffset UpdatedAt);

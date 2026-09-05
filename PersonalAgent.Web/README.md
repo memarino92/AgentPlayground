@@ -23,13 +23,14 @@ The web app talks only to the API; it does not call model providers or worker se
 ```text
 PERSONAL_AGENT_API_BASE_URL  -> PersonalAgentApi:BaseUrl
 INTERNAL_API_KEY             -> PersonalAgentApi:InternalApiKey
+WEB_ACTOR_SIGNING_KEY        -> PersonalAgentApi:ActorSigningKey (Web) and Security:ActorSigningKey (API)
 GITHUB_CLIENT_ID             -> Authentication:Schemes:GitHub:ClientId
 GITHUB_CLIENT_SECRET         -> Authentication:Schemes:GitHub:ClientSecret
 GOOGLE_CLIENT_ID             -> Authentication:Schemes:Google:ClientId
 GOOGLE_CLIENT_SECRET         -> Authentication:Schemes:Google:ClientSecret
 ```
 
-Optional:
+Access allowlists are required and fail closed:
 
 ```text
 GITHUB_ALLOWED_USERS         -> Authentication:Schemes:GitHub:AllowedUsers
@@ -38,13 +39,14 @@ GOOGLE_ALLOWED_EMAILS        -> Authentication:Schemes:Google:AllowedEmails
 GOOGLE_CALLBACK_PATH         -> Authentication:Schemes:Google:CallbackPath
 ```
 
-`PersonalAgentApi:InternalApiKey` is validated on startup in this project, so set it to the same value as API `INTERNAL_API_KEY` when that API protection is enabled.
+`PersonalAgentApi:InternalApiKey` and `PersonalAgentApi:ActorSigningKey` are validated on startup. Set `WEB_ACTOR_SIGNING_KEY` to the same long random value in Web and API; never expose it to browser or mobile clients.
 
 ## Local Run
 
 ```powershell
 dotnet user-secrets set "PersonalAgentApi:BaseUrl" "http://localhost:5100" --project .\PersonalAgent.Web
 dotnet user-secrets set "PersonalAgentApi:InternalApiKey" "your-internal-api-key" --project .\PersonalAgent.Web
+dotnet user-secrets set "PersonalAgentApi:ActorSigningKey" "a-long-random-signing-key" --project .\PersonalAgent.Web
 dotnet user-secrets set "Authentication:Schemes:GitHub:ClientId" "your-github-client-id" --project .\PersonalAgent.Web
 dotnet user-secrets set "Authentication:Schemes:GitHub:ClientSecret" "your-github-client-secret" --project .\PersonalAgent.Web
 dotnet user-secrets set "Authentication:Schemes:Google:ClientId" "your-google-client-id" --project .\PersonalAgent.Web
@@ -59,9 +61,10 @@ Create a Google OAuth 2.0 web client in Google Cloud and register the redirect U
 `https://yourdomain.com/signin-google` (or the local HTTPS URL plus `/signin-google`).
 
 Set `GOOGLE_ALLOWED_EMAILS` to the coach's exact Google account email. Only listed,
-verified Google email addresses receive the `Coach` role. Coaches can view and download
-check-in transcripts at `/coach-transcripts`; they cannot access chat, upload audio, or
-change speaker labels. GitHub sign-ins retain the `Owner` role.
+verified Google email addresses receive the `Coach` role. An owner must then assign the
+coach email to an athlete profile at `/admin/integrations`. Coaches receive private chat
+sessions and can query only assigned coach check-ins; tool access is controlled by the
+role matrix on that page. GitHub sign-ins retain the `Owner` role.
 
 ## Deployment Notes
 

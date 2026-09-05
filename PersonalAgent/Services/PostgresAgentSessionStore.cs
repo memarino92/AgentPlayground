@@ -17,6 +17,11 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
 
     public async Task CreateSessionAsync(Guid sessionId, string profileId, string sessionStateJson, CancellationToken cancellationToken = default)
     {
+        await CreateSessionAsync(sessionId, new AgentAccessContext(profileId, AgentRoles.Owner, profileId), sessionStateJson, cancellationToken);
+    }
+
+    public async Task CreateSessionAsync(Guid sessionId, AgentAccessContext access, string sessionStateJson, CancellationToken cancellationToken = default)
+    {
         var now = DateTimeOffset.UtcNow;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -26,6 +31,9 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
             (
                 session_id,
                 profile_id,
+                actor_id,
+                role_name,
+                memory_profile_id,
                 session_state,
                 session_state_version,
                 last_message_seq,
@@ -37,6 +45,9 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
             (
                 @sessionId,
                 @profileId,
+                @actorId,
+                @roleName,
+                @memoryProfileId,
                 @sessionState::jsonb,
                 @sessionStateVersion,
                 0,
@@ -46,7 +57,10 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
             );
             """;
         command.Parameters.AddWithValue("sessionId", sessionId);
-        command.Parameters.AddWithValue("profileId", profileId);
+        command.Parameters.AddWithValue("profileId", access.SubjectProfileId);
+        command.Parameters.AddWithValue("actorId", access.ActorId);
+        command.Parameters.AddWithValue("roleName", access.Role);
+        command.Parameters.AddWithValue("memoryProfileId", access.MemoryProfileId);
         command.Parameters.AddWithValue("sessionState", sessionStateJson);
         command.Parameters.AddWithValue("sessionStateVersion", SessionStateVersion);
         command.Parameters.AddWithValue("createdAt", now);
@@ -59,7 +73,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT profile_id, session_state, last_message_seq
+            SELECT profile_id, session_state, last_message_seq, actor_id, role_name, memory_profile_id
             FROM {SessionsTable}
             WHERE session_id = @sessionId;
             """;
@@ -68,7 +82,14 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
 
-        return new PersistedAgentSession(sessionId, reader.GetString(0), reader.GetString(1), reader.GetInt64(2));
+        return new PersistedAgentSession(
+            sessionId,
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetInt64(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5));
     }
 
     public async Task<IReadOnlyList<PersistedAgentSessionSummary>> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize, CancellationToken cancellationToken = default)
@@ -90,7 +111,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
                 ORDER BY tm.message_seq ASC
                 LIMIT 1
             ) AS first_user_message ON TRUE
-            WHERE s.profile_id = @profileId
+            WHERE s.actor_id = @profileId
               AND (
                     @beforeActivityAt IS NULL
                  OR @beforeSessionId IS NULL

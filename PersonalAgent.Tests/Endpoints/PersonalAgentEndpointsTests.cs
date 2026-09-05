@@ -16,6 +16,8 @@ using PersonalAgent.Services;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Xunit;
 
@@ -59,6 +61,17 @@ public class PersonalAgentEndpointsTests
         var payload = await ReadJsonAsync(response);
         payload.GetProperty("sessionId").GetString().Should().NotBeNullOrWhiteSpace();
         payload.GetProperty("modelId").GetString().Should().Be("gpt-4o-mini");
+    }
+
+    [Fact]
+    public async Task CreateSession_ReturnsUnauthorized_WhenSignedActorMissing()
+    {
+        await using var app = await BuildAppAsync(addSignedActor: false);
+        var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/api/sessions", new { profileId = "test-user", modelId = "gpt-4o-mini" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
@@ -418,7 +431,7 @@ public class PersonalAgentEndpointsTests
         return doc.RootElement.Clone();
     }
 
-    private static async Task<WebApplication> BuildAppAsync(string? internalApiKey = null)
+    private static async Task<WebApplication> BuildAppAsync(string? internalApiKey = null, bool addSignedActor = true)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -435,6 +448,7 @@ public class PersonalAgentEndpointsTests
         {
             AllowedOrigins = [],
             InternalApiKey = internalApiKey ?? string.Empty,
+            ActorSigningKey = "test-actor-signing-key",
             RateLimit = new RateLimitOptions { PermitLimit = 100, WindowSeconds = 1 }
         }));
 
@@ -471,6 +485,9 @@ public class PersonalAgentEndpointsTests
         builder.Services.AddSingleton<AgentApprovalService>();
         builder.Services.AddSingleton<WorkJournalService>();
         builder.Services.AddSingleton<ITavilyMcpToolProvider, TestTavilyMcpToolProvider>();
+        builder.Services.AddSingleton<IToolAccessStore, TestToolAccessStore>();
+        builder.Services.AddSingleton<ToolAccessService>();
+        builder.Services.AddSingleton<ICoachAssignmentStore, TestCoachAssignmentStore>();
         builder.Services.AddSingleton<PushNotificationService>();
         builder.Services.AddSingleton<IOptions<PushNotificationsOptions>>(Options.Create(new PushNotificationsOptions()));
         builder.Services.AddSingleton<CoachCheckinService>();
@@ -482,6 +499,21 @@ public class PersonalAgentEndpointsTests
 
         var app = builder.Build();
         app.UseRateLimiter();
+        if (addSignedActor) app.Use(async (context, next) =>
+        {
+            const string actorId = "test-user";
+            const string role = AgentRoles.Owner;
+            const string email = "owner@example.com";
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+            var payload = $"{actorId}\n{role}\n{email}\n{timestamp}";
+            var signature = Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes("test-actor-signing-key"), Encoding.UTF8.GetBytes(payload)));
+            context.Request.Headers["X-Agent-Actor"] = actorId;
+            context.Request.Headers["X-Agent-Role"] = role;
+            context.Request.Headers["X-Agent-Email"] = email;
+            context.Request.Headers["X-Agent-Timestamp"] = timestamp;
+            context.Request.Headers["X-Agent-Signature"] = signature;
+            await next();
+        });
         app.MapPersonalAgentEndpoints();
         await app.StartAsync();
         return app;
@@ -492,6 +524,26 @@ public class PersonalAgentEndpointsTests
         public bool IsAvailable => false;
         public string Status => "TestStub";
         public IReadOnlyList<Microsoft.Extensions.AI.AIFunction> GetTools() => [];
+    }
+
+    private sealed class TestToolAccessStore : IToolAccessStore
+    {
+        public Task<IReadOnlyDictionary<string, bool>> GetRolePermissionsAsync(string role, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, bool>>(new Dictionary<string, bool>());
+
+        public Task SavePermissionsAsync(IReadOnlyList<ToolRolePermission> permissions, string updatedBy, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class TestCoachAssignmentStore : ICoachAssignmentStore
+    {
+        public Task<IReadOnlyList<string>> GetAssignedProfilesAsync(string coachActorId, string coachEmail, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
+
+        public Task<IReadOnlyList<CoachProfileAssignment>> GetAssignmentsAsync(string subjectProfileId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<CoachProfileAssignment>>([]);
+
+        public Task SaveAssignmentAsync(SaveCoachProfileAssignmentRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private static ChatModelCatalog ChatModelCatalogFactory(IServiceProvider sp) =>

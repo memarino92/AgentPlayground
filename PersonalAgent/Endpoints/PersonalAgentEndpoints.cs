@@ -15,7 +15,8 @@ internal static class PersonalAgentEndpoints
     {
         app.MapGet("/", () => new { status = "healthy", service = "PersonalAgent API" });
 
-        var security = app.Services.GetRequiredService<IOptions<SecurityOptions>>().Value;
+        var securityOptions = app.Services.GetRequiredService<IOptions<SecurityOptions>>();
+        var security = securityOptions.Value;
         var apiKeyOptions = app.Services.GetRequiredService<IOptions<ApiKeyOptions>>();
         var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PersonalAgent.Api");
         var apiGroup = app.MapGroup("/api").RequireRateLimiting(PersonalAgentConstants.ApiRateLimiter);
@@ -31,7 +32,7 @@ internal static class PersonalAgentEndpoints
             return Results.Ok(new { models });
         });
 
-        apiGroup.MapPost("/sessions", async (CreateSessionRequest request, AgentService agentService, ChatModelCatalog chatModelCatalog) =>
+        apiGroup.MapPost("/sessions", async (HttpContext httpContext, CreateSessionRequest request, AgentService agentService, ChatModelCatalog chatModelCatalog, ICoachAssignmentStore assignmentStore) =>
         {
             if (string.IsNullOrWhiteSpace(request.ProfileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
@@ -40,12 +41,14 @@ internal static class PersonalAgentEndpoints
             if (selectedModel is null)
                 return Results.BadRequest(new { error = $"Model '{request.ModelId}' is not available" });
 
-            logger.LogInformation("Creating session for profile {ProfileId} using model {ModelId}", request.ProfileId, selectedModel.Id);
-            var created = await agentService.CreateSessionAsync(request.ProfileId, selectedModel.Id);
+            var access = await ResolveAccessAsync(httpContext, request.ProfileId, assignmentStore);
+            if (access is null) return Results.Forbid();
+            logger.LogInformation("Creating session for actor {ActorId}, role {Role}, subject {ProfileId} using model {ModelId}", access.ActorId, access.Role, access.SubjectProfileId, selectedModel.Id);
+            var created = await agentService.CreateSessionAsync(access, selectedModel.Id);
             return Results.Ok(new { sessionId = created.SessionId, modelId = created.ModelId, message = "Session created successfully" });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
-        apiGroup.MapGet("/sessions", async (string profileId, int? pageSize, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, AgentService agentService) =>
+        apiGroup.MapGet("/sessions", async (HttpContext httpContext, string profileId, int? pageSize, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
@@ -59,11 +62,13 @@ internal static class PersonalAgentEndpoints
                 pageSize ?? 20,
                 beforeActivityAt,
                 beforeSessionId);
-            var page = await agentService.GetSessionsAsync(profileId, beforeActivityAt, beforeSessionId, pageSize ?? 20);
+            var access = await ResolveAccessAsync(httpContext, profileId, assignmentStore);
+            if (access is null) return Results.Forbid();
+            var page = await agentService.GetSessionsAsync(access, beforeActivityAt, beforeSessionId, pageSize ?? 20);
             return Results.Ok(page);
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
-        apiGroup.MapPost("/sessions/{sessionId}/messages", async (string sessionId, SendMessageRequest request, AgentService agentService) =>
+        apiGroup.MapPost("/sessions/{sessionId}/messages", async (HttpContext httpContext, string sessionId, SendMessageRequest request, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
             if (string.IsNullOrWhiteSpace(request.ProfileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
@@ -77,23 +82,27 @@ internal static class PersonalAgentEndpoints
                 sessionId,
                 request.ProfileId,
                 request.Message.Length);
-            var response = await agentService.SendMessageAsync(sessionId, request.ProfileId, request.Message);
+            var access = await ResolveAccessAsync(httpContext, request.ProfileId, assignmentStore);
+            if (access is null) return Results.Forbid();
+            var response = await agentService.SendMessageAsync(sessionId, access, request.Message, httpContext.RequestAborted);
             return response is not null
                 ? Results.Ok(new { sessionId, response })
                 : Results.NotFound(new { error = "Session not found" });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
-        apiGroup.MapGet("/sessions/{sessionId}/messages", async (string sessionId, string profileId, AgentService agentService) =>
+        apiGroup.MapGet("/sessions/{sessionId}/messages", async (HttpContext httpContext, string sessionId, string profileId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
 
             logger.LogInformation("Loading transcript for session {SessionId} and profile {ProfileId}", sessionId, profileId);
-            var conversation = await agentService.GetSessionMessagesAsync(sessionId, profileId);
+            var access = await ResolveAccessAsync(httpContext, profileId, assignmentStore);
+            if (access is null) return Results.Forbid();
+            var conversation = await agentService.GetSessionMessagesAsync(sessionId, access);
             return conversation is not null
                 ? Results.Ok(new { sessionId = conversation.SessionId, modelId = conversation.ModelId, messages = conversation.Messages })
                 : Results.NotFound(new { error = "Session not found" });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
         apiGroup.MapPost("/mobile/devices/register", async (RegisterMobileDeviceTokenRequest request, AgentService agentService) =>
         {
@@ -206,6 +215,8 @@ internal static class PersonalAgentEndpoints
             var profileId = form["profileId"].ToString();
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
+            if (!string.Equals(SignedActorFilter.Get(request.HttpContext).ActorId, profileId, StringComparison.OrdinalIgnoreCase))
+                return Results.Forbid();
 
             var file = form.Files.GetFile("file");
             if (file is null)
@@ -235,12 +246,13 @@ internal static class PersonalAgentEndpoints
                 createdAtUtc = result.CreatedAtUtc,
                 isDuplicate = result.IsDuplicate
             });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions, ownerOnly: true));
 
-        apiGroup.MapGet("/coach-checkins/{uploadId:guid}", async (Guid uploadId, string profileId, AgentService agentService) =>
+        apiGroup.MapGet("/coach-checkins/{uploadId:guid}", async (HttpContext httpContext, Guid uploadId, string profileId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
+            if (await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null) return Results.Forbid();
 
             var status = await agentService.GetCoachCheckinStatusAsync(uploadId, profileId);
             return status is null
@@ -255,12 +267,13 @@ internal static class PersonalAgentEndpoints
                     createdAtUtc = status.CreatedAtUtc,
                     updatedAtUtc = status.UpdatedAtUtc
                 });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
-        apiGroup.MapGet("/coach-checkins/{uploadId:guid}/summary", async (Guid uploadId, string profileId, AgentService agentService) =>
+        apiGroup.MapGet("/coach-checkins/{uploadId:guid}/summary", async (HttpContext httpContext, Guid uploadId, string profileId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
+            if (await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null) return Results.Forbid();
 
             var summary = await agentService.GetCoachCheckinSummaryAsync(uploadId, profileId);
             return summary is null
@@ -273,11 +286,17 @@ internal static class PersonalAgentEndpoints
                     summaryJson = summary.SummaryJson,
                     updatedAtUtc = summary.UpdatedAtUtc
                 });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
-        apiGroup.MapGet("/coach-checkins/{uploadId:guid}/transcript", async (Guid uploadId, AgentService agentService) =>
+        apiGroup.MapGet("/coach-checkins/{uploadId:guid}/transcript", async (HttpContext httpContext, Guid uploadId, string? profileId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
-            var transcript = await agentService.GetCoachCheckinTranscriptAsync(uploadId);
+            var actor = SignedActorFilter.Get(httpContext);
+            if (actor.Role == AgentRoles.Coach
+                && (string.IsNullOrWhiteSpace(profileId) || await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null))
+                return Results.Forbid();
+            var transcript = string.IsNullOrWhiteSpace(profileId)
+                ? await agentService.GetCoachCheckinTranscriptAsync(uploadId)
+                : await agentService.GetCoachCheckinTranscriptAsync(uploadId, profileId);
             return transcript is null
                 ? Results.NotFound(new { error = "Coach check-in transcript not found" })
                 : Results.Ok(new
@@ -298,11 +317,17 @@ internal static class PersonalAgentEndpoints
                         confidence = utterance.Confidence
                     })
                 });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
-        apiGroup.MapGet("/coach-checkins/{uploadId:guid}/transcript.txt", async (Guid uploadId, AgentService agentService) =>
+        apiGroup.MapGet("/coach-checkins/{uploadId:guid}/transcript.txt", async (HttpContext httpContext, Guid uploadId, string? profileId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
-            var transcript = await agentService.GetCoachCheckinTranscriptAsync(uploadId);
+            var actor = SignedActorFilter.Get(httpContext);
+            if (actor.Role == AgentRoles.Coach
+                && (string.IsNullOrWhiteSpace(profileId) || await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null))
+                return Results.Forbid();
+            var transcript = string.IsNullOrWhiteSpace(profileId)
+                ? await agentService.GetCoachCheckinTranscriptAsync(uploadId)
+                : await agentService.GetCoachCheckinTranscriptAsync(uploadId, profileId);
             if (transcript is null)
                 return Results.NotFound(new { error = "Coach check-in transcript not found" });
 
@@ -310,9 +335,9 @@ internal static class PersonalAgentEndpoints
 
             var fileName = $"coach-checkin-{uploadId}.txt";
             return Results.File(Encoding.UTF8.GetBytes(content), "text/plain; charset=utf-8", fileName);
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
-        apiGroup.MapPost("/coach-checkins/{uploadId:guid}/speaker-overrides", async (Guid uploadId, CoachSpeakerOverrideRequest request, AgentService agentService) =>
+        apiGroup.MapPost("/coach-checkins/{uploadId:guid}/speaker-overrides", async (HttpContext httpContext, Guid uploadId, CoachSpeakerOverrideRequest request, AgentService agentService) =>
         {
             if (string.IsNullOrWhiteSpace(request.ProfileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
@@ -320,10 +345,11 @@ internal static class PersonalAgentEndpoints
                 return Results.BadRequest(new { error = "At least one speaker override is required" });
             if (request.Overrides.Any(ovr => string.IsNullOrWhiteSpace(ovr.Role)))
                 return Results.BadRequest(new { error = "Each override role is required" });
+            if (!string.Equals(SignedActorFilter.Get(httpContext).ActorId, request.ProfileId, StringComparison.OrdinalIgnoreCase)) return Results.Forbid();
 
             await agentService.ApplyCoachSpeakerOverridesAsync(uploadId, request.ProfileId, request.Overrides);
             return Results.Ok(new { message = "Speaker overrides applied. Processing restarted." });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions, ownerOnly: true));
 
         apiGroup.MapGet("/coach-checkins/admin", async (int? limit, AgentService agentService) =>
         {
@@ -349,7 +375,72 @@ internal static class PersonalAgentEndpoints
                     sampleTexts = label.SampleTexts
                 })
             }));
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions, ownerOnly: true));
+
+        apiGroup.MapGet("/coach-checkins", async (HttpContext httpContext, string profileId, int? limit, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
+        {
+            if (string.IsNullOrWhiteSpace(profileId)) return Results.BadRequest(new { error = "ProfileId is required" });
+            if (await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null) return Results.Forbid();
+            var items = await agentService.GetCoachCheckinItemsAsync(profileId, limit ?? 100);
+            return Results.Ok(items.Select(item => new
+            {
+                uploadId = item.UploadId,
+                sessionId = item.SessionId,
+                profileId = item.ProfileId,
+                originalFileName = item.OriginalFileName,
+                status = item.Status.ToString(),
+                error = item.Error,
+                createdAtUtc = item.CreatedAtUtc,
+                updatedAtUtc = item.UpdatedAtUtc,
+                hasAudioBlob = item.HasAudioBlob,
+                utteranceCount = item.UtteranceCount,
+                chunkCount = item.ChunkCount,
+                speakerLabels = item.SpeakerLabels
+            }));
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
+
+        apiGroup.MapGet("/admin/tool-access", async (ToolAccessService toolAccessService) =>
+            Results.Ok(await toolAccessService.GetCatalogAsync()))
+            .AddEndpointFilter(new SignedActorFilter(securityOptions, ownerOnly: true));
+
+        apiGroup.MapPut("/admin/tool-access", async (HttpContext httpContext, SaveToolAccessRequest request, ToolAccessService toolAccessService) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.UpdatedBy)) return Results.BadRequest(new { error = "UpdatedBy is required" });
+            try
+            {
+                await toolAccessService.SaveAsync(request with { UpdatedBy = SignedActorFilter.Get(httpContext).ActorId });
+                return Results.NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions, ownerOnly: true));
+
+        apiGroup.MapGet("/coach-assignments", async (HttpContext httpContext, ICoachAssignmentStore assignmentStore) =>
+        {
+            var actor = SignedActorFilter.Get(httpContext);
+            if (actor.Role != AgentRoles.Coach || string.IsNullOrWhiteSpace(actor.Email)) return Results.Forbid();
+            return Results.Ok(new { profiles = await assignmentStore.GetAssignedProfilesAsync(actor.ActorId, actor.Email) });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
+
+        apiGroup.MapGet("/admin/coach-assignments", async (HttpContext httpContext, string profileId, ICoachAssignmentStore assignmentStore) =>
+        {
+            if (!string.Equals(SignedActorFilter.Get(httpContext).ActorId, profileId, StringComparison.OrdinalIgnoreCase)) return Results.Forbid();
+            return Results.Ok(await assignmentStore.GetAssignmentsAsync(profileId));
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions, ownerOnly: true));
+
+        apiGroup.MapPut("/admin/coach-assignments", async (HttpContext httpContext, SaveCoachProfileAssignmentRequest request, ICoachAssignmentStore assignmentStore) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.CoachEmail)
+                || string.IsNullOrWhiteSpace(request.SubjectProfileId)
+                || string.IsNullOrWhiteSpace(request.UpdatedBy))
+                return Results.BadRequest(new { error = "CoachEmail, SubjectProfileId, and UpdatedBy are required" });
+            var actor = SignedActorFilter.Get(httpContext);
+            if (!string.Equals(actor.ActorId, request.SubjectProfileId, StringComparison.OrdinalIgnoreCase)) return Results.Forbid();
+            await assignmentStore.SaveAssignmentAsync(request with { UpdatedBy = actor.ActorId });
+            return Results.NoContent();
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions, ownerOnly: true));
 
         return app;
     }
@@ -361,5 +452,20 @@ internal static class PersonalAgentEndpoints
         if (executeAt is not null) count++;
         if (!string.IsNullOrWhiteSpace(when)) count++;
         return count is 1;
+    }
+
+    private static async Task<AgentAccessContext?> ResolveAccessAsync(HttpContext context, string subjectProfileId, ICoachAssignmentStore assignmentStore)
+    {
+        var actor = SignedActorFilter.Get(context);
+        if (actor.Role == AgentRoles.Owner)
+            return string.Equals(actor.ActorId, subjectProfileId, StringComparison.OrdinalIgnoreCase)
+                ? actor.ForSubject(subjectProfileId)
+                : null;
+
+        if (actor.Role != AgentRoles.Coach || string.IsNullOrWhiteSpace(actor.Email)) return null;
+        var profiles = await assignmentStore.GetAssignedProfilesAsync(actor.ActorId, actor.Email, context.RequestAborted);
+        return profiles.Contains(subjectProfileId, StringComparer.OrdinalIgnoreCase)
+            ? actor.ForSubject(subjectProfileId)
+            : null;
     }
 }

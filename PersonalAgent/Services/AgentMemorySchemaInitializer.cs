@@ -43,6 +43,8 @@ internal class AgentMemorySchemaInitializer(IOptions<AgentMemoryOptions> options
         var coachCallSessionsTable = QualifiedTableName("coach_call_sessions");
         var coachCallChunksTable = QualifiedTableName("coach_call_chunks");
         var coachCallSpeakerOverridesTable = QualifiedTableName("coach_call_speaker_overrides");
+        var toolRolePermissionsTable = QualifiedTableName("tool_role_permissions");
+        var coachProfileAssignmentsTable = QualifiedTableName("coach_profile_assignments");
         var vectorColumnDefinition = _options.EnableSemanticMemory
             ? $", embedding vector({_options.VectorDimensions}) NULL"
             : string.Empty;
@@ -73,6 +75,42 @@ internal class AgentMemorySchemaInitializer(IOptions<AgentMemoryOptions> options
             ALTER TABLE {sessionsTable} ALTER COLUMN profile_id SET NOT NULL;
             CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.SessionsTableName}_updated_at")} ON {sessionsTable} (updated_at DESC);
             CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.SessionsTableName}_profile_id_updated_at")} ON {sessionsTable} (profile_id, updated_at DESC);
+
+            ALTER TABLE {sessionsTable} ADD COLUMN IF NOT EXISTS actor_id text;
+            ALTER TABLE {sessionsTable} ADD COLUMN IF NOT EXISTS role_name text;
+            ALTER TABLE {sessionsTable} ADD COLUMN IF NOT EXISTS memory_profile_id text;
+            UPDATE {sessionsTable}
+            SET actor_id = profile_id,
+                role_name = 'Owner',
+                memory_profile_id = profile_id
+            WHERE actor_id IS NULL OR role_name IS NULL OR memory_profile_id IS NULL;
+            ALTER TABLE {sessionsTable} ALTER COLUMN actor_id SET NOT NULL;
+            ALTER TABLE {sessionsTable} ALTER COLUMN role_name SET NOT NULL;
+            ALTER TABLE {sessionsTable} ALTER COLUMN memory_profile_id SET NOT NULL;
+            CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.SessionsTableName}_actor_updated_at")} ON {sessionsTable} (actor_id, updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS {toolRolePermissionsTable}
+            (
+                role_name text NOT NULL,
+                tool_key text NOT NULL,
+                is_enabled boolean NOT NULL,
+                updated_at timestamptz NOT NULL,
+                updated_by text NOT NULL,
+                PRIMARY KEY (role_name, tool_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS {coachProfileAssignmentsTable}
+            (
+                normalized_coach_email text NOT NULL,
+                coach_email text NOT NULL,
+                coach_actor_id text NULL,
+                subject_profile_id text NOT NULL,
+                is_active boolean NOT NULL,
+                updated_at timestamptz NOT NULL,
+                updated_by text NOT NULL,
+                PRIMARY KEY (normalized_coach_email, subject_profile_id)
+            );
+            CREATE INDEX IF NOT EXISTS {QuoteIdentifier("ix_coach_profile_assignments_actor")} ON {coachProfileAssignmentsTable} (coach_actor_id, is_active);
 
             CREATE TABLE IF NOT EXISTS {transcriptMessagesTable}
             (

@@ -74,7 +74,7 @@ internal static class ServiceCollectionAuthenticationExtensions
                         return;
                     }
 
-                    if (allowedUsers.Count > 0 && !allowedUsers.Contains(githubLogin))
+                    if (!allowedUsers.Contains(githubLogin))
                     {
                         context.Fail($"GitHub user '{githubLogin}' is not authorized to access this application");
                         return;

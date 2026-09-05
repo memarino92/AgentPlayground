@@ -13,14 +13,26 @@ internal class AgentService(
     public Task<(string SessionId, string ModelId)> CreateSessionAsync(string profileId, string modelId) =>
         chatService.CreateSessionAsync(profileId, modelId);
 
+    public Task<(string SessionId, string ModelId)> CreateSessionAsync(AgentAccessContext access, string modelId) =>
+        chatService.CreateSessionAsync(access, modelId);
+
     public Task<SessionSummaryPage> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize) =>
         chatService.GetSessionsAsync(profileId, beforeActivityAt, beforeSessionId, pageSize);
+
+    public Task<SessionSummaryPage> GetSessionsAsync(AgentAccessContext access, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize) =>
+        chatService.GetSessionsAsync(access, beforeActivityAt, beforeSessionId, pageSize);
 
     public Task<string?> SendMessageAsync(string sessionId, string profileId, string message) =>
         chatService.SendMessageAsync(sessionId, profileId, message);
 
+    public Task<string?> SendMessageAsync(string sessionId, AgentAccessContext access, string message, CancellationToken cancellationToken = default) =>
+        chatService.SendMessageAsync(sessionId, access, message, cancellationToken);
+
     public Task<SessionConversation?> GetSessionMessagesAsync(string sessionId, string profileId) =>
         chatService.GetSessionMessagesAsync(sessionId, profileId);
+
+    public Task<SessionConversation?> GetSessionMessagesAsync(string sessionId, AgentAccessContext access, CancellationToken cancellationToken = default) =>
+        chatService.GetSessionMessagesAsync(sessionId, access, cancellationToken);
 
     public Task GenerateAndPublishTestMessageAsync(TestEventRequested request, CancellationToken cancellationToken) =>
         eventService.GenerateAndPublishTestMessageAsync(request, cancellationToken);
@@ -55,9 +67,15 @@ internal class AgentService(
     public Task<CoachCheckinTranscriptResponse?> GetCoachCheckinTranscriptAsync(Guid uploadId, CancellationToken cancellationToken = default) =>
         coachCheckinService.GetTranscriptAsync(uploadId, cancellationToken);
 
+    public Task<CoachCheckinTranscriptResponse?> GetCoachCheckinTranscriptAsync(Guid uploadId, string profileId, CancellationToken cancellationToken = default) =>
+        coachCheckinService.GetTranscriptAsync(uploadId, profileId, cancellationToken);
+
     public Task ApplyCoachSpeakerOverridesAsync(Guid uploadId, string profileId, IReadOnlyList<CoachSpeakerOverrideItem> overrides, CancellationToken cancellationToken = default) =>
         coachCheckinService.ApplySpeakerOverridesAsync(uploadId, profileId, overrides, cancellationToken);
 
     public Task<IReadOnlyList<CoachCheckinAdminItem>> GetCoachCheckinAdminItemsAsync(int limit = 100, CancellationToken cancellationToken = default) =>
         coachCheckinService.GetRecentUploadsAsync(limit, cancellationToken);
+
+    public Task<IReadOnlyList<CoachCheckinAdminItem>> GetCoachCheckinItemsAsync(string profileId, int limit = 100, CancellationToken cancellationToken = default) =>
+        coachCheckinService.GetRecentUploadsAsync(profileId, limit, cancellationToken);
 }

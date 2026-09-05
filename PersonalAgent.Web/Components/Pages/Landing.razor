@@ -22,7 +22,7 @@
             : authState.User.IsInRole("Owner")
                 ? "/chat"
                 : authState.User.IsInRole("Coach")
-                    ? "/coach-transcripts"
+                    ? "/chat"
                     : "/access-denied";
 
         NavigationManager.NavigateTo(destination, forceLoad: true);
