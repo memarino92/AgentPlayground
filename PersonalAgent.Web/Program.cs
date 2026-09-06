@@ -1,10 +1,12 @@
 using AgentPlayground.Contracts.Hosting;
+using AgentPlayground.Contracts.Configuration;
 using MudBlazor.Services;
 using PersonalAgent.Web.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.ConfigurePlatformHosting();
 if (builder.Environment.IsDevelopment()) builder.Configuration.AddUserSecrets<Program>();
+builder.Configuration.AddPostgresConfiguration("Web");
 builder.Services.AddPostgresDataProtection(builder.Configuration);
 builder.Services.AddPersonalAgentApiClient(builder.Configuration);
 builder.Services.AddGitHubAuthentication(builder.Configuration);

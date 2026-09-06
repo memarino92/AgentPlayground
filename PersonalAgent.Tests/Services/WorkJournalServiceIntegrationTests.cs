@@ -48,8 +48,7 @@ public sealed class WorkJournalServiceIntegrationTests : IClassFixture<PostgresV
 
 public sealed class PostgresVectorFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("pgvector/pgvector:0.8.2-pg18-trixie")
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:0.8.2-pg18-trixie")
         .WithDatabase("agentplayground_tests")
         .WithUsername("postgres")
         .WithPassword("postgres")
