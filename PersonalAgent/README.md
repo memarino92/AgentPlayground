@@ -42,13 +42,16 @@ These consumers are registered with retry policies and respond with typed contra
 
 ## Required Configuration
 
-Use either environment variables or user secrets.
+Production uses PostgreSQL-backed configuration. Seed it once with
+`scripts/seed-configuration.ps1`, then configure only these bootstrap variables:
 
 ```text
-OPENAI_API_KEY               -> OpenAI:ApiKey
-MESSAGING_CONNECTION_STRING  -> Messaging:ConnectionString
+DATABASE_URL
+CONFIG_ENCRYPTION_KEY
 ```
 
+`CONFIG_ENCRYPTION_KEY` must be the same base64-encoded 32-byte key used by the seed script.
+Application settings and encrypted secrets are loaded from `app.configuration_settings`.
 Startup validation is enabled for required options, including `OpenAI:ApiKey`.
 
 Optional:
@@ -64,6 +67,9 @@ FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 -> PushNotifications:ServiceAccountJsonBase
 FIREBASE_SERVICE_ACCOUNT_PATH -> PushNotifications:ServiceAccountPath
 ANDROID_PUSH_CHANNEL_ID      -> PushNotifications:AndroidChannelId
 ```
+
+These legacy environment bindings remain available when database-backed configuration
+is disabled locally, but are not needed after the database has been seeded.
 
 For push notifications, set `PUSH_NOTIFICATIONS_ENABLED=true` and provide either
 `FIREBASE_SERVICE_ACCOUNT_JSON`, `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64`, or `FIREBASE_SERVICE_ACCOUNT_PATH`.

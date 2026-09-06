@@ -1,4 +1,5 @@
 using AgentPlayground.Contracts.Commands;
+using AgentPlayground.Contracts.Configuration;
 using AgentPlayground.Contracts.Messaging;
 using AgentPlayground.Contracts.Messaging.Events;
 using AgentPlayground.Contracts.Messaging.Requests;
@@ -10,6 +11,7 @@ using PersonalAgent.Worker.Consumers;
 using PersonalAgent.Worker.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Configuration.AddPostgresConfiguration("Worker");
 
 builder.Services.AddHttpClient("GitHubWorkJournal", client =>
 {

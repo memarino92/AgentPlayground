@@ -20,6 +20,18 @@ The web app talks only to the API; it does not call model providers or worker se
 
 ## Required Configuration
 
+Production requires only the following bootstrap variables after running
+`scripts/seed-configuration.ps1`:
+
+```text
+DATABASE_URL
+CONFIG_ENCRYPTION_KEY
+```
+
+The API URL, OAuth settings, allowlists, and shared signing credentials are loaded from
+the encrypted PostgreSQL configuration table. Existing direct environment bindings below
+remain available when database-backed configuration is disabled locally.
+
 ```text
 PERSONAL_AGENT_API_BASE_URL  -> PersonalAgentApi:BaseUrl
 INTERNAL_API_KEY             -> PersonalAgentApi:InternalApiKey
@@ -40,6 +52,18 @@ GOOGLE_CALLBACK_PATH         -> Authentication:Schemes:Google:CallbackPath
 ```
 
 `PersonalAgentApi:InternalApiKey` and `PersonalAgentApi:ActorSigningKey` are validated on startup. Set `WEB_ACTOR_SIGNING_KEY` to the same long random value in Web and API; never expose it to browser or mobile clients.
+
+## Production Seed
+
+```powershell
+Copy-Item .\scripts\seed-configuration.values.ps1.example .\scripts\seed-configuration.values.ps1
+# Edit the ignored values file, then generate SQL:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\seed-configuration.ps1
+```
+
+Paste `scripts/seed-configuration.generated.sql` into the PostgreSQL console. After
+seeding, delete the populated values and generated SQL files. Keep `DATABASE_URL` and
+`CONFIG_ENCRYPTION_KEY` on API, Web, and Worker.
 
 ## Local Run
 

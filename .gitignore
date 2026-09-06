@@ -8,6 +8,8 @@
 .env.*
 !.env.railway.example
 !.env.compose.example
+scripts/seed-configuration.values.ps1
+scripts/seed-configuration.generated.sql
 
 # Firebase mobile/backend credentials
 google-services.json

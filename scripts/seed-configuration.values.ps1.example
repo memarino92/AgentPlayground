@@ -1,0 +1,37 @@
+# Copy this file to seed-configuration.values.ps1, fill in the values, run
+# seed-configuration.ps1 once, then delete the populated local file.
+# seed-configuration.values.ps1 is ignored by git.
+
+# Only required when running seed-configuration.ps1 with -Apply.
+$DatabaseUrl = ''
+$ConfigEncryptionKey = '<base64 32-byte key; generate with: openssl rand -base64 32>'
+
+$InternalApiKey = '<shared internal API key>'
+$ActorSigningKey = '<shared actor signing key>'
+$PersonalAgentApiBaseUrl = '<Railway private API URL, for example http://personalagent.railway.internal:8080>'
+
+$OpenAiApiKey = '<OpenAI API key>'
+$GitHubClientId = '<GitHub OAuth client id>'
+$GitHubClientSecret = '<GitHub OAuth client secret>'
+$GitHubAllowedUsers = '<comma-separated GitHub owner logins>'
+$GoogleClientId = '<Google OAuth client id>'
+$GoogleClientSecret = '<Google OAuth client secret>'
+$GoogleAllowedEmails = '<comma-separated verified coach emails>'
+$AssemblyAiApiKey = '<AssemblyAI API key>'
+$AllowedOrigins = '<public Web URL, for example https://example.up.railway.app>'
+
+# Optional integrations. Leave empty to keep the integration disabled/unconfigured.
+$TavilyApiKey = ''
+$TavilyMcpUrl = 'https://mcp.tavily.com/mcp'
+$EnableWebSearch = 'true'
+
+$PushNotificationsEnabled = 'false'
+$FirebaseProjectId = ''
+$FirebaseServiceAccountJsonBase64 = ''
+$AndroidPushChannelId = 'agent-approval-high'
+
+$GitHubPat = ''
+$GitHubOwner = ''
+$GitHubRepo = ''
+$GitHubBranch = 'main'
+$GitHubJournalPath = ''

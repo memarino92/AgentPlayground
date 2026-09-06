@@ -249,41 +249,25 @@ For cloud deployments, the apps also accept `MESSAGING_CONNECTION_STRING`. If Ra
 
 Deploy this solution as four Railway services: one PostgreSQL service plus three app services.
 
-### One-Command Bootstrap
+### Configuration Seed
 
-If you want to minimize dashboard work, use the included bootstrap script. It creates or reuses the Railway project, creates the three app services, configures their Dockerfile paths and watch patterns, provisions a Railway domain for the web app, wires shared variables, and points the web app at the API over Railway private networking.
-
-Copy [.env.railway.example](/C:/Users/Michael/projects/AgentPlayground/.env.railway.example) to `.env.railway`, fill in the values, then run:
-
-```powershell
-Copy-Item .env.railway.example .env.railway
-pwsh -NoProfile -File .\scripts\set-internal-api-key.ps1
-pwsh -NoProfile -File .\scripts\check-railway-env.ps1
-pwsh -NoProfile -File .\scripts\setup-railway.ps1 -CreatePostgres
-```
-
-The script reads `.env.railway` automatically. You can still override anything with explicit script parameters or process-level environment variables.
-
-Deployment secrets can also be sourced from local user secrets automatically. The Railway scripts currently fall back to:
-
-- `PersonalAgent` user secrets for `OpenAI:ApiKey` and `Security:InternalApiKey`
-- `PersonalAgent.Web` user secrets for `Authentication:Schemes:GitHub:ClientId`, `ClientSecret`, `AllowedUsers`, and `CallbackPath`
-
-If you have not created an internal API key yet, run [`set-internal-api-key.ps1`](/C:/Users/Michael/projects/AgentPlayground/scripts/set-internal-api-key.ps1). It generates a strong key, stores it in `PersonalAgent` user secrets, and writes the same value to `.env.railway`.
-
-What still remains after that:
-
-- If `-CreatePostgres` cannot provision PostgreSQL automatically with your installed Railway CLI, create one Railway PostgreSQL service in the same project/environment, name it `Postgres`, and rerun the setup script
-- Ensure Railway has access to the GitHub repository if you use `-RepoSlug`
-- Create or update your GitHub OAuth app to use the printed callback URL
-- Push to the configured branch, or use [`deploy-railway.ps1`](/C:/Users/Michael/projects/AgentPlayground/scripts/deploy-railway.ps1) if you created empty services instead of repo-backed ones
-
-To redeploy later with the same local file:
+Application configuration and encrypted secrets are stored in PostgreSQL. Copy the
+gitignored seed-values template, paste the Railway values into it, and run the seed once:
 
 ```powershell
-pwsh -NoProfile -File .\scripts\check-railway-env.ps1
-pwsh -NoProfile -File .\scripts\deploy-railway.ps1
+Copy-Item .\scripts\seed-configuration.values.ps1.example .\scripts\seed-configuration.values.ps1
+# Edit seed-configuration.values.ps1, then generate the SQL file:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\seed-configuration.ps1
 ```
+
+Paste `scripts/seed-configuration.generated.sql` into the PostgreSQL console. The seed is
+idempotent and contains its own schema and table creation. Secret values are encrypted
+before the SQL is generated. Delete both populated files after seeding; they are ignored
+by git as a second safeguard.
+
+If the database is directly reachable and Docker Desktop is running, generation and
+application can instead be combined with `-Apply`. Set `$DatabaseUrl` in the values file
+before using that switch.
 
 ### Service Layout
 
@@ -297,56 +281,18 @@ pwsh -NoProfile -File .\scripts\deploy-railway.ps1
 4. `postgres`
    - Use Railway PostgreSQL
 
-### Shared Variables
+### Bootstrap Variables
 
 Set these on all three app services:
 
 ```text
-MESSAGING_CONNECTION_STRING=${{Postgres.DATABASE_URL}}
-MESSAGING_SCHEMA=transport
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+CONFIG_ENCRYPTION_KEY=<same base64 32-byte key used by the seed script>
 ```
 
-### Config Key Standard
-
-Use these names as the single source of truth across API, Web, Worker, scripts, and docs:
-
-```text
-OPENAI_API_KEY            -> OpenAI:ApiKey
-INTERNAL_API_KEY          -> Security:InternalApiKey (API), PersonalAgentApi:InternalApiKey (Web)
-MESSAGING_CONNECTION_STRING -> Messaging:ConnectionString
-MESSAGING_SCHEMA          -> Messaging:Schema
-PERSONAL_AGENT_API_BASE_URL -> PersonalAgentApi:BaseUrl
-```
-
-Notes:
-
-- Environment variables take precedence over config files and user secrets.
-- `DATABASE_URL` is still accepted only as a PostgreSQL URL fallback for connection-string normalization.
-- Legacy key `OpenApiKey` is no longer the canonical key; use `OpenAI:ApiKey`.
-
-### API Variables
-
-Set these on `personalagent-api`:
-
-```text
-OPENAI_API_KEY=...
-ALLOWED_ORIGINS=https://your-web-service.up.railway.app
-INTERNAL_API_KEY=generate-a-long-random-value
-```
-
-`PORT` is provided automatically by Railway and the API now binds to it without extra setup.
-
-### Web Variables
-
-Set these on `personalagent-web`:
-
-```text
-GITHUB_CLIENT_ID=...
-GITHUB_CLIENT_SECRET=...
-GITHUB_ALLOWED_USERS=your-github-login
-PERSONAL_AGENT_API_BASE_URL=http://${{personalagent-api.RAILWAY_PRIVATE_DOMAIN}}:${{personalagent-api.PORT}}
-INTERNAL_API_KEY=same-value-as-api-internal-key
-```
+All remaining API, Web, and Worker settings come from `app.configuration_settings`.
+`PORT` is supplied automatically by Railway. Existing direct environment-variable bindings
+remain available only when database-backed configuration is disabled locally.
 
 GitHub OAuth should use these URLs:
 
@@ -359,21 +305,13 @@ The web app now trusts forwarded host/protocol headers so GitHub callback URLs a
 
 ### Worker Variables
 
-Set these on `personalagent-worker`:
-
-```text
-GITHUB_PAT=...
-GITHUB_OWNER=...
-GITHUB_REPO=...
-GITHUB_BRANCH=main
-GITHUB_JOURNAL_PATH=journal
-```
+Worker provider credentials and work-journal settings are populated by the seed script.
 
 ### Notes
 
 - Keep each app as a single instance unless you replace the API's in-memory session storage.
 - The web app and API both bind Railway's `PORT` automatically.
-- If you enable `INTERNAL_API_KEY` on the API, set the same value on the web service.
+- Keep `CONFIG_ENCRYPTION_KEY` outside PostgreSQL and rotate it through a controlled reseed.
 
 ### Agent Event Tool Pattern
 
