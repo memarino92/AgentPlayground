@@ -116,6 +116,8 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<ITavilyMcpToolProvider>(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
         services.AddHostedService(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
         services.AddSingleton<IToolAccessStore, PostgresToolAccessStore>();
+        services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
+        services.AddSingleton<AgentToolBinder>();
         services.AddSingleton<ToolAccessService>();
         services.AddSingleton<ICoachAssignmentStore, PostgresCoachAssignmentStore>();
         services.AddSingleton<AgentChatService>();

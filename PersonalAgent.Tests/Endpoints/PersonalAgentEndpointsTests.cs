@@ -553,6 +553,8 @@ public class PersonalAgentEndpointsTests
         builder.Services.AddSingleton<WorkJournalService>();
         builder.Services.AddSingleton<ITavilyMcpToolProvider, TestTavilyMcpToolProvider>();
         builder.Services.AddSingleton<IToolAccessStore, TestToolAccessStore>();
+        builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
+        builder.Services.AddSingleton<AgentToolBinder>();
         builder.Services.AddSingleton<ToolAccessService>();
         builder.Services.AddSingleton<ICoachAssignmentStore, TestCoachAssignmentStore>();
         builder.Services.AddSingleton<PushNotificationService>();

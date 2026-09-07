@@ -10,9 +10,9 @@ Recorded 2026-09-07. Ordered for a predominantly single-maintainer application. 
 
 **Done when:** a fresh checkout can start all server services using documented local setup; a production-format backup is restored into an isolated target; scoped chat, config decryption, vector search, and controlled background work pass; measured recovery time and actual backup age are recorded. See [recovery runbook](../runbooks/database-recovery.md).
 
-## 2. AI gateway and consistent tool interface — runtime catalog implemented
+## 2. AI gateway and consistent tool interface — catalog and registry implemented
 
-**Observed:** journal parsing and embeddings already cross typed bus contracts to API, but AssemblyAI adapter/options live in Worker, `AgentTaskExecutionService` previously selected `gpt-4o-mini` (now delegates the default to API), and journal schema assumes 1536-dimensional vectors. Tool metadata is duplicated between chat and access services.
+**Observed:** journal parsing and embeddings already cross typed bus contracts to API, but AssemblyAI adapter/options live in Worker, `AgentTaskExecutionService` previously selected `gpt-4o-mini` (now delegates the default to API), and journal schema assumes 1536-dimensional vectors. Tool metadata was duplicated between chat and access services; the shared registry now removes that duplication.
 
 **Deliver in slices:**
 
@@ -75,9 +75,16 @@ Introduce a versioned evaluation set for retrieval relevance, grounded answers, 
 - Tests use the real encryption seed and synthetic data. The CI job is configured to run the snapshot suite; 37 checks passed locally on Windows Docker Desktop on 2026-09-07. Linux CI also passes in PR #34 after fixing readiness to wait for the final PostgreSQL TCP listener.
 - Still outstanding in item 1: manifests for scheduled S3 backups, retention/monitoring, synthetic public demo seed, fresh local configuration/Compose parity, real production-archive rehearsal, and full API/Web/Worker recovery checks. A successful database restore alone does not complete item 1.
 - Added MIT license at the maintainer's request; third-party notices still need review before publication.
-- Scheduled tasks now request the API default model; two contract tests exercise different API-selected defaults without Worker configuration changes. The API now refreshes provider inventory at runtime, filtered through reviewed chat/tool policy. See [catalog behavior](../runbooks/runtime-chat-models.md); transcription migration and registry consolidation remain pending.
+- Scheduled tasks now request the API default model; two contract tests exercise different API-selected defaults without Worker configuration changes. The API now refreshes provider inventory at runtime, filtered through reviewed chat/tool policy. See [catalog behavior](../runbooks/runtime-chat-models.md); the transcription migration remains pending.
 ## Implementation progress: runtime model catalog
 
 - API-local discovery and catalog interfaces separate provider inventory from application selection policy. OpenAI is the current adapter; clients keep the existing contract.
 - Cached refresh, timeout/backoff, fallback, authoritative empty inventories, and a single default are covered by tests. Journal parsing resolves the default per job; saved conversations retain their chosen model.
 - Reviewed policy still loads at startup; this is runtime provider availability, not automatic adoption of unreviewed models or live database configuration reload.
+
+## Implementation progress: shared tool registry
+
+- Local tool metadata and factories now share one registration; MCP functions enter the same catalog and binding path. Stable keys and role defaults are preserved.
+- Authorization and availability are checked at binding and again at execution. Context-bound factories omit profile/actor/role from the model's argument schema. Descriptive side-effect metadata does not imply automatic approval enforcement.
+- Eight registry tests cover all local bindings, catalog/function parity, Coach restrictions, separate subjects, forged profile arguments, revoked permissions, unavailable MCP integrations, duplicate names/keys, and invalid context. See [adding tools](../runbooks/adding-agent-tools.md).
+- This completes slice 5 of item 2. Provider migration, durable transcription jobs, embedding-space ownership, and scheduled actor propagation remain outstanding.
