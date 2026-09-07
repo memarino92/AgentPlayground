@@ -53,11 +53,12 @@ For application startup, follow [local development](docs/runbooks/local-developm
 ## Direction and operating notes
 
 - [Roadmap](docs/plans/roadmap.md): local parity/recovery, AI gateway, Android, and durable agent workflows.
-- [Recovery design and rehearsal](docs/runbooks/database-recovery.md): backups exist, but recovery is not yet proven.
+- [Snapshot commands](docs/runbooks/snapshot-commands.md): export and restore locally with checksum and configuration-key verification.
+- [Recovery design and rehearsal](docs/runbooks/database-recovery.md): complete application recovery remains to be proven.
 - [Public-release review](docs/runbooks/public-release.md): cleanup completed and remaining publication work.
 - [Decision docs](docs/README.md): accepted choices, proposals, and how to record future decisions.
 - [API details](PersonalAgent/README.md), [Web details](PersonalAgent.Web/README.md), and [contributor instructions](AGENTS.md).
 
 Production runs on Railway. Each server service boots with `DATABASE_URL` and `CONFIG_ENCRYPTION_KEY` after configuration seeding. Keep the decryption key outside the database backup. Never commit populated seed files, database snapshots, personal journals, coaching audio, or credentials.
 
-This is a personal system under active development. Public availability, a supported contributor demo, and proven disaster recovery are tracked deliverables, not current guarantees. No project license has been selected yet.
+This is a personal system under active development. Public availability, a supported contributor demo, and proven disaster recovery are tracked deliverables, not current guarantees. Licensed under the [MIT License](LICENSE).

@@ -2,7 +2,7 @@
 
 Recorded 2026-09-07. Ordered for a predominantly single-maintainer application. Estimates are deliberately omitted until the first slices expose their integration work.
 
-## 1. Reproducible local data and proven recovery — next
+## 1. Reproducible local data and proven recovery — in progress
 
 **Observed:** `infrastructure/backup/backup.sh` uploads custom-format dumps, but the repository has no restore helper or completed rehearsal. Encrypted config, push tokens, staged audio, and SQL transport share the database. Local Compose/examples lag the RBAC/configuration refactor.
 
@@ -12,15 +12,16 @@ Recorded 2026-09-07. Ordered for a predominantly single-maintainer application. 
 
 ## 2. AI gateway and consistent tool interface — accepted direction, implementation pending
 
-**Observed:** journal parsing and embeddings already cross typed bus contracts to API, but AssemblyAI adapter/options live in Worker, `AgentTaskExecutionService` selects `gpt-4o-mini`, and journal schema assumes 1536-dimensional vectors. Tool metadata is duplicated between chat and access services.
+**Observed:** journal parsing and embeddings already cross typed bus contracts to API, but AssemblyAI adapter/options live in Worker, `AgentTaskExecutionService` previously selected `gpt-4o-mini` (now delegates the default to API), and journal schema assumes 1536-dimensional vectors. Tool metadata is duplicated between chat and access services.
 
 **Deliver in slices:**
 
-1. Define neutral capability contracts and API-local interfaces for transcription, chat task execution, structured extraction, and embeddings. Route by capability/policy rather than vendor model ID in Worker.
-2. Move AssemblyAI adapter, HTTP client, secrets, options, vendor response mapping, and provider tests into API. Preserve domain transcript processing in Worker; keep provider job persistence and replay semantics explicit.
-3. Persist transcription submission/job IDs; make resume and redelivery idempotent. Avoid a synchronous multi-minute HTTP proxy or binary bus payloads.
-4. Build the tool catalog and function list from one registration with server-bound context, authorization, availability, and execution logging.
-5. Define an embedding-space/version contract, keeping stored/query vectors compatible. A provider swap with changed dimensions or semantics requires migration/re-embedding; make that API-owned work rather than silently mixing spaces.
+1. Keep runtime model discovery behind `GET /api/models` (already consumed by Web); make the source refreshable inside API with cache/fallback and chat-capability policy. Remove vendor defaults from Worker.
+2. Define neutral capability contracts and API-local interfaces for transcription, chat task execution, structured extraction, and embeddings. Route by capability/policy rather than vendor model ID in Worker.
+3. Move AssemblyAI adapter, HTTP client, secrets, options, vendor response mapping, and provider tests into API. Preserve domain transcript processing in Worker; keep provider job persistence and replay semantics explicit.
+4. Persist transcription submission/job IDs; make resume and redelivery idempotent. Avoid a synchronous multi-minute HTTP proxy or binary bus payloads.
+5. Build the tool catalog and function list from one registration with server-bound context, authorization, availability, and execution logging.
+6. Define an embedding-space/version contract, keeping stored/query vectors compatible. A provider swap with changed dimensions or semantics requires migration/re-embedding; make that API-owned work rather than silently mixing spaces.
 
 **Done when:** swap a fake transcription provider for another by changing API registration/configuration only; shared contracts and Web/Worker/Mobile code remain unchanged; provider SDKs/types/keys do not cross the gateway; role and subject tests pass. No provider-specific packages should remain in clients. See [0004](../decisions/0004-agent-service-boundary.md).
 
@@ -66,3 +67,12 @@ Introduce a versioned evaluation set for retrieval relevance, grounded answers, 
 - Replaced the playground README with a product overview and explicit current limitations.
 - Migrated generic .NET skills and OpenCode tooling to user configuration with verified copies and a preserved backup; retained repository conventions in AGENTS.md.
 - Removed four unreferenced API DTOs and unused legacy Web authentication options; consolidated service local-start instructions into the shared runbook.
+
+## Implementation progress: snapshot and restore slice
+
+- Added `export-database-snapshot.ps1` and `restore-database-snapshot.ps1` with a shared module and development state-reset SQL. See [usage](../runbooks/snapshot-commands.md).
+- Full archives include checksum/version manifests; restore can only create a new local Docker target. Recovery mode has no network; development mode binds loopback and clears runtime credentials/action state while retaining private domain data.
+- Tests use the real encryption seed and synthetic data. The CI job is configured to run the snapshot suite; 37 checks passed locally on Windows Docker Desktop on 2026-09-07. Linux CI execution awaits a pushed PR.
+- Still outstanding in item 1: manifests for scheduled S3 backups, retention/monitoring, synthetic public demo seed, fresh local configuration/Compose parity, real production-archive rehearsal, and full API/Web/Worker recovery checks. A successful database restore alone does not complete item 1.
+- Added MIT license at the maintainer's request; third-party notices still need review before publication.
+- Scheduled tasks now request the API default model; two contract tests exercise different API-selected defaults without Worker configuration changes. Runtime provider discovery remains pending inside API.

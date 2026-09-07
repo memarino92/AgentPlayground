@@ -1,0 +1,22 @@
+-- Synthetic state only; no production values belong in this fixture.
+CREATE EXTENSION vector;
+CREATE SCHEMA agent_memory;
+CREATE SCHEMA transport;
+CREATE TABLE app.data_protection_keys (friendly_name text PRIMARY KEY, xml text NOT NULL);
+INSERT INTO app.data_protection_keys VALUES ('synthetic-key', 'synthetic-cookie-key');
+CREATE TABLE agent_memory.sessions (session_id uuid PRIMARY KEY, profile_id text, role_name text);
+INSERT INTO agent_memory.sessions VALUES ('11111111-1111-1111-1111-111111111111','synthetic-owner','Owner');
+CREATE TABLE agent_memory.transcript_messages (session_id uuid REFERENCES agent_memory.sessions, content text);
+INSERT INTO agent_memory.transcript_messages VALUES ('11111111-1111-1111-1111-111111111111','Synthetic garden note');
+CREATE TABLE agent_memory.memory_records (content text, embedding vector(3));
+INSERT INTO agent_memory.memory_records VALUES ('Synthetic garden note','[1,0,0]'),('Other note','[0,1,0]');
+CREATE TABLE agent_memory.coach_profile_assignments (coach_email text, subject_profile_id text);
+INSERT INTO agent_memory.coach_profile_assignments VALUES ('coach@example.test','synthetic-owner');
+CREATE TABLE agent_memory.mobile_device_tokens (push_token text);
+INSERT INTO agent_memory.mobile_device_tokens VALUES ('synthetic-device-token');
+CREATE TABLE agent_memory.agent_approvals (status text);
+INSERT INTO agent_memory.agent_approvals VALUES ('Pending');
+CREATE TABLE agent_memory.tool_role_permissions (role_name text, tool_key text, is_enabled boolean, updated_at timestamptz, updated_by text, PRIMARY KEY(role_name, tool_key));
+INSERT INTO agent_memory.tool_role_permissions VALUES ('Owner','Local:publish_mobile_notification',true,now(),'fixture');
+CREATE TABLE transport.pending_work (instruction text);
+INSERT INTO transport.pending_work VALUES ('Synthetic scheduled notification');

@@ -35,3 +35,13 @@ jobs:
         with:
           name: test-results
           path: '**/TestResults/*.trx'
+
+  database-snapshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Verify export and isolated restore with synthetic data
+        shell: pwsh
+        run: ./scripts/tests/Test-DatabaseSnapshots.ps1
