@@ -25,7 +25,7 @@ flowchart LR
 
 Web is the trusted authentication boundary for browser users. The API resolves actor/subject access and owns agent execution, persistence services, retrieval, model providers, and tool authorization. Worker owns background job delivery and domain processing. Contracts provide typed cross-service messages. PostgreSQL is both storage and messaging infrastructure, avoiding another broker for this deployment size.
 
-The intended AI gateway boundary is stronger than today's implementation: all AI vendor adapters, provider-specific configuration, SDKs, model selection policy, and error translation belong to the API project. Domain behavior should depend on capability interfaces and neutral DTOs. Worker still hosts AssemblyAI and hard-codes a chat model for scheduled tasks. See [0004](decisions/0004-agent-service-boundary.md).
+The intended AI gateway boundary is stronger than today's implementation: all AI vendor adapters, provider-specific configuration, SDKs, model selection policy, and error translation belong to the API project. Domain behavior should depend on capability interfaces and neutral DTOs. Worker still hosts AssemblyAI. Scheduled tasks now request the API default model; Web loads the current API catalog at chat initialization. See [0004](decisions/0004-agent-service-boundary.md).
 
 ## Current persistence and operations
 

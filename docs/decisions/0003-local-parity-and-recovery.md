@@ -1,6 +1,6 @@
 # 0003: Prove recovery locally before adding another hosted environment
 
-- Status: Proposed
+- Status: Accepted; snapshot/restore slice implemented
 - Recorded: 2026-09-07
 - Context: Maintainer request; predominantly single-user application with occasional family/coach access
 
@@ -18,4 +18,4 @@ Daily logical backups imply a potential loss window approaching the backup inter
 
 ## Delivery and verification
 
-The backup uploader exists; snapshot/import automation and a successful restore are **not yet demonstrated**. The [recovery runbook](../runbooks/database-recovery.md) defines the first deliverable, key custody, transport replay policy, and evidence required before calling recovery proven.
+The backup uploader exists. Export and guarded local restore helpers now support full recovery and a development state reset; see [snapshot commands](../runbooks/snapshot-commands.md). Synthetic restore tests verify checksums, vectors, encrypted settings, retained records, isolation, and failure guards. A real production backup and full application recovery are **not yet demonstrated**. The [recovery runbook](../runbooks/database-recovery.md) defines the first deliverable, key custody, transport replay policy, and evidence required before calling recovery proven.

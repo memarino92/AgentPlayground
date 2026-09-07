@@ -27,6 +27,11 @@ dotnet remove <Path> package <PackageName> # Remove package
 dotnet sln add <Path>                      # Add to solution
 ```
 
+## Git Conventions
+
+- Use project-focused branch names such as `digital-garden/database-recovery`; avoid generic assistant/tool prefixes.
+- Use Conventional Commits, for example `feat: add snapshot restore workflow`, `fix: enforce actor scope`, and `docs: record gateway decision`.
+
 ## Personal Tooling
 
 - Keep generic skills, assistant agents/plugins, and machine-specific LSP configuration in user directories. See `docs/runbooks/personal-tooling.md`.

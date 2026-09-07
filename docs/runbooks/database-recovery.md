@@ -1,6 +1,6 @@
 # Database snapshots, local imports, and recovery rehearsal
 
-Status: **design/runbook, not a completed recovery test**. The existing `infrastructure/backup/backup.sh` creates a PostgreSQL custom-format dump and uploads it to S3 on a loop (default 86400 seconds). The script exits on failure. Its presence does not prove the backup service is deployed, uploads are monitored, retention is configured, or any archive has been restored.
+Status: **database export/restore implemented and tested on synthetic data; full application DR still unproven**. Start with [snapshot commands](snapshot-commands.md). The existing `infrastructure/backup/backup.sh` creates a PostgreSQL custom-format dump and uploads it to S3 on a loop (default 86400 seconds). The script exits on failure. Its presence does not prove the backup service is deployed, uploads are monitored, retention is configured, or any archive has been restored.
 
 ## Two different outcomes
 
@@ -11,9 +11,9 @@ Status: **design/runbook, not a completed recovery test**. The existing `infrast
 
 A private local reproduction may retain sensitive content deliberately, but it is not a sanitized demo. Encrypt its storage, restrict access, and delete it when no longer needed. Pseudonymizing a profile ID does not sanitize journal text, audio, transcripts, embeddings, or OAuth tokens.
 
-## Snapshot contract to implement
+## Snapshot contract and remaining operations
 
-Provide a PowerShell export helper accepting a named source connection through a protected environment/credential mechanism and an output directory. Never print the connection string. Use matching PostgreSQL client tooling and custom format; stop on any nonzero exit. Write a manifest containing UTC start/end, source alias (no credentials), server/client/extension versions, application commit, archive size, SHA-256, and backup mode. Upload archive and manifest, verify upload, and alert on stale/missing backups. Set remote access controls, storage encryption, and lifecycle retention explicitly.
+The PowerShell export helper accepts a named source connection through an environment variable and an output directory. Never print the connection string. Use matching PostgreSQL client tooling and custom format; stop on any nonzero exit. Write a manifest containing UTC start/end, source alias (no credentials), server/client/extension versions, application commit, archive size, SHA-256, and backup mode. Upload archive and manifest, verify upload, and alert on stale/missing backups. Set remote access controls, storage encryption, and lifecycle retention explicitly.
 
 `pg_dump` obtains a consistent logical snapshot of a database while it is in use. Custom archives can be inspected and selectively restored. It does not include cluster-wide roles/tablespaces; capture the required role/grant provisioning separately. A logical dump is not point-in-time recovery. References: [PostgreSQL 18 pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html), [pg_restore](https://www.postgresql.org/docs/18/app-pgrestore.html).
 
