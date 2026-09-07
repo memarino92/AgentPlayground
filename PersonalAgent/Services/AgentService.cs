@@ -11,8 +11,11 @@ internal class AgentService(
     public Task<(string SessionId, string ModelId)> CreateSessionAsync(string profileId, string modelId) =>
         chatService.CreateSessionAsync(profileId, modelId);
 
-    public Task<(string SessionId, string ModelId)> CreateSessionAsync(AgentAccessContext access, string modelId) =>
-        chatService.CreateSessionAsync(access, modelId);
+    public Task<(string SessionId, string ModelId)> CreateSessionAsync(AgentAccessContext access, string modelId, CancellationToken cancellationToken = default) =>
+        chatService.CreateSessionAsync(access, modelId, cancellationToken);
+
+    public Task<(string SessionId, string ModelId)> CreateSessionAsync(AgentAccessContext access, AvailableChatModel selectedModel, CancellationToken cancellationToken = default) =>
+        chatService.CreateSessionAsync(access, selectedModel, cancellationToken);
 
     public Task<SessionSummaryPage> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize) =>
         chatService.GetSessionsAsync(profileId, beforeActivityAt, beforeSessionId, pageSize);

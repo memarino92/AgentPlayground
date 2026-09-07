@@ -1,0 +1,6 @@
+@baseUrl = http://localhost:5100
+@internalApiKey = {{ $processEnv INTERNAL_API_KEY }}
+
+### API-owned runtime catalog; obtain credentials from local configuration.
+GET {{baseUrl}}/api/models
+X-Internal-Api-Key: {{internalApiKey}}

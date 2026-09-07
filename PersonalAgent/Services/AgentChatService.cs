@@ -14,7 +14,7 @@ namespace PersonalAgent.Services;
 
 internal class AgentChatService
 {
-    private readonly ChatModelCatalog _chatModelCatalog;
+    private readonly IChatModelCatalog _chatModelCatalog;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _serviceProvider;
     private readonly IAgentSessionStore _sessionStore;
@@ -30,7 +30,7 @@ internal class AgentChatService
 
     public AgentChatService(
         IOptions<ApiKeyOptions> apiKeyOptions,
-        ChatModelCatalog chatModelCatalog,
+        IChatModelCatalog chatModelCatalog,
         ILoggerFactory loggerFactory,
         IServiceProvider serviceProvider,
         IAgentSessionStore sessionStore,
@@ -60,15 +60,22 @@ internal class AgentChatService
     public async Task<(string SessionId, string ModelId)> CreateSessionAsync(string profileId, string modelId)
         => await CreateSessionAsync(new AgentAccessContext(profileId, AgentRoles.Owner, profileId), modelId);
 
-    public async Task<(string SessionId, string ModelId)> CreateSessionAsync(AgentAccessContext access, string modelId)
+    public async Task<(string SessionId, string ModelId)> CreateSessionAsync(AgentAccessContext access, string modelId, CancellationToken cancellationToken = default)
     {
         ValidateAccess(access);
 
-        var selectedModel = _chatModelCatalog.FindModel(modelId)
+        var selectedModel = await _chatModelCatalog.FindModelAsync(modelId, cancellationToken)
             ?? throw new InvalidOperationException($"Chat model '{modelId}' is not available.");
+        return await CreateSessionAsync(access, selectedModel, cancellationToken);
+    }
+
+    // The endpoint passes the selection from its catalog snapshot, avoiding a second discovery after authorization.
+    public async Task<(string SessionId, string ModelId)> CreateSessionAsync(AgentAccessContext access, AvailableChatModel selectedModel, CancellationToken cancellationToken = default)
+    {
+        ValidateAccess(access);
         var sessionId = Guid.NewGuid();
         var sessionState = JsonSerializer.Serialize(new AgentSessionState(selectedModel.Id));
-        await _sessionStore.CreateSessionAsync(sessionId, access, sessionState);
+        await _sessionStore.CreateSessionAsync(sessionId, access, sessionState, cancellationToken);
         _logger.LogInformation(
             "Created session {SessionId} for actor {ActorId}, role {Role}, subject {SubjectProfileId} using model {ModelId}",
             sessionId,
@@ -136,7 +143,7 @@ internal class AgentChatService
                 return null;
             }
 
-            var sessionState = DeserializeSessionState(persistedSession.SessionStateJson);
+            var sessionState = await DeserializeSessionStateAsync(persistedSession.SessionStateJson, cancellationToken);
             var agent = await CreateSessionAgentAsync(sessionState.ModelId, access, cancellationToken);
             var session = await agent.CreateSessionAsync(cancellationToken);
             var transcript = await _sessionStore.GetSessionMessagesAsync(parsedSessionId) ?? [];
@@ -205,7 +212,7 @@ internal class AgentChatService
         var messages = await _sessionStore.GetSessionMessagesAsync(parsedSessionId);
         if (messages is null) return null;
 
-        var sessionState = DeserializeSessionState(persistedSession.SessionStateJson);
+        var sessionState = await DeserializeSessionStateAsync(persistedSession.SessionStateJson, cancellationToken);
         _logger.LogInformation("Loaded transcript containing {MessageCount} messages using model {ModelId}", messages.Count, sessionState.ModelId);
         return new SessionConversation(sessionId, sessionState.ModelId, messages);
     }
@@ -320,14 +327,15 @@ internal class AgentChatService
         if (string.IsNullOrWhiteSpace(access.SubjectProfileId)) throw new InvalidOperationException("Subject profile id is required.");
     }
 
-    private AgentSessionState DeserializeSessionState(string? sessionStateJson)
+    private async Task<AgentSessionState> DeserializeSessionStateAsync(string? sessionStateJson, CancellationToken cancellationToken)
     {
         var parsed = string.IsNullOrWhiteSpace(sessionStateJson)
             ? null
             : JsonSerializer.Deserialize<AgentSessionState>(sessionStateJson);
-        return _chatModelCatalog.FindModel(parsed?.ModelId) is { } selectedModel
-            ? new AgentSessionState(selectedModel.Id)
-            : new AgentSessionState(_chatModelCatalog.GetDefaultModel().Id);
+        // Inventory changes apply to new sessions. Never silently retarget an existing conversation.
+        return !string.IsNullOrWhiteSpace(parsed?.ModelId)
+            ? parsed
+            : new AgentSessionState((await _chatModelCatalog.GetDefaultModelAsync(cancellationToken)).Id);
     }
 
     private static string BuildMemoryPrompt(IEnumerable<string> recalledMemories) =>
