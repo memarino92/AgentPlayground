@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - 'digital-garden/**'
   workflow_dispatch:
 
 jobs:

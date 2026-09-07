@@ -40,10 +40,12 @@ try {
     $containerId = Invoke-SnapshotDocker -Arguments ($arguments + @($Image)) -Operation 'Create fresh restore target'
     if ($containerId -notmatch '^[0-9a-f]{64}$') { throw 'Docker did not return a container ID.' }
     $null = Invoke-SnapshotDocker -Arguments @('--host',$endpoint,'start',$containerId) -Operation 'Start restore target'
+    # The entrypoint initialization server accepts Unix sockets before restarting.
+    # TCP readiness waits for the final server, which listens beyond that temporary socket.
     $ready = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
         try {
-            $null = Invoke-SnapshotDocker -Arguments @('--host',$endpoint,'exec',$containerId,'pg_isready','-U','postgres','-d','garden') -Operation 'Wait for restore target'
+            $null = Invoke-SnapshotDocker -Arguments @('--host',$endpoint,'exec',$containerId,'pg_isready','--host','127.0.0.1','-U','postgres','-d','garden') -Operation 'Wait for restore target'
             $ready = $true
             break
         }
