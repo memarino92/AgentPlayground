@@ -22,7 +22,7 @@ internal class AgentTaskExecutionService(
             var sessionResponse = await SendAsOwnerAsync(client, profileId, "/api/sessions", new
             {
                 profileId,
-                modelId = "gpt-4o-mini"
+                modelId = (string?)null
             }, cancellationToken);
 
             if (!sessionResponse.IsSuccessStatusCode)
