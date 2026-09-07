@@ -31,6 +31,8 @@ dotnet sln add <Path>                      # Add to solution
 
 - Use project-focused branch names such as `digital-garden/database-recovery`; avoid generic assistant/tool prefixes.
 - Use Conventional Commits, for example `feat: add snapshot restore workflow`, `fix: enforce actor scope`, and `docs: record gateway decision`.
+- Use **Rebase and merge** and preserve individual, meaningful Conventional Commits in a linear history. Avoid merge commits and squash merges unless the maintainer explicitly requests an exception.
+- Prefer independent branches from updated `main`. When work depends on an unmerged PR, the agent owns restacking the remaining commits after each parent lands: replay only the child change onto the new parent, verify the resulting tree, and push with an explicit force-with-lease guard. Do not ask the maintainer to change merge strategy to accommodate a stack.
 
 ## Personal Tooling
 
