@@ -218,8 +218,6 @@ internal class AgentChatService
 
     private async Task<ChatClientAgent> CreateSessionAgentAsync(string modelId, AgentAccessContext access, CancellationToken cancellationToken)
     {
-        var publishTool = WrapTool(AIFunctionFactory.Create(_eventService.PublishGeneratedMessageToolAsync, "publish_generated_test_message",
-            "Publish a generated test message to the shared MassTransit bus."));
         var mobileNotifyTool = WrapTool(AIFunctionFactory.Create(
             (string title, string body, CancellationToken token) => _eventService.PublishMobileNotificationToolAsync(access.SubjectProfileId, title, body, token), "publish_mobile_notification",
             "Send a push notification event to a user's registered mobile device. Use this when the user asks to notify or ping their phone."));
@@ -240,7 +238,6 @@ internal class AgentChatService
             "Get the current date and time, optionally in a specific IANA or Windows timezone (e.g. 'America/Chicago' or 'Central Standard Time'). Call this before scheduling when the user specifies relative times like 'at noon today', '10 PM tomorrow', or 'next Monday'."));
         var candidates = new (string Key, AIFunction Tool)[]
         {
-            (AgentToolKeys.PublishGeneratedTestMessage, publishTool),
             (AgentToolKeys.PublishMobileNotification, mobileNotifyTool),
             (AgentToolKeys.SyncWorkJournal, syncJournalTool),
             (AgentToolKeys.SearchWorkJournal, searchJournalTool),
@@ -278,10 +275,6 @@ internal class AgentChatService
         var instructions = new StringBuilder(
             """
             You are a helpful personal assistant.
-            When asked to respond to a bus test event, you must call the publish_generated_test_message tool exactly once with a concise generated message describing that you received the event.
-            The tool arguments must include a valid correlationId GUID string copied from context.
-            This does not mean that you should respond to every user message with a bus event follow-up, only when you are specifically asked to generate a follow-up message for a bus event.
-
             When the user asks you to send a notification to their mobile device, call the publish_mobile_notification tool once with a short title and concise body text.
 
             When the user asks for a reminder later (for example "in 5 minutes" or "at 6pm"), call schedule_notification with title, body, and exactly one timing input.

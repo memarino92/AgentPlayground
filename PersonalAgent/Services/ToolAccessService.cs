@@ -6,7 +6,6 @@ internal sealed class ToolAccessService(IToolAccessStore store, ITavilyMcpToolPr
 {
     private static readonly AgentToolDescriptor[] LocalTools =
     [
-        new(AgentToolKeys.PublishGeneratedTestMessage, "publish_generated_test_message", "Publish test event", "Events", "Publish a generated test message to the shared bus.", true, true, false),
         new(AgentToolKeys.PublishMobileNotification, "publish_mobile_notification", "Send mobile notification", "Notifications", "Send a notification to the current user's registered device.", true, true, false),
         new(AgentToolKeys.SyncWorkJournal, "sync_work_journal", "Sync work journal", "Work journal", "Sync the private work journal from GitHub.", true, true, false),
         new(AgentToolKeys.SearchWorkJournal, "search_work_journal", "Search work journal", "Work journal", "Search the private work journal.", true, true, false),

@@ -10,6 +10,10 @@
 !.env.compose.example
 scripts/seed-configuration.values.ps1
 scripts/seed-configuration.generated.sql
+# Database snapshots contain private application data and encrypted credentials.
+*.dump
+*.backup
+/snapshots/
 
 # Firebase mobile/backend credentials
 google-services.json
@@ -495,3 +499,9 @@ $RECYCLE.BIN/
 
 # Agent build verifications
 /.artifacts/
+
+# Personal assistant tooling belongs in user configuration, not this repository.
+/.opencode/
+/.ocx/
+/opencode.json
+/opencode.jsonc

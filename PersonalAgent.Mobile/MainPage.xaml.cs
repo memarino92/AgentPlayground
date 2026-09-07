@@ -152,7 +152,7 @@ public partial class MainPage : ContentPage
 
         var profileEntry = new Entry
         {
-            Placeholder = "Profile id (e.g. memarino92)",
+            Placeholder = "Profile id (e.g. local-owner)",
             BackgroundColor = Colors.White,
             TextColor = Color.FromArgb("#0f172a")
         };

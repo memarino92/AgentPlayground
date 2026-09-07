@@ -1,9 +1,7 @@
 using FluentAssertions;
 using MassTransit;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Moq;
-using PersonalAgent.Configuration;
 using PersonalAgent.Services;
 using Xunit;
 
@@ -13,21 +11,9 @@ public class AgentEventServiceTests
 {
     private static AgentEventService CreateService()
     {
-        var apiKeyOptions = Options.Create(new ApiKeyOptions { OpenAiKey = "test-key" });
         var bus = new Mock<IBus>().Object;
-        var chatModelCatalog = new ChatModelCatalog(Options.Create(new ChatModelCatalogOptions
-        {
-            Models = [new ChatModelOption { Id = "gpt-4o-mini", DisplayName = "GPT-4o Mini", IsDefault = true }]
-        }));
-        var schedulingService = new SchedulingService(new Mock<IBus>().Object, NullLogger<SchedulingService>.Instance);
-        return new AgentEventService(
-            apiKeyOptions,
-            bus,
-            chatModelCatalog,
-            schedulingService,
-            NullLogger<AgentEventService>.Instance,
-            NullLoggerFactory.Instance,
-            new Mock<IServiceProvider>().Object);
+        var schedulingService = new SchedulingService(bus, NullLogger<SchedulingService>.Instance);
+        return new AgentEventService(bus, schedulingService, NullLogger<AgentEventService>.Instance);
     }
 
     [Fact]
