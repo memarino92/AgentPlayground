@@ -33,7 +33,6 @@ The Worker is now orchestration-only for journal sync and calls these model task
 
 This service uses MassTransit SQL transport and handles:
 
-- Event consumption (`TestEventRequested`).
 - Work journal request/response consumers:
   - `ParseWorkJournalEntriesRequest`
   - `GenerateEmbeddingsRequest`
@@ -76,12 +75,7 @@ For push notifications, set `PUSH_NOTIFICATIONS_ENABLED=true` and provide either
 
 ## Local Run
 
-```powershell
-pwsh -NoProfile -File .\scripts\start-postgres.ps1
-dotnet user-secrets set "OpenAI:ApiKey" "your-openai-key" --project .\PersonalAgent
-dotnet user-secrets set "Messaging:ConnectionString" "Host=localhost;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground" --project .\PersonalAgent
-dotnet run --project .\PersonalAgent
-```
+Use the shared [local development runbook](../docs/runbooks/local-development.md) for current database-backed configuration, required credentials, startup order, and OAuth callback URLs.
 
 ## Notes
 

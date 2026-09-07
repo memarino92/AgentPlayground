@@ -1,11 +1,9 @@
-using AgentPlayground.Contracts.Messaging.Events;
 using PersonalAgent.Models;
 
 namespace PersonalAgent.Services;
 
 internal class AgentService(
     AgentChatService chatService,
-    AgentEventService eventService,
     AgentApprovalService approvalService,
     SchedulingService schedulingService,
     CoachCheckinService coachCheckinService)
@@ -33,9 +31,6 @@ internal class AgentService(
 
     public Task<SessionConversation?> GetSessionMessagesAsync(string sessionId, AgentAccessContext access, CancellationToken cancellationToken = default) =>
         chatService.GetSessionMessagesAsync(sessionId, access, cancellationToken);
-
-    public Task GenerateAndPublishTestMessageAsync(TestEventRequested request, CancellationToken cancellationToken) =>
-        eventService.GenerateAndPublishTestMessageAsync(request, cancellationToken);
 
     public Task RegisterMobileDeviceTokenAsync(RegisterMobileDeviceTokenRequest request, CancellationToken cancellationToken = default) =>
         approvalService.RegisterMobileDeviceTokenAsync(request, cancellationToken);

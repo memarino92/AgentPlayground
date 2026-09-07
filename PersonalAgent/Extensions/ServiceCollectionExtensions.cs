@@ -127,12 +127,6 @@ internal static class ServiceCollectionExtensions
                 {
                     e.Name = "personal-agent-generate-embeddings";
                 });
-            x.AddConsumer<TestEventRequestedConsumer>()
-                .Endpoint(e =>
-                {
-                    e.Name = "personal-agent-test-event-requested";
-                    e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<TestEventRequested>(_ => { }));
-                });
             x.AddConsumer<DevicePushNotificationRequestedConsumer>(cfg =>
                 cfg.UseMessageRetry(retry => retry.Exponential(3, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(2))))
                 .Endpoint(e =>

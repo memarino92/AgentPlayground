@@ -4,7 +4,7 @@
 
 ```bash
 dotnet build                    # Build entire solution
-dotnet build --project <Path>   # Build specific project
+dotnet build <Path>             # Build specific project
 dotnet run --project <Path>     # Run specific project
 dotnet clean                    # Clean build artifacts
 dotnet restore                  # Restore packages
@@ -14,7 +14,7 @@ dotnet restore                  # Restore packages
 
 ```bash
 dotnet test                              # Run all tests
-dotnet test --project <Path>             # Run specific test project
+dotnet test <Path>                       # Run specific test project
 dotnet test --filter "FullyQualifiedName~TestMethodName"  # Run single test
 ```
 
@@ -26,6 +26,11 @@ dotnet add <Path> reference <RefPath>      # Add project reference
 dotnet remove <Path> package <PackageName> # Remove package
 dotnet sln add <Path>                      # Add to solution
 ```
+
+## Personal Tooling
+
+- Keep generic skills, assistant agents/plugins, and machine-specific LSP configuration in user directories. See `docs/runbooks/personal-tooling.md`.
+- Repository builds must not depend on a contributor installing personal assistant tooling.
 
 ## Code Style Guidelines
 
@@ -148,7 +153,15 @@ AgentPlayground/
 - `TreatWarningsAsErrors` is **enabled** - never add `<NoWarn>` without approval
 - Package versions are **centrally managed** in `Directory.Packages.props`
 - **.NET**: 10.0
-- **Framework**: Microsoft Agent Framework (RC 1.0)
+- **Framework**: Microsoft Agent Framework; pinned versions live in `Directory.Packages.props`.
+
+## Decisions and Plans
+
+- Read `docs/README.md` and relevant records in `docs/decisions/` before architectural changes.
+- Record significant decisions with context, alternatives, consequences, and source evidence. Use `docs/decisions/template.md`.
+- Distinguish accepted decisions from proposals and retrospective records; never present a plan as implemented.
+- Keep future work and acceptance criteria in `docs/plans/roadmap.md`; put operational procedures in `docs/runbooks/`.
+- Keep private data, credentials, snapshot files, and unredacted operational evidence out of documentation and Git.
 
 ## Messaging Notes
 

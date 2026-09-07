@@ -7,7 +7,6 @@
 - GitHub-authenticated owner UI and Google-authenticated coach transcript access.
 - Session list, session restore, and transcript browsing.
 - Model selection when creating a chat session.
-- Test-event publish action wired to the shared bus.
 - API access via `PersonalAgentClient` with internal API key header forwarding.
 
 ## Runtime Model
@@ -67,17 +66,7 @@ seeding, delete the populated values and generated SQL files. Keep `DATABASE_URL
 
 ## Local Run
 
-```powershell
-dotnet user-secrets set "PersonalAgentApi:BaseUrl" "http://localhost:5100" --project .\PersonalAgent.Web
-dotnet user-secrets set "PersonalAgentApi:InternalApiKey" "your-internal-api-key" --project .\PersonalAgent.Web
-dotnet user-secrets set "PersonalAgentApi:ActorSigningKey" "a-long-random-signing-key" --project .\PersonalAgent.Web
-dotnet user-secrets set "Authentication:Schemes:GitHub:ClientId" "your-github-client-id" --project .\PersonalAgent.Web
-dotnet user-secrets set "Authentication:Schemes:GitHub:ClientSecret" "your-github-client-secret" --project .\PersonalAgent.Web
-dotnet user-secrets set "Authentication:Schemes:Google:ClientId" "your-google-client-id" --project .\PersonalAgent.Web
-dotnet user-secrets set "Authentication:Schemes:Google:ClientSecret" "your-google-client-secret" --project .\PersonalAgent.Web
-dotnet user-secrets set "Authentication:Schemes:Google:AllowedEmails" "coach@example.com" --project .\PersonalAgent.Web
-dotnet run --project .\PersonalAgent.Web
-```
+Use the shared [local development runbook](../docs/runbooks/local-development.md) for current database-backed configuration, required credentials, startup order, and OAuth callback URLs.
 
 ## Coach Access
 

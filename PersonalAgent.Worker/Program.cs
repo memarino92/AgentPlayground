@@ -72,18 +72,6 @@ builder.Services.AddMassTransit(x =>
     if (workJournalSyncEnabled)
         x.AddRequestClient<ParseWorkJournalEntriesRequest>();
 
-    x.AddConsumer<TestEventRequestedConsumer>()
-        .Endpoint(e =>
-        {
-            e.Name = "personal-agent-worker-test-event-requested";
-            e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<TestEventRequested>(_ => { }));
-        });
-    x.AddConsumer<AgentGeneratedTestMessageConsumer>()
-        .Endpoint(e =>
-        {
-            e.Name = "personal-agent-worker-agent-generated-test-message";
-            e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<AgentGeneratedTestMessage>(_ => { }));
-        });
     x.AddConsumer<AgentTaskSchedulerConsumer>(cfg =>
         cfg.UseMessageRetry(retry => retry.Exponential(3, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1))))
         .Endpoint(e =>
