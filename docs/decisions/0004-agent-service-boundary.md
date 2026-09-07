@@ -1,6 +1,6 @@
 # 0004: Centralize agent providers and use a single tool registry
 
-- Status: Accepted direction; implementation pending
+- Status: Accepted direction; runtime model catalog implemented, provider/tool migrations pending
 - Recorded: 2026-09-07
 - Evidence: `AgentChatService`, `ToolAccessService`, `AssemblyAiTranscriptionService`, journal request/response consumers
 
@@ -31,4 +31,6 @@ Provider-independent does not mean every model produces interchangeable embeddin
 Provider replacement acceptance test: exercise the same domain contract against two API adapters (one may be a deterministic fake), with no changes to clients, worker logic, or wire DTOs. Document any capability mismatch explicitly; do not hide a breaking domain change as a provider swap.
 ## Runtime model catalog
 
-The maintainer confirmed on 2026-09-07 that chat clients should retrieve available models from our API at runtime. The Web app already calls `GET /api/models`; currently the API catalog is built once from startup configuration. Keep the catalog contract owned by API, with opaque IDs, labels, and a default. The API may derive entries from local/database policy or provider discovery; clients must not call vendor model-list endpoints or hard-code vendor defaults. Provider-derived catalogs need chat-capability filtering, caching, timeout/fallback behavior, and policy validation before being offered to users. Do not expose every provider model as if it supports the same chat/tools contract.
+The maintainer confirmed on 2026-09-07 that chat clients should retrieve available models from our API at runtime. The Web app calls `GET /api/models`. The API now refreshes provider availability through an API-local adapter, intersecting it with reviewed chat/tool policy. Labels and policy still load from configuration at startup. Keep the catalog contract owned by API, with opaque IDs, labels, and a default. The API may derive entries from local/database policy or provider discovery; clients must not call vendor model-list endpoints or hard-code vendor defaults. Provider-derived catalogs need chat-capability filtering, caching, timeout/fallback behavior, and policy validation before being offered to users. Do not expose every provider model as if it supports the same chat/tools contract.
+
+Implemented in the runtime-model-catalog change: cached OpenAI inventory, timeout/fallback, a single default, new-session validation, and stable model identity for saved conversations. See [behavior and limitations](../runbooks/runtime-chat-models.md). This completes model discovery only; the transcription adapter and shared tool registry remain pending.

@@ -17,7 +17,7 @@ The Worker is now orchestration-only for journal sync and calls these model task
 ## API Endpoints
 
 - `GET /` health/status.
-- `GET /api/models` available chat models.
+- `GET /api/models` available chat models from a cached provider inventory and API-owned policy; see [runtime model behavior](../docs/runbooks/runtime-chat-models.md).
 - `POST /api/sessions` create a session.
 - `GET /api/sessions` list sessions (cursor paging).
 - `POST /api/sessions/{sessionId}/messages` send message.

@@ -424,6 +424,72 @@ public class PersonalAgentEndpointsTests
         result.Should().Contain("body is required");
     }
 
+    [Fact]
+    public async Task RuntimeCatalog_ChangesNewSessions_AndPreservesStoredModel()
+    {
+        var clock = new CatalogTestClock();
+        var source = new Mock<IChatModelDiscovery>();
+        source.SetupSequence(Source => Source.GetModelIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["model-a"])
+            .ReturnsAsync(["model-b"]);
+        using var catalog = new ChatModelCatalog(Options.Create(new ChatModelCatalogOptions
+        {
+            Models = [new() { Id = "model-a", DisplayName = "First model", IsDefault = true }, new() { Id = "model-b", DisplayName = "Second model" }]
+        }), source.Object, clock, NullLogger<ChatModelCatalog>.Instance);
+        await using var app = await BuildAppAsync(modelCatalog: catalog);
+        var client = app.GetTestClient();
+        var firstResponse = await client.PostAsJsonAsync("/api/sessions", new { profileId = "test-user" });
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var first = await ReadJsonAsync(firstResponse);
+        first.GetProperty("modelId").GetString().Should().Be("model-a");
+        var sessionId = first.GetProperty("sessionId").GetString();
+
+        clock.Now = clock.Now.AddMinutes(5);
+        var modelsResponse = await client.GetAsync("/api/models");
+        modelsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var models = (await ReadJsonAsync(modelsResponse)).GetProperty("models");
+        models.GetArrayLength().Should().Be(1);
+        models[0].GetProperty("id").GetString().Should().Be("model-b");
+        models[0].GetProperty("displayName").GetString().Should().Be("Second model");
+        models[0].GetProperty("isDefault").GetBoolean().Should().BeTrue();
+
+        var secondResponse = await client.PostAsJsonAsync("/api/sessions", new { profileId = "test-user" });
+        secondResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ReadJsonAsync(secondResponse)).GetProperty("modelId").GetString().Should().Be("model-b");
+        var unavailable = await client.PostAsJsonAsync("/api/sessions", new { profileId = "test-user", modelId = "model-a" });
+        unavailable.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var transcript = await client.GetAsync($"/api/sessions/{sessionId}/messages?profileId=test-user");
+        transcript.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ReadJsonAsync(transcript)).GetProperty("modelId").GetString().Should().Be("model-a");
+        source.Verify(Source => Source.GetModelIdsAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task EmptyCatalog_ReturnsEmptyList_AndServiceUnavailableForNewSession()
+    {
+        var source = new Mock<IChatModelDiscovery>();
+        source.Setup(Source => Source.GetModelIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        using var catalog = new ChatModelCatalog(Options.Create(new ChatModelCatalogOptions()), source.Object,
+            TimeProvider.System, NullLogger<ChatModelCatalog>.Instance);
+        await using var app = await BuildAppAsync(modelCatalog: catalog);
+        var client = app.GetTestClient();
+
+        var list = await client.GetAsync("/api/models");
+        list.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ReadJsonAsync(list)).GetProperty("models").GetArrayLength().Should().Be(0);
+        var create = await client.PostAsJsonAsync("/api/sessions", new { profileId = "test-user" });
+        create.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        create.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        (await ReadJsonAsync(create)).GetProperty("title").GetString().Should().Be("No chat models are available");
+    }
+
+    private sealed class CatalogTestClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = DateTimeOffset.Parse("2026-09-07T00:00:00Z");
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response)
     {
         var content = await response.Content.ReadAsStringAsync();
@@ -431,7 +497,7 @@ public class PersonalAgentEndpointsTests
         return doc.RootElement.Clone();
     }
 
-    private static async Task<WebApplication> BuildAppAsync(string? internalApiKey = null, bool addSignedActor = true)
+    private static async Task<WebApplication> BuildAppAsync(string? internalApiKey = null, bool addSignedActor = true, IChatModelCatalog? modelCatalog = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -461,6 +527,7 @@ public class PersonalAgentEndpointsTests
 
         builder.Services.AddSingleton<IOptions<ChatModelCatalogOptions>>(Options.Create(new ChatModelCatalogOptions
         {
+            DiscoverFromProvider = false,
             Models = [new ChatModelOption { Id = "gpt-4o-mini", DisplayName = "GPT-4o mini", IsDefault = true }]
         }));
         builder.Services.AddSingleton<IOptions<CoachCheckinOptions>>(Options.Create(new CoachCheckinOptions()));
@@ -474,7 +541,7 @@ public class PersonalAgentEndpointsTests
             ConnectionString = "Host=localhost;Database=test;Username=postgres;Password=postgres"
         }));
 
-        builder.Services.AddSingleton(ChatModelCatalogFactory);
+        builder.Services.AddSingleton<IChatModelCatalog>(sp => modelCatalog ?? ChatModelCatalogFactory(sp));
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
         builder.Services.AddSingleton<IAgentSemanticMemoryStore>(sp => (InMemoryAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         builder.Services.AddSingleton<IAgentApprovalStore>(sp => (InMemoryAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
@@ -547,7 +614,7 @@ public class PersonalAgentEndpointsTests
     }
 
     private static ChatModelCatalog ChatModelCatalogFactory(IServiceProvider sp) =>
-        new(sp.GetRequiredService<IOptions<ChatModelCatalogOptions>>());
+        new(sp.GetRequiredService<IOptions<ChatModelCatalogOptions>>(), Mock.Of<IChatModelDiscovery>(), TimeProvider.System, NullLogger<ChatModelCatalog>.Instance);
 
     private sealed class TestEmbeddingService : IAgentEmbeddingService
     {

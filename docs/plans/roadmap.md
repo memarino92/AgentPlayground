@@ -10,7 +10,7 @@ Recorded 2026-09-07. Ordered for a predominantly single-maintainer application. 
 
 **Done when:** a fresh checkout can start all server services using documented local setup; a production-format backup is restored into an isolated target; scoped chat, config decryption, vector search, and controlled background work pass; measured recovery time and actual backup age are recorded. See [recovery runbook](../runbooks/database-recovery.md).
 
-## 2. AI gateway and consistent tool interface — accepted direction, implementation pending
+## 2. AI gateway and consistent tool interface — runtime catalog implemented
 
 **Observed:** journal parsing and embeddings already cross typed bus contracts to API, but AssemblyAI adapter/options live in Worker, `AgentTaskExecutionService` previously selected `gpt-4o-mini` (now delegates the default to API), and journal schema assumes 1536-dimensional vectors. Tool metadata is duplicated between chat and access services.
 
@@ -72,7 +72,12 @@ Introduce a versioned evaluation set for retrieval relevance, grounded answers, 
 
 - Added `export-database-snapshot.ps1` and `restore-database-snapshot.ps1` with a shared module and development state-reset SQL. See [usage](../runbooks/snapshot-commands.md).
 - Full archives include checksum/version manifests; restore can only create a new local Docker target. Recovery mode has no network; development mode binds loopback and clears runtime credentials/action state while retaining private domain data.
-- Tests use the real encryption seed and synthetic data. The CI job is configured to run the snapshot suite; 37 checks passed locally on Windows Docker Desktop on 2026-09-07. Linux CI execution awaits a pushed PR.
+- Tests use the real encryption seed and synthetic data. The CI job is configured to run the snapshot suite; 37 checks passed locally on Windows Docker Desktop on 2026-09-07. Linux CI also passes in PR #34 after fixing readiness to wait for the final PostgreSQL TCP listener.
 - Still outstanding in item 1: manifests for scheduled S3 backups, retention/monitoring, synthetic public demo seed, fresh local configuration/Compose parity, real production-archive rehearsal, and full API/Web/Worker recovery checks. A successful database restore alone does not complete item 1.
 - Added MIT license at the maintainer's request; third-party notices still need review before publication.
-- Scheduled tasks now request the API default model; two contract tests exercise different API-selected defaults without Worker configuration changes. Runtime provider discovery remains pending inside API.
+- Scheduled tasks now request the API default model; two contract tests exercise different API-selected defaults without Worker configuration changes. The API now refreshes provider inventory at runtime, filtered through reviewed chat/tool policy. See [catalog behavior](../runbooks/runtime-chat-models.md); transcription migration and registry consolidation remain pending.
+## Implementation progress: runtime model catalog
+
+- API-local discovery and catalog interfaces separate provider inventory from application selection policy. OpenAI is the current adapter; clients keep the existing contract.
+- Cached refresh, timeout/backoff, fallback, authoritative empty inventories, and a single default are covered by tests. Journal parsing resolves the default per job; saved conversations retain their chosen model.
+- Reviewed policy still loads at startup; this is runtime provider availability, not automatic adoption of unreviewed models or live database configuration reload.

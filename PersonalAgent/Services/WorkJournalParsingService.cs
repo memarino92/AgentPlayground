@@ -9,19 +9,19 @@ namespace PersonalAgent.Services;
 
 internal class WorkJournalParsingService
 {
-    private readonly ChatClient _chatClient;
+    private readonly OpenAIClient _openAiClient;
+    private readonly IChatModelCatalog _chatModelCatalog;
     private readonly ILogger<WorkJournalParsingService> _logger;
 
     public WorkJournalParsingService(
         IOptions<ApiKeyOptions> apiKeyOptions,
-        ChatModelCatalog chatModelCatalog,
+        IChatModelCatalog chatModelCatalog,
         ILogger<WorkJournalParsingService> logger)
     {
         var apiKey = apiKeyOptions.Value.OpenAiKey;
-        var modelId = chatModelCatalog.GetDefaultModel().Id;
-        _chatClient = new OpenAIClient(apiKey).GetChatClient(modelId);
+        _openAiClient = new OpenAIClient(apiKey);
+        _chatModelCatalog = chatModelCatalog;
         _logger = logger;
-        _logger.LogInformation("Initialized work journal parsing service with model {ModelId}", modelId);
     }
 
     public async Task<List<ParsedWorkJournalEntry>> ParseEntriesAsync(string fileName, string fileContent, CancellationToken cancellationToken = default)
@@ -52,7 +52,9 @@ internal class WorkJournalParsingService
         {{fileContent}}
         """;
 
-        var response = await _chatClient.CompleteChatAsync(
+        var model = await _chatModelCatalog.GetDefaultModelAsync(cancellationToken);
+        _logger.LogInformation("Parsing work journal with model {ModelId}", model.Id);
+        var response = await _openAiClient.GetChatClient(model.Id).CompleteChatAsync(
             [new UserChatMessage(prompt)],
             new ChatCompletionOptions { ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() },
             cancellationToken);

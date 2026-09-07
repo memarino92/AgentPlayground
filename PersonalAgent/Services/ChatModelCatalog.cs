@@ -1,41 +1,95 @@
 using Microsoft.Extensions.Options;
+
 using PersonalAgent.Configuration;
 using PersonalAgent.Models;
 
 namespace PersonalAgent.Services;
 
-internal class ChatModelCatalog(IOptions<ChatModelCatalogOptions> options)
+internal sealed class ChatModelCatalog(
+    IOptions<ChatModelCatalogOptions> Options,
+    IChatModelDiscovery Discovery,
+    TimeProvider TimeProvider,
+    ILogger<ChatModelCatalog> Logger) : IChatModelCatalog, IDisposable
 {
-    private readonly List<AvailableChatModel> _models = BuildModels(options.Value.Models);
+    private readonly ChatModelCatalogOptions _options = Options.Value;
+    private readonly IReadOnlyList<AvailableChatModel> _configuredModels = BuildModels(Options.Value.Models);
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private CatalogSnapshot? _snapshot;
 
-    public IReadOnlyList<AvailableChatModel> GetModels() => _models;
-
-    public AvailableChatModel GetDefaultModel() => _models.First(model => model.IsDefault);
-
-    public AvailableChatModel? FindModel(string? modelId)
+    public async Task<IReadOnlyList<AvailableChatModel>> GetModelsAsync(CancellationToken CancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(modelId)) return GetDefaultModel();
-        return _models.FirstOrDefault(model => string.Equals(model.Id, modelId.Trim(), StringComparison.OrdinalIgnoreCase));
+        CancellationToken.ThrowIfCancellationRequested();
+        if (!_options.DiscoverFromProvider) return _configuredModels;
+        var snapshot = Volatile.Read(ref _snapshot);
+        if (snapshot is not null && TimeProvider.GetUtcNow() < snapshot.RefreshAfter) return snapshot.Models;
+
+        await _refreshLock.WaitAsync(CancellationToken);
+        try
+        {
+            snapshot = _snapshot;
+            if (snapshot is not null && TimeProvider.GetUtcNow() < snapshot.RefreshAfter) return snapshot.Models;
+
+            IReadOnlyList<AvailableChatModel> models;
+            var refreshSeconds = _options.RefreshIntervalSeconds;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(_options.DiscoveryTimeoutSeconds));
+            try
+            {
+                var ids = await Discovery.GetModelIdsAsync(timeout.Token).WaitAsync(timeout.Token);
+                var availableIds = ids.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                models = NormalizeDefault(_configuredModels.Where(Model => availableIds.Contains(Model.Id)).ToArray());
+                Logger.LogInformation("Refreshed chat catalog: {ModelCount} configured models available", models.Count);
+                if (models.Count is 0) Logger.LogWarning("Provider inventory contains no configured chat models");
+            }
+            catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception exception)
+            {
+                // Provider exceptions may include response bodies. Log the type, not private provider details.
+                models = snapshot?.Models ?? _configuredModels;
+                refreshSeconds = _options.FailureRetrySeconds;
+                Logger.LogWarning("Chat model discovery failed ({ErrorType}); retaining {ModelCount} fallback models",
+                    exception.GetType().Name, models.Count);
+            }
+
+            snapshot = new CatalogSnapshot(models, TimeProvider.GetUtcNow().AddSeconds(refreshSeconds));
+            Volatile.Write(ref _snapshot, snapshot);
+            return snapshot.Models;
+        }
+        finally { _refreshLock.Release(); }
     }
 
-    private static List<AvailableChatModel> BuildModels(IEnumerable<ChatModelOption> configuredModels)
+    public async Task<AvailableChatModel> GetDefaultModelAsync(CancellationToken CancellationToken = default) =>
+        await FindModelAsync(null, CancellationToken)
+            ?? throw new InvalidOperationException("No chat models are available.");
+
+    public async Task<AvailableChatModel?> FindModelAsync(string? ModelId, CancellationToken CancellationToken = default)
     {
-        var models = configuredModels
-            .Where(model => !string.IsNullOrWhiteSpace(model.Id))
-            .Select(model => new AvailableChatModel(
-                model.Id.Trim(),
-                string.IsNullOrWhiteSpace(model.DisplayName) ? model.Id.Trim() : model.DisplayName.Trim(),
-                model.IsDefault))
-            .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (models.Count is 0)
-            return [new AvailableChatModel("gpt-4o-mini", "GPT-4o mini", true)];
-
-        if (models.Any(model => model.IsDefault)) return models;
-
-        var firstModel = models[0];
-        models[0] = firstModel with { IsDefault = true };
-        return models;
+        var models = await GetModelsAsync(CancellationToken);
+        return string.IsNullOrWhiteSpace(ModelId)
+            ? models.FirstOrDefault(Model => Model.IsDefault)
+            : models.FirstOrDefault(Model => string.Equals(Model.Id, ModelId.Trim(), StringComparison.OrdinalIgnoreCase));
     }
+
+    private static IReadOnlyList<AvailableChatModel> BuildModels(IEnumerable<ChatModelOption> ConfiguredModels)
+    {
+        var models = ConfiguredModels
+            .Where(Model => !string.IsNullOrWhiteSpace(Model.Id))
+            .Select(Model => new AvailableChatModel(Model.Id.Trim(),
+                string.IsNullOrWhiteSpace(Model.DisplayName) ? Model.Id.Trim() : Model.DisplayName.Trim(), Model.IsDefault))
+            .DistinctBy(Model => Model.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (models.Length is 0) models = [new AvailableChatModel("gpt-4o-mini", "GPT-4o mini", true)];
+        return NormalizeDefault(models);
+    }
+
+    private static IReadOnlyList<AvailableChatModel> NormalizeDefault(AvailableChatModel[] Models)
+    {
+        var defaultIndex = Array.FindIndex(Models, Model => Model.IsDefault);
+        if (defaultIndex < 0) defaultIndex = 0;
+        return Array.AsReadOnly(Models.Select((Model, Index) => Model with { IsDefault = Index == defaultIndex }).ToArray());
+    }
+
+    public void Dispose() => _refreshLock.Dispose();
+
+    private sealed record CatalogSnapshot(IReadOnlyList<AvailableChatModel> Models, DateTimeOffset RefreshAfter);
 }

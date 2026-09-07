@@ -25,26 +25,32 @@ internal static class PersonalAgentEndpoints
 
         apiGroup.AddEndpointFilter(new InternalApiKeyFilter(apiKeyOptions));
 
-        apiGroup.MapGet("/models", (ChatModelCatalog chatModelCatalog) =>
+        apiGroup.MapGet("/models", async (IChatModelCatalog chatModelCatalog, CancellationToken cancellationToken) =>
         {
-            var models = chatModelCatalog.GetModels();
+            var models = await chatModelCatalog.GetModelsAsync(cancellationToken);
             logger.LogInformation("Returning {ModelCount} chat models", models.Count);
-            return Results.Ok(new { models });
-        });
+            return TypedResults.Ok(new ChatModelsResponse(models));
+        }).WithName("GetChatModels")
+            .WithSummary("Get available chat models")
+            .WithDescription("Returns API-approved chat models from a cached provider inventory, with fallback during discovery failures.");
 
-        apiGroup.MapPost("/sessions", async (HttpContext httpContext, CreateSessionRequest request, AgentService agentService, ChatModelCatalog chatModelCatalog, ICoachAssignmentStore assignmentStore) =>
+        apiGroup.MapPost("/sessions", async (HttpContext httpContext, CreateSessionRequest request, AgentService agentService, IChatModelCatalog chatModelCatalog, ICoachAssignmentStore assignmentStore, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.ProfileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
 
-            var selectedModel = chatModelCatalog.FindModel(request.ModelId);
+            var models = await chatModelCatalog.GetModelsAsync(cancellationToken);
+            if (models.Count is 0) return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "No chat models are available");
+            var selectedModel = string.IsNullOrWhiteSpace(request.ModelId)
+                ? models.First(Model => Model.IsDefault)
+                : models.FirstOrDefault(Model => string.Equals(Model.Id, request.ModelId.Trim(), StringComparison.OrdinalIgnoreCase));
             if (selectedModel is null)
                 return Results.BadRequest(new { error = $"Model '{request.ModelId}' is not available" });
 
             var access = await ResolveAccessAsync(httpContext, request.ProfileId, assignmentStore);
             if (access is null) return Results.Forbid();
             logger.LogInformation("Creating session for actor {ActorId}, role {Role}, subject {ProfileId} using model {ModelId}", access.ActorId, access.Role, access.SubjectProfileId, selectedModel.Id);
-            var created = await agentService.CreateSessionAsync(access, selectedModel.Id);
+            var created = await agentService.CreateSessionAsync(access, selectedModel, cancellationToken);
             return Results.Ok(new { sessionId = created.SessionId, modelId = created.ModelId, message = "Session created successfully" });
         }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
