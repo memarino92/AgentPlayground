@@ -8,7 +8,8 @@ internal record AgentToolDescriptor(
     string Description,
     bool IsAvailable,
     bool OwnerDefault,
-    bool CoachDefault);
+    bool CoachDefault,
+    bool HasSideEffects = false);
 
 internal record ToolRolePermission(string Role, string ToolKey, bool IsEnabled);
 

@@ -12,7 +12,7 @@ public class ToolAccessServiceTests
     [Fact]
     public async Task IsAllowedAsync_UsesRestrictedCoachDefaults()
     {
-        var service = new ToolAccessService(new TestStore(), new TestTavilyProvider());
+        var service = new ToolAccessService(new TestStore(), new AgentToolRegistry(new TestTavilyProvider()));
 
         var checkinsAllowed = await service.IsAllowedAsync(AgentRoles.Coach, AgentToolKeys.SearchCoachCheckins);
         var journalAllowed = await service.IsAllowedAsync(AgentRoles.Coach, AgentToolKeys.SearchWorkJournal);
@@ -28,7 +28,7 @@ public class ToolAccessServiceTests
         {
             Permissions = new Dictionary<string, bool> { [AgentToolKeys.SearchCoachCheckins] = false }
         };
-        var service = new ToolAccessService(store, new TestTavilyProvider());
+        var service = new ToolAccessService(store, new AgentToolRegistry(new TestTavilyProvider()));
 
         var allowed = await service.IsAllowedAsync(AgentRoles.Coach, AgentToolKeys.SearchCoachCheckins);
 
@@ -38,7 +38,7 @@ public class ToolAccessServiceTests
     [Fact]
     public async Task IsAllowedAsync_DeniesNewMcpToolByDefault()
     {
-        var service = new ToolAccessService(new TestStore(), new TestTavilyProvider([new StubFunction("search")]));
+        var service = new ToolAccessService(new TestStore(), new AgentToolRegistry(new TestTavilyProvider([new StubFunction("search")])));
 
         var allowed = await service.IsAllowedAsync(AgentRoles.Owner, AgentToolKeys.Tavily("search"));
 

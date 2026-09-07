@@ -1,6 +1,6 @@
 # 0004: Centralize agent providers and use a single tool registry
 
-- Status: Accepted direction; runtime model catalog implemented, provider/tool migrations pending
+- Status: Accepted direction; runtime model catalog and tool registry implemented; transcription migration pending
 - Recorded: 2026-09-07
 - Evidence: `AgentChatService`, `ToolAccessService`, `AssemblyAiTranscriptionService`, journal request/response consumers
 
@@ -20,7 +20,7 @@ The API service becomes a larger availability boundary; background work needs du
 
 ## Delivery and verification
 
-Neither migration is implemented by this record. First add registry parity tests, then demonstrate a provider stub completing a persisted transcription job after an API restart without duplicate submission. Existing role restrictions, speaker-review behavior, and data ownership must remain intact.
+The tool registry migration is implemented with catalog/function parity, server-bound subject, and execution-time revocation tests. Transcription still needs a provider stub completing a persisted job after an API restart without duplicate submission. Existing role restrictions, speaker-review behavior, and data ownership must remain intact.
 
 ## Provider independence contract
 
@@ -33,4 +33,8 @@ Provider replacement acceptance test: exercise the same domain contract against 
 
 The maintainer confirmed on 2026-09-07 that chat clients should retrieve available models from our API at runtime. The Web app calls `GET /api/models`. The API now refreshes provider availability through an API-local adapter, intersecting it with reviewed chat/tool policy. Labels and policy still load from configuration at startup. Keep the catalog contract owned by API, with opaque IDs, labels, and a default. The API may derive entries from local/database policy or provider discovery; clients must not call vendor model-list endpoints or hard-code vendor defaults. Provider-derived catalogs need chat-capability filtering, caching, timeout/fallback behavior, and policy validation before being offered to users. Do not expose every provider model as if it supports the same chat/tools contract.
 
-Implemented in the runtime-model-catalog change: cached OpenAI inventory, timeout/fallback, a single default, new-session validation, and stable model identity for saved conversations. See [behavior and limitations](../runbooks/runtime-chat-models.md). This completes model discovery only; the transcription adapter and shared tool registry remain pending.
+Implemented in the runtime-model-catalog change: cached OpenAI inventory, timeout/fallback, a single default, new-session validation, and stable model identity for saved conversations. See [behavior and limitations](../runbooks/runtime-chat-models.md). This completes model discovery; the transcription adapter migration remains pending.
+
+## Tool registry implementation
+
+AgentToolRegistry now declares local tool metadata and handler factories together and adapts discovered MCP functions into the same registrations. ToolAccessService derives the permission catalog and AgentToolBinder supplies authorized context-bound functions. Stable keys and role defaults are preserved; existing logging/authorization runs again at invocation. Duplicate keys/names are rejected. See [adding tools](../runbooks/adding-agent-tools.md) for the contribution interface and side-effect metadata limits.

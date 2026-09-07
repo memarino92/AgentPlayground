@@ -39,6 +39,6 @@ The intended AI gateway boundary is stronger than today's implementation: all AI
 
 ## Areas to improve deliberately
 
-`AgentChatService` constructs functions while `ToolAccessService` separately declares the catalog. Consolidate those definitions before adding more tools. The transcription consumer mixes orchestration, provider calls, and SQL state changes; split through domain-facing interfaces as the provider moves. Split the large endpoint map by capability when changing those endpoints, preserving the security filters and route tests.
+`AgentToolRegistry` now declares tool metadata and factories once; the permission catalog and context-bound agent functions share those definitions. Follow the [tool registration guide](runbooks/adding-agent-tools.md) when adding capabilities. The transcription consumer mixes orchestration, provider calls, and SQL state changes; split through domain-facing interfaces as the provider moves. Split the large endpoint map by capability when changing those endpoints, preserving the security filters and route tests.
 
 Do not rename every project or move all infrastructure in one pass. Root Dockerfiles are actively used by Compose/Railway scripts. Keep the small shared PostgreSQL deployment until operational evidence calls for more infrastructure.

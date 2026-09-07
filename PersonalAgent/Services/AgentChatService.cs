@@ -20,11 +20,7 @@ internal class AgentChatService
     private readonly IAgentSessionStore _sessionStore;
     private readonly SemanticMemoryService _semanticMemoryService;
     private readonly OpenAIClient _openAiClient;
-    private readonly AgentEventService _eventService;
-    private readonly WorkJournalService _workJournalService;
-    private readonly CoachCheckinService _coachCheckinService;
-    private readonly ITavilyMcpToolProvider _tavilyMcpToolProvider;
-    private readonly ToolAccessService _toolAccessService;
+    private readonly AgentToolBinder _toolBinder;
     private readonly ILogger<AgentChatService> _logger;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
 
@@ -35,11 +31,7 @@ internal class AgentChatService
         IServiceProvider serviceProvider,
         IAgentSessionStore sessionStore,
         SemanticMemoryService semanticMemoryService,
-        AgentEventService eventService,
-        WorkJournalService workJournalService,
-        CoachCheckinService coachCheckinService,
-        ITavilyMcpToolProvider tavilyMcpToolProvider,
-        ToolAccessService toolAccessService,
+        AgentToolBinder toolBinder,
         ILogger<AgentChatService> logger)
     {
         var apiKey = apiKeyOptions.Value.OpenAiKey;
@@ -49,11 +41,7 @@ internal class AgentChatService
         _serviceProvider = serviceProvider;
         _sessionStore = sessionStore;
         _semanticMemoryService = semanticMemoryService;
-        _eventService = eventService;
-        _workJournalService = workJournalService;
-        _coachCheckinService = coachCheckinService;
-        _tavilyMcpToolProvider = tavilyMcpToolProvider;
-        _toolAccessService = toolAccessService;
+        _toolBinder = toolBinder;
         _logger = logger;
     }
 
@@ -165,13 +153,12 @@ internal class AgentChatService
             var citedUrlCount = CountUrls(responseText);
 
             _logger.LogInformation(
-                "Processed message for model {ModelId}; recalledMemories={RecalledMemories}; persisted={WasSaved}; responseLength={ResponseLength}; citedUrlCount={CitedUrlCount}; tavilyAvailable={TavilyAvailable}",
+                "Processed message for model {ModelId}; recalledMemories={RecalledMemories}; persisted={WasSaved}; responseLength={ResponseLength}; citedUrlCount={CitedUrlCount}",
                 sessionState.ModelId,
                 recalledMemories.Count,
                 wasSaved,
                 responseText.Length,
-                citedUrlCount,
-                _tavilyMcpToolProvider.IsAvailable);
+                citedUrlCount);
 
             if (wasSaved)
                 await _semanticMemoryService.StoreConversationMemoriesAsync(parsedSessionId, persistedSession.EffectiveMemoryProfileId, message, responseText, cancellationToken);
@@ -225,59 +212,10 @@ internal class AgentChatService
 
     private async Task<ChatClientAgent> CreateSessionAgentAsync(string modelId, AgentAccessContext access, CancellationToken cancellationToken)
     {
-        var mobileNotifyTool = WrapTool(AIFunctionFactory.Create(
-            (string title, string body, CancellationToken token) => _eventService.PublishMobileNotificationToolAsync(access.SubjectProfileId, title, body, token), "publish_mobile_notification",
-            "Send a push notification event to a user's registered mobile device. Use this when the user asks to notify or ping their phone."));
-        var syncJournalTool = WrapTool(AIFunctionFactory.Create(_workJournalService.SyncWorkJournalAsync, "sync_work_journal",
-            "Trigger a background process to sync the work journal from GitHub. This syncs markdown files and prepares them for semantic search."));
-        var searchJournalTool = WrapTool(AIFunctionFactory.Create(_workJournalService.SearchWorkJournalAsync, "search_work_journal",
-            "Search the work journal for answers to user questions using RAG (Retrieval-Augmented Generation). Use this tool whenever the user asks about past work, journal entries, or questions like 'when did I work on...' or 'who did I help'."));
-        var searchCoachCheckinsTool = WrapTool(AIFunctionFactory.Create(
-            (string query, string? exerciseTag, CancellationToken token) => _coachCheckinService.SearchCoachCheckinsAsync(query, access.SubjectProfileId, exerciseTag, token), "search_coach_checkins",
-            "Search transcribed coach check-ins for exercise cues, notes, and attributed coaching advice. Provide a query and optionally an exerciseTag like squat or bench."));
-        var scheduleNotificationTool = WrapTool(AIFunctionFactory.Create(
-            (string title, string body, string? delay, string? executeAt, string? when, string? timeZoneId, CancellationToken token) => _eventService.ScheduleNotificationToolAsync(access.SubjectProfileId, title, body, delay, executeAt, when, timeZoneId, token), "schedule_notification",
-            "Schedule a mobile notification using delay, absolute executeAt datetime, or natural when text like 'tonight'."));
-        var scheduleAgentTaskTool = WrapTool(AIFunctionFactory.Create(
-            (string instruction, string? delay, string? executeAt, string? when, string? timeZoneId, bool notifyOnCompletion, CancellationToken token) => _eventService.ScheduleAgentTaskToolAsync(access.SubjectProfileId, instruction, delay, executeAt, when, timeZoneId, notifyOnCompletion, token), "schedule_agent_task",
-            "Schedule a future agent task. Required: instruction and exactly one timing field (delay, executeAt, or when)."));
-        var getCurrentDateTimeTool = WrapTool(AIFunctionFactory.Create(_eventService.GetCurrentDateTimeToolAsync, "get_current_date_time",
-            "Get the current date and time, optionally in a specific IANA or Windows timezone (e.g. 'America/Chicago' or 'Central Standard Time'). Call this before scheduling when the user specifies relative times like 'at noon today', '10 PM tomorrow', or 'next Monday'."));
-        var candidates = new (string Key, AIFunction Tool)[]
-        {
-            (AgentToolKeys.PublishMobileNotification, mobileNotifyTool),
-            (AgentToolKeys.SyncWorkJournal, syncJournalTool),
-            (AgentToolKeys.SearchWorkJournal, searchJournalTool),
-            (AgentToolKeys.SearchCoachCheckins, searchCoachCheckinsTool),
-            (AgentToolKeys.ScheduleNotification, scheduleNotificationTool),
-            (AgentToolKeys.ScheduleAgentTask, scheduleAgentTaskTool),
-            (AgentToolKeys.GetCurrentDateTime, getCurrentDateTimeTool)
-        };
-        var tools = new List<AIFunction>();
-        foreach (var candidate in candidates)
-            if (await _toolAccessService.IsAllowedAsync(access.Role, candidate.Key, cancellationToken))
-                tools.Add(WrapAuthorizedTool(candidate.Tool, "Local", candidate.Key, access));
-
-        var webTools = new List<AIFunction>();
-        foreach (var webTool in _tavilyMcpToolProvider.GetTools())
-        {
-            var key = AgentToolKeys.Tavily(webTool.Name);
-            if (!await _toolAccessService.IsAllowedAsync(access.Role, key, cancellationToken)) continue;
-            var wrapped = WrapAuthorizedTool(webTool, "TavilyMcp", key, access);
-            webTools.Add(wrapped);
-            tools.Add(wrapped);
-        }
-
-        _logger.LogInformation(
-            "Creating agent for model {ModelId}; tavilyAvailable={TavilyAvailable}; tavilyStatus={TavilyStatus}; tavilyToolCount={TavilyToolCount}; totalToolCount={TotalToolCount}",
-            modelId,
-            _tavilyMcpToolProvider.IsAvailable,
-            _tavilyMcpToolProvider.Status,
-            webTools.Count,
-            tools.Count);
-
-        if (webTools.Count > 0)
-            _logger.LogDebug("Tavily tools for model {ModelId}: {ToolNames}", modelId, string.Join(",", webTools.Select(tool => tool.Name)));
+        var tools = await _toolBinder.BindAsync(access, cancellationToken);
+        var webToolCount = tools.Count(Tool => Tool.Source == "TavilyMcp");
+        _logger.LogInformation("Creating agent for model {ModelId} with {ToolCount} authorized tools, including {WebToolCount} web tools",
+            modelId, tools.Count, webToolCount);
 
         var instructions = new StringBuilder(
             """
@@ -296,7 +234,7 @@ internal class AgentChatService
             When the user asks about strongman coaching calls, cues by exercise, or prior check-in guidance, use search_coach_checkins. Athlete scope is applied by the server.
             """);
 
-        if (webTools.Count > 0)
+        if (webToolCount > 0)
             instructions.AppendLine("Use available Tavily web tools for current events, external facts, and documentation lookups. When you use web tools, include source URLs in your response.");
         else
             instructions.AppendLine("Web search is currently unavailable; answer without web tools and acknowledge limits for current events when needed.");
@@ -310,15 +248,10 @@ internal class AgentChatService
                 instructions: instructions.ToString(),
                 name: "PersonalAgent",
                 description: "Personal agent that can publish follow-up messages to the shared event bus and query the user's work journal.",
-                tools: [.. tools],
+                tools: [.. tools.Select(Tool => Tool.Function)],
                 loggerFactory: _loggerFactory,
                 services: _serviceProvider);
     }
-
-    private static AIFunction WrapTool(AIFunction tool) => tool;
-
-    private AIFunction WrapAuthorizedTool(AIFunction tool, string source, string toolKey, AgentAccessContext access) =>
-        new LoggingAIFunction(tool, _logger, source, toolKey, access, _toolAccessService);
 
     private static void ValidateAccess(AgentAccessContext access)
     {
