@@ -18,6 +18,7 @@ internal static class ServiceCollectionExtensions
         var securityOptions = BuildSecurityOptions(configuration);
 
         services.AddMessagingOptions(configuration);
+        services.AddTranscription(configuration);
         services.AddAgentMemoryOptions(configuration);
         services.AddOptions<SqlTransportOptions>()
             .Configure<IOptions<MessagingOptions>>((sqlOptions, messagingOptions) =>
@@ -124,6 +125,8 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<AgentService>();
         services.AddMassTransit(x =>
         {
+            x.AddConsumer<TranscriptionRequestConsumer>()
+                .Endpoint(e => e.Name = "personal-agent-transcription");
             x.AddConsumer<ParseWorkJournalEntriesRequestConsumer>(cfg =>
                 cfg.UseMessageRetry(retry => retry.Exponential(3, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1))))
                 .Endpoint(e =>

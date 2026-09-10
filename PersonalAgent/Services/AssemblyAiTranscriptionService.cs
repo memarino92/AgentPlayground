@@ -1,30 +1,28 @@
 using Microsoft.Extensions.Options;
-using PersonalAgent.Worker.Configuration;
-using PersonalAgent.Worker.Models;
+using PersonalAgent.Configuration;
+using AgentPlayground.Contracts.Messaging.Responses;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-namespace PersonalAgent.Worker.Services;
+namespace PersonalAgent.Services;
 
-internal class AssemblyAiTranscriptionService(IHttpClientFactory httpClientFactory, IOptions<AssemblyAiOptions> options) : ITranscriptionService
+internal class AssemblyAiTranscriptionService(IHttpClientFactory httpClientFactory, IOptions<AssemblyAiOptions> options) : ITranscriptionProvider
 {
     private readonly AssemblyAiOptions _options = options.Value;
 
-    public async Task<List<TranscribedUtterance>> TranscribeAsync(byte[] audioBytes, string fileName, string mimeType, CancellationToken cancellationToken = default)
+    public async Task<string> SubmitAsync(byte[] Audio, string MimeType, CancellationToken CancellationToken)
     {
-        var client = httpClientFactory.CreateClient("AssemblyAi");
-
-        var uploadUrl = await UploadAudioAsync(client, audioBytes, mimeType, cancellationToken);
-        var transcriptId = await SubmitTranscriptionAsync(client, uploadUrl, cancellationToken);
-        return await PollResultAsync(client, transcriptId, cancellationToken);
+        var Client = httpClientFactory.CreateClient("AssemblyAi");
+        var UploadUrl = await UploadAudioAsync(Client, Audio, MimeType, CancellationToken);
+        return await SubmitTranscriptionAsync(Client, UploadUrl, CancellationToken);
     }
 
     private async Task<string> UploadAudioAsync(HttpClient client, byte[] audioBytes, string mimeType, CancellationToken cancellationToken)
     {
         using var content = new ByteArrayContent(audioBytes);
         content.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(mimeType) ? "audio/m4a" : mimeType);
-        var response = await client.PostAsync("upload", content, cancellationToken);
+        using var response = await client.PostAsync("upload", content, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var payload = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -43,7 +41,7 @@ internal class AssemblyAiTranscriptionService(IHttpClientFactory httpClientFacto
             speaker_labels = true
         });
         using var content = new StringContent(body, Encoding.UTF8, "application/json");
-        var response = await client.PostAsync("transcript", content, cancellationToken);
+        using var response = await client.PostAsync("transcript", content, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var payload = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -53,48 +51,27 @@ internal class AssemblyAiTranscriptionService(IHttpClientFactory httpClientFacto
         return idElement.GetString() ?? throw new InvalidOperationException("AssemblyAI transcript id was null.");
     }
 
-    private async Task<List<TranscribedUtterance>> PollResultAsync(HttpClient client, string transcriptId, CancellationToken cancellationToken)
+    public async Task<TranscriptionResponse> GetResultAsync(Guid JobId, string ProviderJobId, CancellationToken CancellationToken)
     {
-        var timeout = TimeSpan.FromMinutes(_options.TranscriptionTimeoutMinutes);
-        var startedAt = DateTimeOffset.UtcNow;
-
-        while (true)
+        var Client = httpClientFactory.CreateClient("AssemblyAi");
+        using var Response = await Client.GetAsync($"transcript/{Uri.EscapeDataString(ProviderJobId)}", CancellationToken);
+        Response.EnsureSuccessStatusCode();
+        using var Document = JsonDocument.Parse(await Response.Content.ReadAsStringAsync(CancellationToken));
+        return Document.RootElement.GetProperty("status").GetString() switch
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var response = await client.GetAsync($"transcript/{transcriptId}", cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-            using var document = JsonDocument.Parse(payload);
-            var status = document.RootElement.GetProperty("status").GetString();
-
-            switch (status)
-            {
-                case "completed":
-                    return ParseUtterances(document.RootElement);
-                case "error":
-                {
-                    var error = document.RootElement.TryGetProperty("error", out var errorElement)
-                        ? errorElement.GetString()
-                        : "Unknown transcription error";
-                    throw new InvalidOperationException($"AssemblyAI transcription failed: {error}");
-                }
-            }
-
-            if (DateTimeOffset.UtcNow - startedAt > timeout)
-                throw new TimeoutException($"AssemblyAI transcription timed out after {timeout.TotalMinutes} minutes.");
-
-            await Task.Delay(TimeSpan.FromSeconds(_options.PollIntervalSeconds), cancellationToken);
-        }
+            "completed" => new(JobId, TranscriptionStatus.Completed, ParseUtterances(Document.RootElement)),
+            "error" => new(JobId, TranscriptionStatus.Failed, [], "Transcription failed."),
+            "queued" or "processing" => new(JobId, TranscriptionStatus.Pending, [], RetryAfterSeconds: _options.PollIntervalSeconds),
+            _ => throw new InvalidOperationException("Unrecognized transcription status.")
+        };
     }
 
-    private static List<TranscribedUtterance> ParseUtterances(JsonElement root)
+    private static List<TranscriptSegment> ParseUtterances(JsonElement root)
     {
         if (!root.TryGetProperty("utterances", out var utterancesElement) || utterancesElement.ValueKind != JsonValueKind.Array)
             return [];
 
-        var utterances = new List<TranscribedUtterance>();
+        var utterances = new List<TranscriptSegment>();
         foreach (var element in utterancesElement.EnumerateArray())
         {
             var speakerLabel = ParseSpeaker(element.TryGetProperty("speaker", out var speakerElement) ? speakerElement.GetString() : null);
@@ -102,7 +79,7 @@ internal class AssemblyAiTranscriptionService(IHttpClientFactory httpClientFacto
             var endMs = element.TryGetProperty("end", out var endElement) ? endElement.GetInt32() : startMs;
             var text = element.TryGetProperty("text", out var textElement) ? textElement.GetString() ?? string.Empty : string.Empty;
             var confidence = element.TryGetProperty("confidence", out var confidenceElement) ? confidenceElement.GetDouble() : 0.0;
-            utterances.Add(new TranscribedUtterance(speakerLabel, "unknown", startMs, endMs, text, confidence));
+            utterances.Add(new TranscriptSegment(speakerLabel, startMs, endMs, text, confidence));
         }
 
         return utterances;

@@ -49,7 +49,7 @@ This is the current manual setup, not an automated fresh-clone demo. Use local c
 
 ## Legacy configuration and Compose
 
-If both bootstrap variables are absent, apps retain appsettings/environment bindings and development user secrets. Startup still requires the internal and actor-signing keys, Web OAuth settings/allowlists, and Worker transcription settings. An OpenAI key and database string alone are not a complete setup after RBAC.
+If both bootstrap variables are absent, apps retain appsettings/environment bindings and development user secrets. Startup still requires the internal and actor-signing keys, Web OAuth settings/allowlists, and API transcription settings. An OpenAI key and database string alone are not a complete setup after RBAC.
 
 `docker-compose.yml` and `.env.compose.example` remain useful infrastructure references, but the example omits newer required settings including actor signing and AssemblyAI. Compose also has an unconditional Firebase file mount and a startup sleep. Treat full-stack one-command startup as pending roadmap work; this review did not run it or silently delete its data volume.
 
@@ -61,3 +61,5 @@ If both bootstrap variables are absent, apps retain appsettings/environment bind
 - Root `Dockerfile.personalagent-api`, `Dockerfile.personalagent-web`, `Dockerfile.personalagent-worker`: canonical service builds.
 
 A full database snapshot is not a public demo fixture. Build a synthetic seed covering owner/coach assignments, tool overrides, sessions, and speaker review to let contributors reproduce the product without private data.
+
+For existing installations, follow the [transcription configuration rollout](transcription-gateway.md) before starting the refactored API.

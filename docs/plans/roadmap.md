@@ -12,7 +12,7 @@ Recorded 2026-09-07. Ordered for a predominantly single-maintainer application. 
 
 ## 2. AI gateway and consistent tool interface — catalog and registry implemented
 
-**Observed:** journal parsing and embeddings already cross typed bus contracts to API, but AssemblyAI adapter/options live in Worker, `AgentTaskExecutionService` previously selected `gpt-4o-mini` (now delegates the default to API), and journal schema assumes 1536-dimensional vectors. Tool metadata was duplicated between chat and access services; the shared registry now removes that duplication.
+**Observed:** journal parsing and embeddings already cross typed bus contracts to API, AssemblyAI adapter/options now live in API, `AgentTaskExecutionService` previously selected `gpt-4o-mini` (now delegates the default to API), and journal schema assumes 1536-dimensional vectors. Tool metadata was duplicated between chat and access services; the shared registry now removes that duplication.
 
 **Deliver in slices:**
 
@@ -75,7 +75,7 @@ Introduce a versioned evaluation set for retrieval relevance, grounded answers, 
 - Tests use the real encryption seed and synthetic data. The CI job is configured to run the snapshot suite; 37 checks passed locally on Windows Docker Desktop on 2026-09-07. Linux CI also passes in PR #34 after fixing readiness to wait for the final PostgreSQL TCP listener.
 - Still outstanding in item 1: manifests for scheduled S3 backups, retention/monitoring, synthetic public demo seed, fresh local configuration/Compose parity, real production-archive rehearsal, and full API/Web/Worker recovery checks. A successful database restore alone does not complete item 1.
 - Added MIT license at the maintainer's request; third-party notices still need review before publication.
-- Scheduled tasks now request the API default model; two contract tests exercise different API-selected defaults without Worker configuration changes. The API now refreshes provider inventory at runtime, filtered through reviewed chat/tool policy. See [catalog behavior](../runbooks/runtime-chat-models.md); the transcription migration remains pending.
+- Scheduled tasks now request the API default model; two contract tests exercise different API-selected defaults without Worker configuration changes. The API now refreshes provider inventory at runtime, filtered through reviewed chat/tool policy. See [catalog behavior](../runbooks/runtime-chat-models.md); the transcription adapter migration is now implemented.
 ## Implementation progress: runtime model catalog
 
 - API-local discovery and catalog interfaces separate provider inventory from application selection policy. OpenAI is the current adapter; clients keep the existing contract.
@@ -88,3 +88,11 @@ Introduce a versioned evaluation set for retrieval relevance, grounded answers, 
 - Authorization and availability are checked at binding and again at execution. Context-bound factories omit profile/actor/role from the model's argument schema. Descriptive side-effect metadata does not imply automatic approval enforcement.
 - Eight registry tests cover all local bindings, catalog/function parity, Coach restrictions, separate subjects, forged profile arguments, revoked permissions, unavailable MCP integrations, duplicate names/keys, and invalid context. See [adding tools](../runbooks/adding-agent-tools.md).
 - This completes slice 5 of item 2. Provider migration, durable transcription jobs, embedding-space ownership, and scheduled actor propagation remain outstanding.
+## Implementation progress: transcription gateway
+
+- Moved AssemblyAI adapter, configuration, HTTP client and provider mapping into API. Worker uses upload-reference request/response contracts and retains speaker attribution and domain processing.
+- API persists the provider job ID, absolute deadline and terminal result; concurrent submission and replay share one job. Ambiguous submissions require review instead of automatic resubmission.
+- Added provider mapping, Worker contract and PostgreSQL restart/replay, ownership, concurrency and timeout tests. See [rollout and operational limits](../runbooks/transcription-gateway.md).
+- Still outstanding: transactional domain completion/outbox, automated ambiguous-job reconciliation, true process-kill/end-to-end transport recovery evidence, and embedding-space migration. Do not mark the broader durable-workflow item complete based on this adapter move.
+- Local validation: API and Worker builds passed without warnings; 63 API non-database tests, 9 Worker non-database tests and 13 Contracts tests passed. Five new PostgreSQL job tests compiled but could not execute because Docker's engine did not respond, including after starting Docker Desktop. Database recovery behavior remains unverified locally until those tests run.
+- Added a transactional AssemblyAI configuration migration using the existing crypto implementation, with conflict detection and optional source retention. The Api-scoped production key was populated and verified against the retained Worker copy on 2026-09-10; services were not redeployed. Six migration-plan tests cover re-encryption, wrong keys, conflicts, flags and replay.
