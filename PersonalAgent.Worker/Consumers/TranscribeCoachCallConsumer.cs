@@ -33,11 +33,20 @@ internal class TranscribeCoachCallConsumer(
                 logger.LogWarning("Upload {UploadId} not found for profile {ProfileId}", message.UploadId, message.ProfileId);
                 return;
             }
-
-            await UpdateUploadStatusAsync(connection, staged.UploadId, "Transcribing", null, context.CancellationToken);
+            await using (var claim = connection.CreateCommand())
+            {
+                claim.CommandText = $"UPDATE {CoachCallUploadsTable} SET status = 'Transcribing', updated_at = now() WHERE upload_id = @id AND profile_id = @profile AND status IN ('Uploaded', 'Queued', 'Transcribing')";
+                claim.Parameters.AddWithValue("id", staged.UploadId);
+                claim.Parameters.AddWithValue("profile", staged.ProfileId);
+                if (await claim.ExecuteNonQueryAsync(context.CancellationToken) == 0) return;
+            }
             var utterances = await transcriptionService.TranscribeAsync(staged.UploadId, staged.ProfileId, context.CancellationToken);
             if (utterances.Count is 0)
-                throw new InvalidOperationException("Transcription completed without utterances.");
+                throw new TranscriptionFailedException("Transcription completed without utterances.");
+
+            await using var transaction = await connection.BeginTransactionAsync(context.CancellationToken);
+            staged = await GetUploadAsync(connection, message.UploadId, message.ProfileId, context.CancellationToken, true);
+            if (staged is null) return;
 
             await PersistUtterancesAsync(connection, staged.SessionId, utterances, context.CancellationToken);
             await UpdateSessionTranscriptAsync(connection, staged.SessionId, utterances, context.CancellationToken);
@@ -47,9 +56,9 @@ internal class TranscribeCoachCallConsumer(
             if (requiresOverride)
                 logger.LogInformation("Upload {UploadId} awaiting speaker override before processing", staged.UploadId);
             else
-                await context.Publish(new ProcessCoachTranscriptCommand(staged.UploadId, staged.SessionId, staged.ProfileId, staged.CorrelationId), context.CancellationToken);
+                await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new ProcessCoachTranscriptCommand(staged.UploadId, staged.SessionId, staged.ProfileId, staged.CorrelationId), context.CancellationToken);
 
-            await context.Publish(
+            await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema,
                 new CoachCallTranscriptionCompletedEvent(
                     staged.UploadId,
                     staged.SessionId,
@@ -58,33 +67,35 @@ internal class TranscribeCoachCallConsumer(
                     utterances.Count,
                     DateTimeOffset.UtcNow),
                 context.CancellationToken);
+            await transaction.CommitAsync(context.CancellationToken);
         }
-        catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested) { throw; }
-        catch (RequestException) { throw; }
+        catch (TranscriptionFailedException ex)
+        {
+            await using var connection = await OpenConnectionAsync(context.CancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(context.CancellationToken);
+            var staged = await GetUploadAsync(connection, message.UploadId, message.ProfileId, context.CancellationToken, true);
+            if (staged is null) return;
+            await UpdateUploadStatusAsync(connection, staged.UploadId, "Failed", ex.Message, context.CancellationToken);
+            await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema,
+                new CoachCallProcessingFailedEvent(staged.UploadId, staged.SessionId, staged.ProfileId, staged.CorrelationId, "transcription", ex.Message, DateTimeOffset.UtcNow), context.CancellationToken);
+            await transaction.CommitAsync(context.CancellationToken);
+        }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Coach call transcription failed for upload {UploadId}", message.UploadId);
-            await PublishFailureAsync(context, message, ex, "transcription");
+            logger.LogError(ex, "Coach call transcription interrupted for upload {UploadId}; delivery can retry", message.UploadId);
+            throw;
         }
     }
 
-    private async Task PublishFailureAsync(ConsumeContext<TranscribeCoachCallCommand> context, TranscribeCoachCallCommand message, Exception ex, string stage)
-    {
-        await using var connection = await OpenConnectionAsync(context.CancellationToken);
-        await UpdateUploadStatusAsync(connection, message.UploadId, "Failed", ex.Message, context.CancellationToken);
-        await context.Publish(
-            new CoachCallProcessingFailedEvent(message.UploadId, null, message.ProfileId, message.CorrelationId, stage, ex.Message, DateTimeOffset.UtcNow),
-            context.CancellationToken);
-    }
-
-    private async Task<StagedCoachUpload?> GetUploadAsync(NpgsqlConnection connection, Guid uploadId, string profileId, CancellationToken cancellationToken)
+    private async Task<StagedCoachUpload?> GetUploadAsync(NpgsqlConnection connection, Guid uploadId, string profileId, CancellationToken cancellationToken, bool lockUpload = false)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT upload_id, session_id, profile_id, correlation_id, status
             FROM {CoachCallUploadsTable}
             WHERE upload_id = @uploadId
-              AND profile_id = @profileId;
+              AND profile_id = @profileId
+            {(lockUpload ? "FOR UPDATE" : "")};
             """;
         command.Parameters.AddWithValue("uploadId", uploadId);
         command.Parameters.AddWithValue("profileId", profileId);
