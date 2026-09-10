@@ -1,4 +1,5 @@
 using AgentPlayground.Contracts.Commands;
+using AgentPlayground.Contracts.Hosting;
 using AgentPlayground.Contracts.Configuration;
 using AgentPlayground.Contracts.Messaging;
 using AgentPlayground.Contracts.Messaging.Events;
@@ -11,6 +12,7 @@ using PersonalAgent.Worker.Consumers;
 using PersonalAgent.Worker.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
+var syntheticDemo = SyntheticEnvironment.IsEnabled(builder.Configuration, builder.Environment);
 builder.Configuration.AddPostgresConfiguration("Worker");
 
 builder.Services.AddHttpClient("GitHubWorkJournal", client =>
@@ -29,12 +31,12 @@ builder.Services.AddHttpClient("PersonalAgentApi", (sp, client) =>
         client.DefaultRequestHeaders.Add("X-Internal-Api-Key", options.InternalApiKey);
 });
 builder.Services.AddSingleton<IAgentTaskExecutionService, AgentTaskExecutionService>();
-builder.Services.AddSingleton<ITranscriptionService, ApiTranscriptionService>();
+builder.Services.AddScoped<ITranscriptionService, ApiTranscriptionService>();
 builder.Services.AddScoped<CoachTranscriptProcessingService>();
 builder.Services.AddHostedService<CoachCallCleanupService>();
 
 var workJournalConfigValidation = WorkerExtensions.ValidateWorkJournalSyncConfiguration(builder.Configuration);
-var workJournalSyncEnabled = workJournalConfigValidation.IsValid;
+var workJournalSyncEnabled = !syntheticDemo && workJournalConfigValidation.IsValid;
 
 if (workJournalSyncEnabled)
 {

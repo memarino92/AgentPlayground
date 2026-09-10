@@ -48,7 +48,7 @@ internal static class PersonalAgentEndpoints
                 return Results.BadRequest(new { error = $"Model '{request.ModelId}' is not available" });
 
             var access = await ResolveAccessAsync(httpContext, request.ProfileId, assignmentStore);
-            if (access is null) return Results.Forbid();
+            if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
             logger.LogInformation("Creating session for actor {ActorId}, role {Role}, subject {ProfileId} using model {ModelId}", access.ActorId, access.Role, access.SubjectProfileId, selectedModel.Id);
             var created = await agentService.CreateSessionAsync(access, selectedModel, cancellationToken);
             return Results.Ok(new { sessionId = created.SessionId, modelId = created.ModelId, message = "Session created successfully" });
@@ -69,7 +69,7 @@ internal static class PersonalAgentEndpoints
                 beforeActivityAt,
                 beforeSessionId);
             var access = await ResolveAccessAsync(httpContext, profileId, assignmentStore);
-            if (access is null) return Results.Forbid();
+            if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
             var page = await agentService.GetSessionsAsync(access, beforeActivityAt, beforeSessionId, pageSize ?? 20);
             return Results.Ok(page);
         }).AddEndpointFilter(new SignedActorFilter(securityOptions));
@@ -89,7 +89,7 @@ internal static class PersonalAgentEndpoints
                 request.ProfileId,
                 request.Message.Length);
             var access = await ResolveAccessAsync(httpContext, request.ProfileId, assignmentStore);
-            if (access is null) return Results.Forbid();
+            if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
             var response = await agentService.SendMessageAsync(sessionId, access, request.Message, httpContext.RequestAborted);
             return response is not null
                 ? Results.Ok(new { sessionId, response })
@@ -103,7 +103,7 @@ internal static class PersonalAgentEndpoints
 
             logger.LogInformation("Loading transcript for session {SessionId} and profile {ProfileId}", sessionId, profileId);
             var access = await ResolveAccessAsync(httpContext, profileId, assignmentStore);
-            if (access is null) return Results.Forbid();
+            if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
             var conversation = await agentService.GetSessionMessagesAsync(sessionId, access);
             return conversation is not null
                 ? Results.Ok(new { sessionId = conversation.SessionId, modelId = conversation.ModelId, messages = conversation.Messages })
@@ -222,7 +222,7 @@ internal static class PersonalAgentEndpoints
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
             if (!string.Equals(SignedActorFilter.Get(request.HttpContext).ActorId, profileId, StringComparison.OrdinalIgnoreCase))
-                return Results.Forbid();
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
 
             var file = form.Files.GetFile("file");
             if (file is null)
@@ -258,7 +258,7 @@ internal static class PersonalAgentEndpoints
         {
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
-            if (await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null) return Results.Forbid();
+            if (await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
 
             var status = await agentService.GetCoachCheckinStatusAsync(uploadId, profileId);
             return status is null
@@ -279,7 +279,7 @@ internal static class PersonalAgentEndpoints
         {
             if (string.IsNullOrWhiteSpace(profileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
-            if (await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null) return Results.Forbid();
+            if (await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
 
             var summary = await agentService.GetCoachCheckinSummaryAsync(uploadId, profileId);
             return summary is null
@@ -299,7 +299,7 @@ internal static class PersonalAgentEndpoints
             var actor = SignedActorFilter.Get(httpContext);
             if (actor.Role == AgentRoles.Coach
                 && (string.IsNullOrWhiteSpace(profileId) || await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null))
-                return Results.Forbid();
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
             var transcript = string.IsNullOrWhiteSpace(profileId)
                 ? await agentService.GetCoachCheckinTranscriptAsync(uploadId)
                 : await agentService.GetCoachCheckinTranscriptAsync(uploadId, profileId);
@@ -330,7 +330,7 @@ internal static class PersonalAgentEndpoints
             var actor = SignedActorFilter.Get(httpContext);
             if (actor.Role == AgentRoles.Coach
                 && (string.IsNullOrWhiteSpace(profileId) || await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null))
-                return Results.Forbid();
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
             var transcript = string.IsNullOrWhiteSpace(profileId)
                 ? await agentService.GetCoachCheckinTranscriptAsync(uploadId)
                 : await agentService.GetCoachCheckinTranscriptAsync(uploadId, profileId);
@@ -351,7 +351,7 @@ internal static class PersonalAgentEndpoints
                 return Results.BadRequest(new { error = "At least one speaker override is required" });
             if (request.Overrides.Any(ovr => string.IsNullOrWhiteSpace(ovr.Role)))
                 return Results.BadRequest(new { error = "Each override role is required" });
-            if (!string.Equals(SignedActorFilter.Get(httpContext).ActorId, request.ProfileId, StringComparison.OrdinalIgnoreCase)) return Results.Forbid();
+            if (!string.Equals(SignedActorFilter.Get(httpContext).ActorId, request.ProfileId, StringComparison.OrdinalIgnoreCase)) return Results.StatusCode(StatusCodes.Status403Forbidden);
 
             await agentService.ApplyCoachSpeakerOverridesAsync(uploadId, request.ProfileId, request.Overrides);
             return Results.Ok(new { message = "Speaker overrides applied. Processing restarted." });
@@ -386,7 +386,7 @@ internal static class PersonalAgentEndpoints
         apiGroup.MapGet("/coach-checkins", async (HttpContext httpContext, string profileId, int? limit, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
             if (string.IsNullOrWhiteSpace(profileId)) return Results.BadRequest(new { error = "ProfileId is required" });
-            if (await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null) return Results.Forbid();
+            if (await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
             var items = await agentService.GetCoachCheckinItemsAsync(profileId, limit ?? 100);
             return Results.Ok(items.Select(item => new
             {
@@ -426,13 +426,13 @@ internal static class PersonalAgentEndpoints
         apiGroup.MapGet("/coach-assignments", async (HttpContext httpContext, ICoachAssignmentStore assignmentStore) =>
         {
             var actor = SignedActorFilter.Get(httpContext);
-            if (actor.Role != AgentRoles.Coach || string.IsNullOrWhiteSpace(actor.Email)) return Results.Forbid();
+            if (actor.Role != AgentRoles.Coach || string.IsNullOrWhiteSpace(actor.Email)) return Results.StatusCode(StatusCodes.Status403Forbidden);
             return Results.Ok(new { profiles = await assignmentStore.GetAssignedProfilesAsync(actor.ActorId, actor.Email) });
         }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
         apiGroup.MapGet("/admin/coach-assignments", async (HttpContext httpContext, string profileId, ICoachAssignmentStore assignmentStore) =>
         {
-            if (!string.Equals(SignedActorFilter.Get(httpContext).ActorId, profileId, StringComparison.OrdinalIgnoreCase)) return Results.Forbid();
+            if (!string.Equals(SignedActorFilter.Get(httpContext).ActorId, profileId, StringComparison.OrdinalIgnoreCase)) return Results.StatusCode(StatusCodes.Status403Forbidden);
             return Results.Ok(await assignmentStore.GetAssignmentsAsync(profileId));
         }).AddEndpointFilter(new SignedActorFilter(securityOptions, ownerOnly: true));
 
@@ -443,7 +443,7 @@ internal static class PersonalAgentEndpoints
                 || string.IsNullOrWhiteSpace(request.UpdatedBy))
                 return Results.BadRequest(new { error = "CoachEmail, SubjectProfileId, and UpdatedBy are required" });
             var actor = SignedActorFilter.Get(httpContext);
-            if (!string.Equals(actor.ActorId, request.SubjectProfileId, StringComparison.OrdinalIgnoreCase)) return Results.Forbid();
+            if (!string.Equals(actor.ActorId, request.SubjectProfileId, StringComparison.OrdinalIgnoreCase)) return Results.StatusCode(StatusCodes.Status403Forbidden);
             await assignmentStore.SaveAssignmentAsync(request with { UpdatedBy = actor.ActorId });
             return Results.NoContent();
         }).AddEndpointFilter(new SignedActorFilter(securityOptions, ownerOnly: true));

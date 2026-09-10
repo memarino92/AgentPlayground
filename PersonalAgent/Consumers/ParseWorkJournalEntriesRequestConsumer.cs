@@ -6,7 +6,7 @@ using PersonalAgent.Services;
 namespace PersonalAgent.Consumers;
 
 internal class ParseWorkJournalEntriesRequestConsumer(
-    WorkJournalParsingService parsingService,
+    IWorkJournalParsingService parsingService,
     ILogger<ParseWorkJournalEntriesRequestConsumer> logger) : IConsumer<ParseWorkJournalEntriesRequest>
 {
     public async Task Consume(ConsumeContext<ParseWorkJournalEntriesRequest> context)

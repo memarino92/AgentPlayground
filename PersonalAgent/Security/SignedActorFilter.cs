@@ -36,7 +36,7 @@ internal sealed class SignedActorFilter(IOptions<SecurityOptions> options, bool 
         var expected = Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(_options.ActorSigningKey), Encoding.UTF8.GetBytes(payload)));
         if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(expected), Encoding.ASCII.GetBytes(signature.ToUpperInvariant())))
             return Results.Unauthorized();
-        if (ownerOnly && role != AgentRoles.Owner) return Results.Forbid();
+        if (ownerOnly && role != AgentRoles.Owner) return Results.StatusCode(StatusCodes.Status403Forbidden);
 
         context.HttpContext.Items[ItemKey] = new SignedActor(actorId, role, string.IsNullOrWhiteSpace(email) ? null : email);
         return await next(context);

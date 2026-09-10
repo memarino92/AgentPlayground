@@ -7,7 +7,7 @@ using System.Text.Json;
 
 namespace PersonalAgent.Services;
 
-internal class WorkJournalParsingService
+internal class WorkJournalParsingService : IWorkJournalParsingService
 {
     private readonly OpenAIClient _openAiClient;
     private readonly IChatModelCatalog _chatModelCatalog;

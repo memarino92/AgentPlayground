@@ -7,6 +7,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Architecture](architecture.md): current responsibilities and boundaries.
 - [Roadmap](plans/roadmap.md): ordered work, evidence, and acceptance criteria.
 - [Local development](runbooks/local-development.md): current setup and known gaps.
+- [Synthetic demo](runbooks/synthetic-demo.md): start API/Web/Worker without private data or provider accounts.
 - [Snapshot commands](runbooks/snapshot-commands.md): implemented export and guarded local restore.
 - [Adding agent tools](runbooks/adding-agent-tools.md): register a capability with shared metadata, binding, and authorization.
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
@@ -24,6 +25,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0005: Durable garden workflows](decisions/0005-durable-garden-workflows.md) | Proposed | Introduce measurable, resumable agent workflows |
 | [0006: Personal assistant tooling](decisions/0006-personal-assistant-tooling.md) | Accepted; migrated | Keep generic skills and tooling in user configuration |
 | [0007: MIT license](decisions/0007-mit-license.md) | Accepted | Permit broad reuse under standard MIT terms |
+| [0008: Synthetic local environment](decisions/0008-synthetic-local-environment.md) | Accepted | Exercise real storage and delivery with deterministic providers and guarded sample sign-in |
 
 ## Working agreement
 

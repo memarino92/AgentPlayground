@@ -4,13 +4,13 @@ Recorded 2026-09-07. Ordered for a predominantly single-maintainer application. 
 
 ## 1. Reproducible local data and proven recovery — in progress
 
-**Observed:** `infrastructure/backup/backup.sh` uploads custom-format dumps, but the repository has no restore helper or completed rehearsal. Encrypted config, push tokens, staged audio, and SQL transport share the database. Local Compose/examples lag the RBAC/configuration refactor.
+**Observed:** `infrastructure/backup/backup.sh` uploads custom-format dumps. Snapshot/restore helpers and a synthetic full-stack local environment are implemented; a production-archive application recovery rehearsal remains outstanding. Encrypted config, push tokens, staged audio, and SQL transport share the database.
 
 **Deliver:** snapshot and restore helpers with named source/target settings, exit-code checks, checksums, an immutable manifest, an empty local target, and local-target guards. Separate full recovery from development sanitization. Use local configuration and a local encryption key; create fresh transport infrastructure before starting services. Add a synthetic seed for development without production access. Fix Compose and examples against the seeded startup contract.
 
 **Done when:** a fresh checkout can start all server services using documented local setup; a production-format backup is restored into an isolated target; scoped chat, config decryption, vector search, and controlled background work pass; measured recovery time and actual backup age are recorded. See [recovery runbook](../runbooks/database-recovery.md).
 
-## 2. AI gateway and consistent tool interface — catalog and registry implemented
+## 2. AI gateway and consistent tool interface — catalog, registry and transcription gateway implemented
 
 **Observed:** journal parsing and embeddings already cross typed bus contracts to API, AssemblyAI adapter/options now live in API, `AgentTaskExecutionService` previously selected `gpt-4o-mini` (now delegates the default to API), and journal schema assumes 1536-dimensional vectors. Tool metadata was duplicated between chat and access services; the shared registry now removes that duplication.
 
@@ -73,7 +73,7 @@ Introduce a versioned evaluation set for retrieval relevance, grounded answers, 
 - Added `export-database-snapshot.ps1` and `restore-database-snapshot.ps1` with a shared module and development state-reset SQL. See [usage](../runbooks/snapshot-commands.md).
 - Full archives include checksum/version manifests; restore can only create a new local Docker target. Recovery mode has no network; development mode binds loopback and clears runtime credentials/action state while retaining private domain data.
 - Tests use the real encryption seed and synthetic data. The CI job is configured to run the snapshot suite; 37 checks passed locally on Windows Docker Desktop on 2026-09-07. Linux CI also passes in PR #34 after fixing readiness to wait for the final PostgreSQL TCP listener.
-- Still outstanding in item 1: manifests for scheduled S3 backups, retention/monitoring, synthetic public demo seed, fresh local configuration/Compose parity, real production-archive rehearsal, and full API/Web/Worker recovery checks. A successful database restore alone does not complete item 1.
+- Still outstanding in item 1: manifests for scheduled S3 backups, retention/monitoring, real production-archive rehearsal, and full API/Web/Worker recovery checks. The synthetic seed and local startup path are now implemented below. A successful synthetic startup or database restore alone does not complete item 1.
 - Added MIT license at the maintainer's request; third-party notices still need review before publication.
 - Scheduled tasks now request the API default model; two contract tests exercise different API-selected defaults without Worker configuration changes. The API now refreshes provider inventory at runtime, filtered through reviewed chat/tool policy. See [catalog behavior](../runbooks/runtime-chat-models.md); the transcription adapter migration is now implemented.
 ## Implementation progress: runtime model catalog
@@ -87,12 +87,20 @@ Introduce a versioned evaluation set for retrieval relevance, grounded answers, 
 - Local tool metadata and factories now share one registration; MCP functions enter the same catalog and binding path. Stable keys and role defaults are preserved.
 - Authorization and availability are checked at binding and again at execution. Context-bound factories omit profile/actor/role from the model's argument schema. Descriptive side-effect metadata does not imply automatic approval enforcement.
 - Eight registry tests cover all local bindings, catalog/function parity, Coach restrictions, separate subjects, forged profile arguments, revoked permissions, unavailable MCP integrations, duplicate names/keys, and invalid context. See [adding tools](../runbooks/adding-agent-tools.md).
-- This completes slice 5 of item 2. Provider migration, durable transcription jobs, embedding-space ownership, and scheduled actor propagation remain outstanding.
+- This completes slice 5 of item 2. Transcription provider migration and persisted jobs subsequently landed. Transactional domain completion, embedding-space ownership, and scheduled actor propagation remain outstanding.
 ## Implementation progress: transcription gateway
 
 - Moved AssemblyAI adapter, configuration, HTTP client and provider mapping into API. Worker uses upload-reference request/response contracts and retains speaker attribution and domain processing.
 - API persists the provider job ID, absolute deadline and terminal result; concurrent submission and replay share one job. Ambiguous submissions require review instead of automatic resubmission.
 - Added provider mapping, Worker contract and PostgreSQL restart/replay, ownership, concurrency and timeout tests. See [rollout and operational limits](../runbooks/transcription-gateway.md).
 - Still outstanding: transactional domain completion/outbox, automated ambiguous-job reconciliation, true process-kill/end-to-end transport recovery evidence, and embedding-space migration. Do not mark the broader durable-workflow item complete based on this adapter move.
-- Local validation: API and Worker builds passed without warnings; 63 API non-database tests, 9 Worker non-database tests and 13 Contracts tests passed. Five new PostgreSQL job tests compiled but could not execute because Docker's engine did not respond, including after starting Docker Desktop. Database recovery behavior remains unverified locally until those tests run.
+- Initial local validation: API and Worker builds passed without warnings; 63 API non-database tests, 9 Worker non-database tests and 13 Contracts tests passed. Five new PostgreSQL job tests were initially blocked by Docker availability. On 2026-09-10, the synthetic-environment work ran the full API suite successfully, including all five PostgreSQL job tests. This supplies service-level recovery evidence, not process-kill or end-to-end outbox guarantees.
 - Added a transactional AssemblyAI configuration migration using the existing crypto implementation, with conflict detection and optional source retention. The Api-scoped production key was populated and verified against the retained Worker copy on 2026-09-10; services were not redeployed. Six migration-plan tests cover re-encryption, wrong keys, conflicts, flags and replay.
+
+## Implementation progress: synthetic local environment
+
+- Added `compose.synthetic.yml` with an independent PostgreSQL volume, encrypted synthetic configuration, deterministic API providers, and a Development-only cookie sign-in for two owners and an assigned coach. Seeds conversations, vector memory, and speaker review. No private values file or provider account is required.
+- API and Web expose startup readiness probes. Compose waits for API initialization instead of a fixed Worker sleep; Firebase is optional in manual Compose. See [demo commands and limitations](../runbooks/synthetic-demo.md) and [decision 0008](../decisions/0008-synthetic-local-environment.md).
+- Full startup exposed and fixed the scoped MassTransit request client captured by singleton transcription service and API authorization denials returning HTTP 500 instead of 403.
+- Local validation on 2026-09-10: 23 Contracts, 71 API (including the five transcription PostgreSQL tests), 12 Web, and 12 Worker tests passed. The synthetic HTTP smoke suite passed 22 checks across encrypted startup, actor/subject checks, pgvector recall, bus transcription to speaker review, and Web cookie/antiforgery flows. CI is configured to run this stack and smoke suite; its remote result is not yet recorded.
+- Still outstanding: real-archive recovery evidence, scheduled backup manifests/monitoring, transactional completion/outbox, and model-quality evaluation. Synthetic token hashes and fixed responses do not measure retrieval or generation quality.
