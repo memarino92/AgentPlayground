@@ -358,15 +358,16 @@ internal class CoachCheckinService(
         {
             metadataCommand.Transaction = transaction;
             metadataCommand.CommandText = $"""
-                SELECT session_id, correlation_id
+                SELECT session_id, correlation_id, status
                 FROM {CoachCallUploadsTable}
                 WHERE upload_id = @uploadId
-                  AND profile_id = @profileId;
+                  AND profile_id = @profileId FOR UPDATE;
                 """;
             metadataCommand.Parameters.AddWithValue("uploadId", uploadId);
             metadataCommand.Parameters.AddWithValue("profileId", profileId);
             await using var reader = await metadataCommand.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken)) throw new InvalidOperationException("Upload not found.");
+            if (reader.GetString(2) != "AwaitingSpeakerOverride") return;
             sessionId = reader.GetGuid(0);
             correlationId = reader.GetGuid(1);
         }
@@ -404,8 +405,8 @@ internal class CoachCheckinService(
             await uploadCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        await CoachCallOutbox.EnqueueAsync(transaction, _schema, new ProcessCoachTranscriptCommand(uploadId, sessionId, profileId, correlationId), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        await bus.Publish(new ProcessCoachTranscriptCommand(uploadId, sessionId, profileId, correlationId), cancellationToken);
     }
 
     public async Task<string> SearchCoachCheckinsAsync(string query, string profileId, string? exerciseTag = null, CancellationToken cancellationToken = default)

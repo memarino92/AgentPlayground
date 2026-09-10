@@ -28,6 +28,15 @@ internal class ProcessCoachTranscriptConsumer(
         try
         {
             await using var connection = await OpenConnectionAsync(context.CancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(context.CancellationToken);
+            await using (var guard = connection.CreateCommand())
+            {
+                guard.CommandText = $"SELECT status FROM {CoachCallUploadsTable} WHERE upload_id = @id AND session_id = @session AND profile_id = @profile FOR UPDATE";
+                guard.Parameters.AddWithValue("id", message.UploadId);
+                guard.Parameters.AddWithValue("session", message.SessionId);
+                guard.Parameters.AddWithValue("profile", message.ProfileId);
+                if (await guard.ExecuteScalarAsync(context.CancellationToken) is not "Processing") return;
+            }
             var utterances = await LoadUtterancesAsync(connection, message.SessionId, message.UploadId, context.CancellationToken);
             if (utterances.Count is 0) throw new InvalidOperationException("No transcribed utterances available.");
 
@@ -35,11 +44,11 @@ internal class ProcessCoachTranscriptConsumer(
             var enrichedUtterances = await LoadUtterancesAsync(connection, message.SessionId, message.UploadId, context.CancellationToken);
             var result = await processingService.ProcessAsync(message.CorrelationId, enrichedUtterances, context.CancellationToken);
 
-            await SaveResultAsync(connection, message, result, context.CancellationToken);
+            await SaveResultAsync(connection, transaction, message, result, context.CancellationToken);
             await ClearAudioBytesAsync(connection, message.UploadId, context.CancellationToken);
             await UpdateUploadStatusAsync(connection, message.UploadId, "Completed", null, context.CancellationToken);
 
-            await context.Publish(
+            await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema,
                 new CoachCallProcessingCompletedEvent(
                     message.UploadId,
                     message.SessionId,
@@ -48,15 +57,12 @@ internal class ProcessCoachTranscriptConsumer(
                     result.Chunks.Count,
                     DateTimeOffset.UtcNow),
                 context.CancellationToken);
+            await transaction.CommitAsync(context.CancellationToken);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Coach transcript processing failed for upload {UploadId}", message.UploadId);
-            await using var connection = await OpenConnectionAsync(context.CancellationToken);
-            await UpdateUploadStatusAsync(connection, message.UploadId, "Failed", ex.Message, context.CancellationToken);
-            await context.Publish(
-                new CoachCallProcessingFailedEvent(message.UploadId, message.SessionId, message.ProfileId, message.CorrelationId, "processing", ex.Message, DateTimeOffset.UtcNow),
-                context.CancellationToken);
+            throw;
         }
     }
 
@@ -119,10 +125,8 @@ internal class ProcessCoachTranscriptConsumer(
         }
     }
 
-    private async Task SaveResultAsync(NpgsqlConnection connection, ProcessCoachTranscriptCommand message, CoachTranscriptProcessingResult result, CancellationToken cancellationToken)
+    private async Task SaveResultAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, ProcessCoachTranscriptCommand message, CoachTranscriptProcessingResult result, CancellationToken cancellationToken)
     {
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
         await using (var sessionCommand = connection.CreateCommand())
         {
             sessionCommand.Transaction = transaction;
@@ -198,8 +202,6 @@ internal class ProcessCoachTranscriptConsumer(
             chunkCommand.Parameters.AddWithValue("createdAt", DateTimeOffset.UtcNow);
             await chunkCommand.ExecuteNonQueryAsync(cancellationToken);
         }
-
-        await transaction.CommitAsync(cancellationToken);
     }
 
     private async Task ClearAudioBytesAsync(NpgsqlConnection connection, Guid uploadId, CancellationToken cancellationToken)

@@ -34,6 +34,7 @@ builder.Services.AddSingleton<IAgentTaskExecutionService, AgentTaskExecutionServ
 builder.Services.AddScoped<ITranscriptionService, ApiTranscriptionService>();
 builder.Services.AddScoped<CoachTranscriptProcessingService>();
 builder.Services.AddHostedService<CoachCallCleanupService>();
+builder.Services.AddHostedService<CoachCallOutboxDispatcher>();
 
 var workJournalConfigValidation = WorkerExtensions.ValidateWorkJournalSyncConfiguration(builder.Configuration);
 var workJournalSyncEnabled = !syntheticDemo && workJournalConfigValidation.IsValid;

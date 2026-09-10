@@ -26,6 +26,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0006: Personal assistant tooling](decisions/0006-personal-assistant-tooling.md) | Accepted; migrated | Keep generic skills and tooling in user configuration |
 | [0007: MIT license](decisions/0007-mit-license.md) | Accepted | Permit broad reuse under standard MIT terms |
 | [0008: Synthetic local environment](decisions/0008-synthetic-local-environment.md) | Accepted | Exercise real storage and delivery with deterministic providers and guarded sample sign-in |
+| [0009: Transcription outbox](decisions/0009-transcription-outbox.md) | Accepted; implemented | Commit transcription and processing completion with durable outgoing messages |
 
 ## Working agreement
 
