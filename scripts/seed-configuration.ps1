@@ -131,7 +131,7 @@ $settings = @(
     @{ Scope = 'Worker'; Key = 'PersonalAgentApi:BaseUrl'; Value = $PersonalAgentApiBaseUrl; Secret = $false },
     @{ Scope = 'Worker'; Key = 'PersonalAgentApi:InternalApiKey'; Value = $InternalApiKey; Secret = $true },
     @{ Scope = 'Worker'; Key = 'PersonalAgentApi:ActorSigningKey'; Value = $ActorSigningKey; Secret = $true },
-    @{ Scope = 'Worker'; Key = 'AssemblyAi:ApiKey'; Value = $AssemblyAiApiKey; Secret = $true },
+    @{ Scope = 'Api'; Key = 'AssemblyAi:ApiKey'; Value = $AssemblyAiApiKey; Secret = $true },
     @{ Scope = 'Worker'; Key = 'GitHub:PersonalAccessToken'; Value = $GitHubPat; Secret = $true },
     @{ Scope = 'Worker'; Key = 'GitHub:RepoOwner'; Value = $GitHubOwner; Secret = $false },
     @{ Scope = 'Worker'; Key = 'GitHub:RepoName'; Value = $GitHubRepo; Secret = $false },

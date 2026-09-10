@@ -25,7 +25,7 @@ The repository name remains `AgentPlayground` to preserve existing project and d
 
 PostgreSQL stores application data, encrypted settings, vectors, and MassTransit SQL transport. Root `Dockerfile.personalagent-*` files define service builds; `infrastructure/backup/` contains the backup uploader.
 
-The next architectural step is a generic AI gateway in the API: clients ask for domain capabilities and the API owns provider adapters. AssemblyAI currently lives in Worker, so that boundary is a planned migration. See [architecture](docs/architecture.md) and the [decision register](docs/README.md).
+The API owns AI provider adapters, including AssemblyAI transcription behind a neutral bus capability with persisted job tracking. Worker retains domain processing. Embedding-space compatibility and fully durable domain workflows remain planned work. See [architecture](docs/architecture.md) and the [decision register](docs/README.md).
 
 ## Build and test
 

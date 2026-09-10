@@ -23,6 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../scripts/ConfigurationScopeMigration/MigrationPlan.cs" Link="MigrationPlan.cs" />
     <ProjectReference Include="..\AgentPlayground.Contracts\AgentPlayground.Contracts.csproj" />
   </ItemGroup>
 

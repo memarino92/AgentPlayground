@@ -35,7 +35,7 @@ internal class TranscribeCoachCallConsumer(
             }
 
             await UpdateUploadStatusAsync(connection, staged.UploadId, "Transcribing", null, context.CancellationToken);
-            var utterances = await transcriptionService.TranscribeAsync(staged.AudioBytes, staged.FileName, staged.MimeType, context.CancellationToken);
+            var utterances = await transcriptionService.TranscribeAsync(staged.UploadId, staged.ProfileId, context.CancellationToken);
             if (utterances.Count is 0)
                 throw new InvalidOperationException("Transcription completed without utterances.");
 
@@ -59,6 +59,8 @@ internal class TranscribeCoachCallConsumer(
                     DateTimeOffset.UtcNow),
                 context.CancellationToken);
         }
+        catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested) { throw; }
+        catch (RequestException) { throw; }
         catch (Exception ex)
         {
             logger.LogError(ex, "Coach call transcription failed for upload {UploadId}", message.UploadId);
@@ -79,7 +81,7 @@ internal class TranscribeCoachCallConsumer(
     {
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT upload_id, session_id, profile_id, correlation_id, original_file_name, mime_type, audio_bytes
+            SELECT upload_id, session_id, profile_id, correlation_id, status
             FROM {CoachCallUploadsTable}
             WHERE upload_id = @uploadId
               AND profile_id = @profileId;
@@ -90,15 +92,12 @@ internal class TranscribeCoachCallConsumer(
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
 
-        if (reader.IsDBNull(6)) throw new InvalidOperationException("Upload audio bytes are missing.");
+        if (reader.GetString(4) is not ("Queued" or "Uploaded" or "Transcribing")) return null;
         return new StagedCoachUpload(
             reader.GetGuid(0),
             reader.GetGuid(1),
             reader.GetString(2),
-            reader.GetGuid(3),
-            reader.GetString(4),
-            reader.GetString(5),
-            (byte[])reader[6]);
+            reader.GetGuid(3));
     }
 
     private async Task PersistUtterancesAsync(NpgsqlConnection connection, Guid sessionId, IReadOnlyList<TranscribedUtterance> utterances, CancellationToken cancellationToken)

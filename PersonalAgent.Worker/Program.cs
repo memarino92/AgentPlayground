@@ -19,7 +19,6 @@ builder.Services.AddHttpClient("GitHubWorkJournal", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 builder.Services.AddPersonalAgentApiOptions(builder.Configuration);
-builder.Services.AddAssemblyAiOptions(builder.Configuration);
 builder.Services.AddCoachCheckinWorkerOptions(builder.Configuration);
 builder.Services.AddHttpClient("PersonalAgentApi", (sp, client) =>
 {
@@ -29,15 +28,8 @@ builder.Services.AddHttpClient("PersonalAgentApi", (sp, client) =>
     if (!string.IsNullOrWhiteSpace(options.InternalApiKey))
         client.DefaultRequestHeaders.Add("X-Internal-Api-Key", options.InternalApiKey);
 });
-builder.Services.AddHttpClient("AssemblyAi", (sp, client) =>
-{
-    var options = sp.GetRequiredService<IOptions<AssemblyAiOptions>>().Value;
-    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
-    client.Timeout = TimeSpan.FromMinutes(options.TranscriptionTimeoutMinutes + 2);
-    client.DefaultRequestHeaders.Add("Authorization", options.ApiKey);
-});
 builder.Services.AddSingleton<IAgentTaskExecutionService, AgentTaskExecutionService>();
-builder.Services.AddSingleton<ITranscriptionService, AssemblyAiTranscriptionService>();
+builder.Services.AddSingleton<ITranscriptionService, ApiTranscriptionService>();
 builder.Services.AddScoped<CoachTranscriptProcessingService>();
 builder.Services.AddHostedService<CoachCallCleanupService>();
 
@@ -68,6 +60,7 @@ builder.Services.AddPostgresMigrationHostedService(options =>
 builder.Services.AddMassTransit(x =>
 {
     x.AddRequestClient<GenerateEmbeddingsRequest>();
+    x.AddRequestClient<TranscriptionRequest>(RequestTimeout.After(m: 3));
 
     if (workJournalSyncEnabled)
         x.AddRequestClient<ParseWorkJournalEntriesRequest>();

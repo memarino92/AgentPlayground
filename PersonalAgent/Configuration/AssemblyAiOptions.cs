@@ -1,4 +1,4 @@
-namespace PersonalAgent.Worker.Configuration;
+namespace PersonalAgent.Configuration;
 
 internal record AssemblyAiOptions
 {

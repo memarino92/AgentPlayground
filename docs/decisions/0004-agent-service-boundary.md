@@ -1,6 +1,6 @@
 # 0004: Centralize agent providers and use a single tool registry
 
-- Status: Accepted direction; runtime model catalog and tool registry implemented; transcription migration pending
+- Status: Accepted direction; runtime model catalog and tool registry implemented; transcription adapter and persisted job tracking implemented
 - Recorded: 2026-09-07
 - Evidence: `AgentChatService`, `ToolAccessService`, `AssemblyAiTranscriptionService`, journal request/response consumers
 
@@ -20,7 +20,7 @@ The API service becomes a larger availability boundary; background work needs du
 
 ## Delivery and verification
 
-The tool registry migration is implemented with catalog/function parity, server-bound subject, and execution-time revocation tests. Transcription still needs a provider stub completing a persisted job after an API restart without duplicate submission. Existing role restrictions, speaker-review behavior, and data ownership must remain intact.
+The tool registry migration is implemented with catalog/function parity, server-bound subject, and execution-time revocation tests. Transcription now has API-owned persisted job tracking and regression tests that recreate the service between submission and completion. Existing role restrictions, speaker-review behavior, and data ownership must remain intact.
 
 ## Provider independence contract
 
@@ -33,8 +33,16 @@ Provider replacement acceptance test: exercise the same domain contract against 
 
 The maintainer confirmed on 2026-09-07 that chat clients should retrieve available models from our API at runtime. The Web app calls `GET /api/models`. The API now refreshes provider availability through an API-local adapter, intersecting it with reviewed chat/tool policy. Labels and policy still load from configuration at startup. Keep the catalog contract owned by API, with opaque IDs, labels, and a default. The API may derive entries from local/database policy or provider discovery; clients must not call vendor model-list endpoints or hard-code vendor defaults. Provider-derived catalogs need chat-capability filtering, caching, timeout/fallback behavior, and policy validation before being offered to users. Do not expose every provider model as if it supports the same chat/tools contract.
 
-Implemented in the runtime-model-catalog change: cached OpenAI inventory, timeout/fallback, a single default, new-session validation, and stable model identity for saved conversations. See [behavior and limitations](../runbooks/runtime-chat-models.md). This completes model discovery; the transcription adapter migration remains pending.
+Implemented in the runtime-model-catalog change: cached OpenAI inventory, timeout/fallback, a single default, new-session validation, and stable model identity for saved conversations. See [behavior and limitations](../runbooks/runtime-chat-models.md). This completes model discovery. The transcription adapter migration is also implemented; see the implementation note below.
 
 ## Tool registry implementation
 
 AgentToolRegistry now declares local tool metadata and handler factories together and adapts discovered MCP functions into the same registrations. ToolAccessService derives the permission catalog and AgentToolBinder supplies authorized context-bound functions. Stable keys and role defaults are preserved; existing logging/authorization runs again at invocation. Duplicate keys/names are rejected. See [adding tools](../runbooks/adding-agent-tools.md) for the contribution interface and side-effect metadata limits.
+
+## Transcription implementation (2026-09-10)
+
+The user requested the adapter move in this change, implementing the accepted boundary above. `TranscriptionRequest` carries only an upload ID and profile, and API resolves that pair against storage. `TranscriptionResponse` carries neutral status and segments; Worker keeps speaker roles and domain processing. `ITranscriptionProvider`, AssemblyAI options/client, response mapping and job persistence live only in API.
+
+`TranscriptionJobService` commits a unique submission claim, saves the provider job ID, persists an absolute deadline, and caches terminal results. Lost submission acknowledgements require operator review rather than automatic resubmission. This is deliberately more conservative than retrying POST without an acknowledged provider idempotency guarantee. A long HTTP proxy and binary bus requests were rejected in the original decision; bounded bus status requests preserve Worker delivery ownership. Full workflow/outbox recovery remains separate work. See [rollout, cancellation and replay semantics](../runbooks/transcription-gateway.md).
+
+Evidence: `TranscriptionJobServiceTests`, `AssemblyAiTranscriptionServiceTests`, `ApiTranscriptionServiceTests`, and the existing schema initializer. The tests use synthetic data and provider stubs; they do not exercise live provider billing or deployment migration.
