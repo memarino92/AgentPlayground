@@ -48,7 +48,13 @@ dotnet test PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj
 
 `dotnet build` includes Android and requires its MAUI workload, Android SDK, and Java toolchain. Follow the [mobile setup](PersonalAgent.Mobile/README.md). Package versions are centrally managed in `Directory.Packages.props`; warnings are errors.
 
-For application startup, follow [local development](docs/runbooks/local-development.md). A build needs no production data; a useful interactive demo still needs configuration and representative seed data. An automated synthetic demo seed is on the roadmap.
+For an interactive demo without private data or provider accounts, start the synthetic stack with Docker:
+
+```powershell
+docker compose -f compose.synthetic.yml up --build --detach --wait --wait-timeout 180
+```
+
+Open [demo sign-in](http://127.0.0.1:15000/login). See the [synthetic walkthrough and smoke test](docs/runbooks/synthetic-demo.md). For real integrations, follow [local development](docs/runbooks/local-development.md).
 
 ## Direction and operating notes
 
@@ -61,4 +67,4 @@ For application startup, follow [local development](docs/runbooks/local-developm
 
 Production runs on Railway. Each server service boots with `DATABASE_URL` and `CONFIG_ENCRYPTION_KEY` after configuration seeding. Keep the decryption key outside the database backup. Never commit populated seed files, database snapshots, personal journals, coaching audio, or credentials.
 
-This is a personal system under active development. Public availability, a supported contributor demo, and proven disaster recovery are tracked deliverables, not current guarantees. Licensed under the [MIT License](LICENSE).
+This is a personal system under active development. The synthetic demo exercises local application behavior; public availability and proven disaster recovery remain tracked deliverables. Licensed under the [MIT License](LICENSE).

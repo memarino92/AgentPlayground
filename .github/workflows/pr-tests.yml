@@ -46,3 +46,21 @@ jobs:
       - name: Verify export and isolated restore with synthetic data
         shell: pwsh
         run: ./scripts/tests/Test-DatabaseSnapshots.ps1
+
+  synthetic-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Start synthetic API, Web and Worker
+        run: docker compose -f compose.synthetic.yml up --build --detach --wait --wait-timeout 180
+      - name: Verify synthetic application flow
+        shell: pwsh
+        run: ./scripts/tests/Test-SyntheticDemo.ps1
+      - name: Capture demo logs
+        if: failure()
+        run: docker compose -f compose.synthetic.yml logs --tail 100
+      - name: Stop disposable demo
+        if: always()
+        run: docker compose -f compose.synthetic.yml down --volumes

@@ -1,0 +1,78 @@
+name: agentplayground-demo
+
+x-demo-environment: &demo-environment
+  ASPNETCORE_ENVIRONMENT: Development
+  DOTNET_ENVIRONMENT: Development
+  SyntheticDemo__Enabled: "true"
+  DATABASE_URL: "Host=postgres-demo;Database=agentplayground_demo;Username=demo;Password=synthetic-local-password"
+  # Public, local-only demo key. Never use these values for a hosted installation.
+  CONFIG_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+services:
+  postgres-demo:
+    image: pgvector/pgvector:0.8.2-pg18-trixie
+    environment:
+      POSTGRES_DB: agentplayground_demo
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: synthetic-local-password
+    volumes:
+      - synthetic-data:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U demo -d agentplayground_demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  personalagent-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.personalagent-api
+    environment:
+      <<: *demo-environment
+      PORT: "5100"
+    ports: ["127.0.0.1:15100:5100"]
+    networks: [default, browser]
+    depends_on:
+      postgres-demo:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, dotnet, PersonalAgent.dll, --healthcheck]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  personalagent-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.personalagent-web
+    environment:
+      <<: *demo-environment
+      PORT: "5000"
+    ports: ["127.0.0.1:15000:5000"]
+    networks: [default, browser]
+    depends_on:
+      personalagent-api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, dotnet, PersonalAgent.Web.dll, --healthcheck]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  personalagent-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.personalagent-worker
+    environment: *demo-environment
+    depends_on:
+      personalagent-api:
+        condition: service_healthy
+
+volumes:
+  synthetic-data:
+
+networks:
+  default:
+    internal: true
+  browser:

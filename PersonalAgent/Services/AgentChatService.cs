@@ -2,8 +2,6 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using OpenAI;
-using OpenAI.Chat;
 using PersonalAgent.Configuration;
 using PersonalAgent.Models;
 using System.Collections.Concurrent;
@@ -19,7 +17,7 @@ internal class AgentChatService
     private readonly IServiceProvider _serviceProvider;
     private readonly IAgentSessionStore _sessionStore;
     private readonly SemanticMemoryService _semanticMemoryService;
-    private readonly OpenAIClient _openAiClient;
+    private readonly IAgentChatClientFactory _chatClients;
     private readonly AgentToolBinder _toolBinder;
     private readonly ILogger<AgentChatService> _logger;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
@@ -32,10 +30,10 @@ internal class AgentChatService
         IAgentSessionStore sessionStore,
         SemanticMemoryService semanticMemoryService,
         AgentToolBinder toolBinder,
-        ILogger<AgentChatService> logger)
+        ILogger<AgentChatService> logger,
+        IAgentChatClientFactory? chatClients = null)
     {
-        var apiKey = apiKeyOptions.Value.OpenAiKey;
-        _openAiClient = new OpenAIClient(apiKey);
+        _chatClients = chatClients ?? new OpenAiAgentChatClientFactory(apiKeyOptions);
         _chatModelCatalog = chatModelCatalog;
         _loggerFactory = loggerFactory;
         _serviceProvider = serviceProvider;
@@ -239,9 +237,7 @@ internal class AgentChatService
         else
             instructions.AppendLine("Web search is currently unavailable; answer without web tools and acknowledge limits for current events when needed.");
 
-        return _openAiClient
-            .GetChatClient(modelId)
-            .AsIChatClient()
+        return _chatClients.Create(modelId)
             .AsBuilder()
             .UseFunctionInvocation()
             .BuildAIAgent(

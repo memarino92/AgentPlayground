@@ -32,14 +32,17 @@ services:
       AGENT_MEMORY_CONNECTION_STRING: "${AGENT_MEMORY_CONNECTION_STRING:-Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground}"
       MESSAGING_SCHEMA: "transport"
       ALLOWED_ORIGINS: "http://localhost:5000"
-      FIREBASE_SERVICE_ACCOUNT_PATH: "/run/secrets/firebase-service-account.json"
-    volumes:
-      - ./firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
+      WEB_ACTOR_SIGNING_KEY: "${WEB_ACTOR_SIGNING_KEY:-dev-actor-signing-key}"
     ports:
       - "5100:5100"
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "dotnet", "PersonalAgent.dll", "--healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
   personalagent-worker:
     build:
@@ -51,12 +54,14 @@ services:
     environment:
       MESSAGING_CONNECTION_STRING: "Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground"
       MESSAGING_SCHEMA: "transport"
-    command: ["sh", "-c", "sleep 15 && dotnet PersonalAgent.Worker.dll"]
+      PERSONAL_AGENT_API_BASE_URL: "http://personalagent-api:5100"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-dev-internal-api-key}"
+      WEB_ACTOR_SIGNING_KEY: "${WEB_ACTOR_SIGNING_KEY:-dev-actor-signing-key}"
     depends_on:
       postgres:
         condition: service_healthy
       personalagent-api:
-        condition: service_started
+        condition: service_healthy
       personalagent-web:
         condition: service_started
     restart: on-failure:5
@@ -74,13 +79,14 @@ services:
       MESSAGING_CONNECTION_STRING: "Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground"
       MESSAGING_SCHEMA: "transport"
       INTERNAL_API_KEY: "${INTERNAL_API_KEY:-dev-internal-api-key}"
+      WEB_ACTOR_SIGNING_KEY: "${WEB_ACTOR_SIGNING_KEY:-dev-actor-signing-key}"
     ports:
       - "5000:5000"
     depends_on:
       postgres:
         condition: service_healthy
       personalagent-api:
-        condition: service_started
+        condition: service_healthy
     restart: on-failure:5
 
 volumes:

@@ -1,6 +1,6 @@
 # Local development
 
-This is the current manual setup, not an automated fresh-clone demo. Use local credentials and data. Do not start application services against an unsanitized production restore; follow [database recovery](database-recovery.md) first.
+For a fresh checkout without private data or provider accounts, use the [synthetic demo](synthetic-demo.md). The instructions below cover manual development with real integrations. Do not start application services against an unsanitized production restore; follow [database recovery](database-recovery.md) first.
 
 ## Build without production data
 
@@ -22,7 +22,7 @@ This is the current manual setup, not an automated fresh-clone demo. Use local c
    Copy-Item scripts/seed-configuration.values.ps1.example scripts/seed-configuration.values.ps1
    ```
 
-   Fill it with development values. Use a new local configuration encryption key and local internal/signing keys. Set the API URL to `http://localhost:5100`, allowed Web origin to `https://localhost:5011`, and development OAuth clients/allowlists. Provide required model/transcription credentials if those services will be exercised. Keep push disabled and optional private journal credentials empty. The current seed validates required values, so synthetic/offline adapters are still a future deliverable.
+   Fill it with development values. Use a new local configuration encryption key and local internal/signing keys. Set the API URL to `http://localhost:5100`, allowed Web origin to `https://localhost:5011`, and development OAuth clients/allowlists. Provide required model/transcription credentials if those services will be exercised. Keep push disabled and optional private journal credentials empty. This manual seed validates integration credentials; the separate [synthetic demo](synthetic-demo.md) initializes its own configuration without them.
 
 3. Generate and apply the seed to the local database only. With `-Apply`, the values file's `$DatabaseUrl` must be a PostgreSQL URL reachable from the seed script's Docker client; use `host.docker.internal` for a database port exposed by the host. For example, the default local instance uses `postgresql://agentplayground:agentplayground@host.docker.internal:5432/agentplayground`.
 
@@ -51,7 +51,7 @@ This is the current manual setup, not an automated fresh-clone demo. Use local c
 
 If both bootstrap variables are absent, apps retain appsettings/environment bindings and development user secrets. Startup still requires the internal and actor-signing keys, Web OAuth settings/allowlists, and API transcription settings. An OpenAI key and database string alone are not a complete setup after RBAC.
 
-`docker-compose.yml` and `.env.compose.example` remain useful infrastructure references, but the example omits newer required settings including actor signing and AssemblyAI. Compose also has an unconditional Firebase file mount and a startup sleep. Treat full-stack one-command startup as pending roadmap work; this review did not run it or silently delete its data volume.
+`docker-compose.yml` and `.env.compose.example` describe the manual integration path. They include actor signing and API AssemblyAI settings, make Firebase credentials optional, and wait for API readiness before starting dependents. Real OAuth/provider credentials are still required for that path; it is separate from the verified synthetic stack in `compose.synthetic.yml`.
 
 ## Infrastructure helpers
 
@@ -60,6 +60,6 @@ If both bootstrap variables are absent, apps retain appsettings/environment bind
 - `setup-railway.ps1`, `deploy-railway.ps1`, `check-railway-env.ps1`: existing hosted operations; audit against current bootstrap configuration before use.
 - Root `Dockerfile.personalagent-api`, `Dockerfile.personalagent-web`, `Dockerfile.personalagent-worker`: canonical service builds.
 
-A full database snapshot is not a public demo fixture. Build a synthetic seed covering owner/coach assignments, tool overrides, sessions, and speaker review to let contributors reproduce the product without private data.
+A full database snapshot is not a public demo fixture. The synthetic stack seeds owner/coach assignments, sessions, vector memory, and speaker review to let contributors reproduce the product without private data.
 
 For existing installations, follow the [transcription configuration rollout](transcription-gateway.md) before starting the refactored API.

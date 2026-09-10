@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using PersonalAgent.Web.Components;
 using PersonalAgent.Web.Endpoints;
+using AgentPlayground.Contracts.Hosting;
+using PersonalAgent.Web.Development;
 
 namespace PersonalAgent.Web.Extensions;
 
@@ -31,7 +33,8 @@ internal static class WebApplicationPipelineExtensions
         app.UseAuthentication();
         app.UseAuthorization();
 
-        app.MapAuthenticationEndpoints();
+        if (SyntheticEnvironment.IsEnabled(app.Configuration, app.Environment)) app.MapSyntheticAuthentication();
+        else app.MapAuthenticationEndpoints();
 
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
