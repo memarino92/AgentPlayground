@@ -1,43 +1,39 @@
 # Runtime chat models
 
-`GET /api/models` remains the only model-discovery contract for Web and other clients. It returns `{ "models": [{ "id": "...", "displayName": "...", "isDefault": true }] }`. Model IDs are opaque client values. Omit `modelId` when creating a session to use the API's current default.
+`GET /api/models` is the model-discovery contract for Web and other clients. It returns `{ "models": [{ "id": "...", "displayName": "...", "isDefault": true }] }`. Clients treat IDs as opaque. Omit `modelId` when creating a session to use the API's current default.
 
-The API calls OpenAI's model-list endpoint on demand through `IChatModelDiscovery`. `IChatModelCatalog` owns eligibility, labels, defaults, caching, and fallback. A provider replacement changes the adapter and its API registration, without changing this wire contract or client code.
+## Database policy
 
-The 2026-09-11 policy update adds GPT-5.5, GPT-5.6 Luna/Terra/Sol, and GPT-6 Astra. Their documented chat/function support was checked against the official model pages: [GPT-5.5](https://developers.openai.com/api/docs/models/gpt-5.5), [Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna), [Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra), [Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol), and [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra). These are eligible options, not a guarantee of account access or a live inference validation. The default remains unchanged.
+Active `Shared` and `Api` `ChatModels:*` rows in `app.configuration_settings` are the sole production policy source. Api rows override matching Shared keys. Appsettings and environment model lists are not consulted. Bootstrap still uses `DATABASE_URL` and `CONFIG_ENCRYPTION_KEY`, like other database settings. Synthetic mode explicitly supplies a fixed test model instead.
 
-If the picker stops at GPT-5.4, check the deployed `ChatModels:Models` policy first: the previous shipped allowlist ended there even when discovery succeeded. Deploy/restart the API with the updated policy and reload the chat page (the browser loads choices on page initialization). Provider availability is cached for up to five minutes. Active database/environment overrides can still restrict or replace policy entries; inspect model IDs and discovery warnings without exporting credentials. A new chat alone does not deploy backend changes or reload the page's model list.
+On API startup, an insert-only migration initializes model entries if no database model rows exist. Existing entries, including inactive ones, prevent seeding the model list. The embedded `Configuration/chat-model-policy.seed.json` is initial migration data, never a runtime fallback. A `ChatModels:PolicyInitialized` marker prevents restoring defaults if all model rows are later removed. Do not remove that marker to disable models; deactivate model ID rows instead. Startup migration preserves existing values, activity, scopes, and defaults and supports settings tables with or without `updated_at`.
 
-## Policy and configuration
+Fresh policy seeds include GPT-5.5, GPT-5.6 Luna/Terra/Sol, and GPT-6 Astra alongside earlier models. Existing database policies are not automatically expanded. Reviewed support: [GPT-5.5](https://developers.openai.com/api/docs/models/gpt-5.5), [Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna), [Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra), [Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol), [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra). Provider inventory still determines account availability; documentation review is not live inference verification.
 
-`ChatModels:Models` is the ordered list of reviewed chat/tool-compatible model IDs and labels. Discovery intersects that list with the provider's available IDs. It does **not** automatically offer new or unknown provider models. OpenAI's [model inventory](https://developers.openai.com/api/reference/resources/models/methods/list) provides identity/availability information rather than chat/tool capability guarantees; name-prefix guessing would expose incompatible models. Review support before adding a model to API policy.
+Edit policy in **Settings → Database settings**, filtering for `ChatModels`. Each indexed model has `Models:N:Id`, `Models:N:DisplayName`, and `Models:N:IsDefault` entries. Change an existing ID/label to another reviewed model, or deactivate its ID row to remove that choice. An active Shared ID may still supply the value when an Api ID is inactive. To add more slots than exist, insert additional indexed rows through an authorized database migration; the generic editor only edits existing rows. No model choices are hardcoded in Web.
 
-The existing `ChatModels:Models` settings and these optional API settings can come from normal configuration, including active `Api` rows in `app.configuration_settings`:
+The API reads policy on every catalog request. Changes invalidate the provider cache immediately for the next request; no API restart is needed after an edit. Reload the chat page to refresh its browser-held choices, then create a chat. Existing sessions keep their selected model. Missing/empty policy yields no model choices and prevents new chat creation; invalid policy or database failure fails the lookup rather than reviving old policy or appsettings defaults.
 
-| Setting | Default | Behavior |
+## Discovery and caching
+
+`IChatModelDiscovery` calls the provider model-list endpoint. `ChatModelCatalog` intersects those IDs with the database's reviewed chat/tool-compatible IDs. OpenAI's [model inventory](https://developers.openai.com/api/reference/resources/models/methods/list) does not provide endpoint/tool capability guarantees, so unknown provider models still require review before policy inclusion.
+
+| Database key | Initial/default value | Behavior |
 | --- | --- | --- |
-| `ChatModels:DiscoverFromProvider` | `true` | Set `false` to serve configured policy without provider discovery |
-| `ChatModels:RefreshIntervalSeconds` | `300` | Successful lookup cache duration; 1–86400 seconds |
-| `ChatModels:FailureRetrySeconds` | `30` | Retry delay after discovery failure; 1–3600 seconds |
-| `ChatModels:DiscoveryTimeoutSeconds` | `5` | Total discovery wait, including SDK retries; 1–60 seconds |
+| `ChatModels:DiscoverFromProvider` | `true` | Set false to serve database policy without provider discovery |
+| `ChatModels:RefreshIntervalSeconds` | `300` | Availability-cache lifetime, 1–86400 seconds |
+| `ChatModels:FailureRetrySeconds` | `30` | Retry delay after provider failure, 1–3600 seconds |
+| `ChatModels:DiscoveryTimeoutSeconds` | `5` | Provider timeout including retries, 1–60 seconds |
 
-The database configuration provider still loads at startup. Changing the reviewed list, credentials, or these options requires an API restart. Provider availability refreshes while the API runs; no Web or Worker deployment is needed. Live editing of database policy is separate future work.
+Concurrent lookups share a refresh. Each call reads the current database policy under the catalog lock. Provider failures retain the last successful result only for the same policy; otherwise fallback is restricted to the new database policy. Successful empty provider results remain authoritative. Provider fallback cannot prove a subsequent inference request will succeed. Database/policy errors propagate and never take this provider-fallback path. Cancelled requests do not update the snapshot.
 
-## Runtime behavior
-
-- The first lookup refreshes inventory; later requests reuse it until expiry. Simultaneous callers share one refresh. There is no background polling when the app is idle.
-- The configured default is preferred when available; otherwise the first available configured model becomes the single default. Blank/duplicate IDs are removed. An empty configuration retains the previous API-owned `gpt-4o-mini` fallback.
-- On timeout/provider failure, use the last successful list, or configured models before the first successful lookup. Retry after the failure delay. Fallback has no maximum age and cannot prove the provider will accept a subsequent chat request; watch discovery warnings for persistent failures.
-- A successful lookup with no eligible models is authoritative: return an empty model list and HTTP 503 Problem Details when creating a session. A later failure does not resurrect previously unavailable choices.
-- Cancellation propagates; cancelled requests do not overwrite the cache. Provider errors are logged by type, without provider response bodies or keys.
-- New sessions and journal parsing jobs use the current selection. Saved conversations retain their model ID, even if it is later removed from the catalog. A retired provider model can fail at execution; there is no silent model switch. Start a new conversation to choose another model. Legacy session state without an ID uses the current default.
+If choices stop at an older model, inspect the active database policy and discovery warnings. Adding names to appsettings has no effect. Ensure this version of the API is deployed once; subsequent database edits require only a picker reload. The source transcript retrieval fix in this PR remains independent and requires no reprocessing.
 
 ## Verification
 
-The API test suite exercises refresh/default changes, eligibility filtering, empty inventories, fallback/backoff, cancellation, timeout, concurrent requests, the SDK's model-list HTTP request, and transcript model preservation. It loads the shipped policy to verify newer models appear after provider refresh and can create sessions through the HTTP endpoint. The Web `ChatModelDiscoveryTests` renders the full chat page, verifies the API-supplied picker choices, and creates a chat with a selected opaque model ID. All provider traffic in these tests uses fakes; no paid inference or live credentials are required.
+`DatabaseChatModelPolicyTests` uses PostgreSQL and the existing settings editor store to verify insert-only migration, current/older table schemas, scope precedence, inactive and deleted entries, policy edits, cache invalidation, provider failure, and invalid policy. Catalog tests cover timeout, cancellation, concurrency and availability changes. HTTP tests verify newer model session creation; Web tests render the picker and settings lifecycle labels. Providers are test doubles; no private account inventory or paid model-quality evaluation is claimed.
 
 ```powershell
 dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj
+dotnet test PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj
 ```
-
-The existing vector integration test requires local Docker. For manual catalog checks use `PersonalAgent/ChatModels.http` with your local internal API key.

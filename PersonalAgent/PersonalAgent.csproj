@@ -38,4 +38,7 @@
     <PackageReference Include="FirebaseAdmin" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Configuration\chat-model-policy.seed.json" />
+  </ItemGroup>
 </Project>

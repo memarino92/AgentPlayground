@@ -53,6 +53,8 @@ Introduce a versioned evaluation set for retrieval relevance, grounded answers, 
 
 **Done when:** a reviewer can understand the problem, run a demo without private data, inspect tests/decisions, and see measurable engineering tradeoffs. Complete the [public-release review](../runbooks/public-release.md) before changing visibility.
 
+2026-09-11 model-policy follow-up: production chat choices now read active Shared/Api database policy on each catalog request, with insert-only startup seeding and immediate provider-cache invalidation after edits. Appsettings model lists and the hardcoded empty-policy fallback are removed. Existing policies and saved-session model IDs are preserved. See [decision 0016](../decisions/0016-database-chat-model-policy.md) and [runtime operations](../runbooks/runtime-chat-models.md).
+
 ### Future plan: Learning Lab — proposed, not implemented
 
 Recorded 2026-09-10 from the maintainer's requested plan. Build an agent that proposes improvements, evaluates them against a fixed baseline, and lets a human approve, reject, or roll them back. This extends the gateway, durable messaging, and review workflows described in [0005](../decisions/0005-durable-garden-workflows.md); it does not imply that durable workflow orchestration or evaluation infrastructure is already complete.

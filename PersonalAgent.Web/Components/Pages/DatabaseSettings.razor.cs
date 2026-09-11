@@ -34,7 +34,7 @@ public partial class DatabaseSettings : IAsyncDisposable
         // Discard entered credentials immediately, even if the subsequent refresh fails.
         Rows = null;
         CredentialStatus = null;
-        Notice = "Saved to the database. Supported credentials reload automatically; other changes require restarting affected services. Use the API reload check to see its result.";
+        Notice = "Saved to the database. Chat model changes apply on the next catalog request; reload the chat page. Supported credentials reload automatically; other changes require restarting affected services. Use the API reload check for credential status.";
         await LoadAsync();
     });
 

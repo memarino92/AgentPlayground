@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -34,8 +33,7 @@ public class PersonalAgentEndpointsTests
     [InlineData("gpt-6-astra")]
     public async Task ShippedPolicy_AllowsNewSessionWithAvailableNewerModel(string ModelId)
     {
-        var Configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory, "Fixtures", "chat-model-policy.json")).Build();
-        var Policy = Configuration.GetSection(ChatModelCatalogOptions.SectionName).Get<ChatModelCatalogOptions>()!;
+        var Policy = DatabaseChatModelPolicy.LoadSeed();
         var Source = new Mock<IChatModelDiscovery>();
         Source.Setup(Value => Value.GetModelIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([ModelId, "text-embedding-3-small"]);
         using var Catalog = new ChatModelCatalog(Options.Create(Policy), Source.Object, TimeProvider.System, NullLogger<ChatModelCatalog>.Instance);

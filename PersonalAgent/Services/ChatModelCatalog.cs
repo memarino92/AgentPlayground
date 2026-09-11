@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 using PersonalAgent.Configuration;
 using PersonalAgent.Models;
@@ -9,35 +10,34 @@ internal sealed class ChatModelCatalog(
     IOptions<ChatModelCatalogOptions> Options,
     IChatModelDiscovery Discovery,
     TimeProvider TimeProvider,
-    ILogger<ChatModelCatalog> Logger) : IChatModelCatalog, IDisposable
+    ILogger<ChatModelCatalog> Logger,
+    IChatModelPolicySource? PolicySource = null) : IChatModelCatalog, IDisposable
 {
-    private readonly ChatModelCatalogOptions _options = Options.Value;
-    private readonly IReadOnlyList<AvailableChatModel> _configuredModels = BuildModels(Options.Value.Models);
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private CatalogSnapshot? _snapshot;
 
     public async Task<IReadOnlyList<AvailableChatModel>> GetModelsAsync(CancellationToken CancellationToken = default)
     {
         CancellationToken.ThrowIfCancellationRequested();
-        if (!_options.DiscoverFromProvider) return _configuredModels;
-        var snapshot = Volatile.Read(ref _snapshot);
-        if (snapshot is not null && TimeProvider.GetUtcNow() < snapshot.RefreshAfter) return snapshot.Models;
-
         await _refreshLock.WaitAsync(CancellationToken);
         try
         {
-            snapshot = _snapshot;
+            var policy = PolicySource is null ? Options.Value : await PolicySource.ReadAsync(CancellationToken);
+            var configuredModels = BuildModels(policy.Models);
+            var policyKey = JsonSerializer.Serialize(policy);
+            var snapshot = _snapshot?.PolicyKey == policyKey ? _snapshot : null;
+            if (!policy.DiscoverFromProvider || configuredModels.Count is 0) return configuredModels;
             if (snapshot is not null && TimeProvider.GetUtcNow() < snapshot.RefreshAfter) return snapshot.Models;
 
             IReadOnlyList<AvailableChatModel> models;
-            var refreshSeconds = _options.RefreshIntervalSeconds;
+            var refreshSeconds = policy.RefreshIntervalSeconds;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(_options.DiscoveryTimeoutSeconds));
+            timeout.CancelAfter(TimeSpan.FromSeconds(policy.DiscoveryTimeoutSeconds));
             try
             {
                 var ids = await Discovery.GetModelIdsAsync(timeout.Token).WaitAsync(timeout.Token);
                 var availableIds = ids.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                models = NormalizeDefault(_configuredModels.Where(Model => availableIds.Contains(Model.Id)).ToArray());
+                models = NormalizeDefault(configuredModels.Where(Model => availableIds.Contains(Model.Id)).ToArray());
                 Logger.LogInformation("Refreshed chat catalog: {ModelCount} configured models available", models.Count);
                 if (models.Count is 0) Logger.LogWarning("Provider inventory contains no configured chat models");
             }
@@ -45,13 +45,13 @@ internal sealed class ChatModelCatalog(
             catch (Exception exception)
             {
                 // Provider exceptions may include response bodies. Log the type, not private provider details.
-                models = snapshot?.Models ?? _configuredModels;
-                refreshSeconds = _options.FailureRetrySeconds;
+                models = snapshot?.Models ?? configuredModels;
+                refreshSeconds = policy.FailureRetrySeconds;
                 Logger.LogWarning("Chat model discovery failed ({ErrorType}); retaining {ModelCount} fallback models",
                     exception.GetType().Name, models.Count);
             }
 
-            snapshot = new CatalogSnapshot(models, TimeProvider.GetUtcNow().AddSeconds(refreshSeconds));
+            snapshot = new CatalogSnapshot(models, TimeProvider.GetUtcNow().AddSeconds(refreshSeconds), policyKey);
             Volatile.Write(ref _snapshot, snapshot);
             return snapshot.Models;
         }
@@ -78,7 +78,6 @@ internal sealed class ChatModelCatalog(
                 string.IsNullOrWhiteSpace(Model.DisplayName) ? Model.Id.Trim() : Model.DisplayName.Trim(), Model.IsDefault))
             .DistinctBy(Model => Model.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (models.Length is 0) models = [new AvailableChatModel("gpt-4o-mini", "GPT-4o mini", true)];
         return NormalizeDefault(models);
     }
 
@@ -91,5 +90,5 @@ internal sealed class ChatModelCatalog(
 
     public void Dispose() => _refreshLock.Dispose();
 
-    private sealed record CatalogSnapshot(IReadOnlyList<AvailableChatModel> Models, DateTimeOffset RefreshAfter);
+    private sealed record CatalogSnapshot(IReadOnlyList<AvailableChatModel> Models, DateTimeOffset RefreshAfter, string PolicyKey);
 }

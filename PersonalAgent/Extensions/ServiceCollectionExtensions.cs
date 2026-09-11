@@ -75,7 +75,6 @@ internal static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services.AddOptions<ChatModelCatalogOptions>()
-            .Bind(configuration.GetSection(ChatModelCatalogOptions.SectionName))
             .Validate(Options => Options.RefreshIntervalSeconds is >= 1 and <= 86400, "ChatModels:RefreshIntervalSeconds must be between 1 and 86400")
             .Validate(Options => Options.FailureRetrySeconds is >= 1 and <= 3600, "ChatModels:FailureRetrySeconds must be between 1 and 3600")
             .Validate(Options => Options.DiscoveryTimeoutSeconds is >= 1 and <= 60, "ChatModels:DiscoveryTimeoutSeconds must be between 1 and 60")
@@ -102,6 +101,8 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<OpenAiClientProvider>();
         services.AddSingleton<IChatModelDiscovery>(sp => new OpenAiChatModelDiscovery(() => sp.GetRequiredService<OpenAiClientProvider>().Current.GetOpenAIModelClient()));
         services.AddSingleton<IChatModelCatalog, ChatModelCatalog>();
+        services.AddSingleton<DatabaseChatModelPolicy>();
+        services.AddSingleton<IChatModelPolicySource>(sp => sp.GetRequiredService<DatabaseChatModelPolicy>());
         services.AddSingleton<IAgentSessionStore, PostgresAgentSessionStore>();
         services.AddSingleton<IAgentSemanticMemoryStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         services.AddSingleton<IAgentApprovalStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());

@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Moq;
 using PersonalAgent.Configuration;
@@ -14,8 +13,7 @@ public class ChatModelCatalogTests
     [Fact]
     public async Task ShippedPolicy_ExposesNewerModelsOnlyWhenProviderMakesThemAvailable()
     {
-        var Configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory, "Fixtures", "chat-model-policy.json")).Build();
-        var Policy = Configuration.GetSection(ChatModelCatalogOptions.SectionName).Get<ChatModelCatalogOptions>()!;
+        var Policy = DatabaseChatModelPolicy.LoadSeed();
         var Clock = new TestClock();
         var Source = new Mock<IChatModelDiscovery>();
         string[] NewModels = ["gpt-5.5", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-6-astra"];
@@ -218,10 +216,10 @@ public class ChatModelCatalogTests
     }
 
     [Fact]
-    public async Task EmptyConfiguration_PreservesApiOwnedFallback()
+    public async Task EmptyConfiguration_DisablesNewModelSelection()
     {
         using var catalog = Create(Mock.Of<IChatModelDiscovery>(), new TestClock(), new ChatModelCatalogOptions { DiscoverFromProvider = false });
-        (await catalog.GetModelsAsync()).Should().ContainSingle().Which.IsDefault.Should().BeTrue();
+        (await catalog.GetModelsAsync()).Should().BeEmpty();
     }
 
     private static ChatModelCatalog Create(IChatModelDiscovery Source, TimeProvider Clock, ChatModelCatalogOptions? Options = null) =>
