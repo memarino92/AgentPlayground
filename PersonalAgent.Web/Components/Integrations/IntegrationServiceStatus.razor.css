@@ -3,3 +3,5 @@
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: .7rem; border-bottom: 1px solid #8993a444; }
 p { margin-top: .6rem; }
+details { margin-top: 1rem; }
+summary { cursor: pointer; }

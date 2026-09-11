@@ -3,35 +3,69 @@
 <section class="status-card">
     <h2>Application status</h2>
     <p>Saved revision: @Settings.SavedRevision · Active revision: @Settings.ActiveRevision</p>
-    <p>Saving validates a candidate. Apply makes it active. Services reload within 15 seconds; refresh to check their acknowledgements.</p>
+    <p>Services pick up applied settings within 15 seconds. Refresh to check their progress.</p>
     <div class="status-table">
         <table>
-            <thead><tr><th>Service / instance</th><th>Applied revision</th><th>Status</th><th>Environment overrides</th></tr></thead>
+            <thead><tr><th>Service</th><th>Settings version</th><th>Status</th><th>Deployment overrides</th></tr></thead>
             <tbody>
                 @foreach (var service in new[] { "Api", "Web", "Worker" })
                 {
                     var instances = Settings.Instances.Where(Instance => Instance.Service == service).ToArray();
-                    if (instances.Length == 0)
-                    {
-                        <tr @key="service"><td>@service</td><td>—</td><td>Not yet seen</td><td>Unknown</td></tr>
-                    }
-                    @foreach (var instance in instances)
-                    {
-                        <tr @key="instance.Instance">
-                            <td>@instance.Service / @instance.Instance[..Math.Min(8, instance.Instance.Length)]</td>
-                            <td>@instance.Revision</td>
-                            <td>@Status(instance)</td>
-                            <td>@(instance.Overrides.Length == 0 ? "None" : string.Join(", ", instance.Overrides))</td>
-                        </tr>
-                    }
+                    var running = instances.Where(IsRecent).ToArray();
+                    <tr @key="service">
+                        <td>@ServiceName(service)</td>
+                        <td>@(running.Length == 0 ? "—" : string.Join(", ", running.Select(Instance => Instance.Revision).Distinct().Order()))</td>
+                        <td>@Summary(instances, running)</td>
+                        <td>@(running.Length == 0 ? "Unknown" : Overrides(running))</td>
+                    </tr>
                 }
             </tbody>
         </table>
     </div>
+    @if (Settings.Instances.Count > 0)
+    {
+        <details>
+            <summary>Technical details and previous instances</summary>
+            <div class="status-table">
+                <table>
+                    <thead><tr><th>Service</th><th>Instance ID</th><th>Version</th><th>Status</th><th>Environment overrides</th></tr></thead>
+                    <tbody>
+                        @foreach (var instance in Settings.Instances)
+                        {
+                            <tr @key="instance.Instance"><td>@ServiceName(instance.Service)</td><td><code>@instance.Instance</code></td><td>@instance.Revision</td>
+                                <td>@Status(instance)</td><td>@string.Join(", ", instance.Overrides)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    }
 </section>
 
 @code {
     [Parameter, EditorRequired] public IntegrationSettingsResponse Settings { get; set; } = default!;
-    private string Status(IntegrationInstanceResponse Instance) => DateTimeOffset.UtcNow - Instance.LastSeen > TimeSpan.FromSeconds(45)
-        ? "Offline or not reporting" : Instance.Revision != Settings.ActiveRevision ? $"Pending — {Instance.Status}" : Instance.Status;
+    private static bool IsRecent(IntegrationInstanceResponse Instance) => DateTimeOffset.UtcNow - Instance.LastSeen <= TimeSpan.FromSeconds(45);
+    private static string ServiceName(string Service) => Service switch { "Api" => "API service", "Web" => "Web application", "Worker" => "Background worker", _ => Service };
+    private string Status(IntegrationInstanceResponse Instance) => !IsRecent(Instance) ? "Offline or not reporting"
+        : Instance.Status.StartsWith("Apply failed", StringComparison.Ordinal) ? "Update failed — previous settings retained"
+        : Instance.Revision != Settings.ActiveRevision ? "Update pending"
+        : Instance.Status == "Disabled" ? "Reporting disabled" : "Up to date";
+    private string Summary(IntegrationInstanceResponse[] All, IntegrationInstanceResponse[] Running)
+    {
+        if (All.Length == 0) return "Not yet seen";
+        if (Running.Length == 0) return "Offline or not reporting";
+        var states = Running.Select(Status).Distinct().ToArray();
+        if (states.Length == 1) return states[0];
+        var pending = Running.Count(Instance => Instance.Revision != Settings.ActiveRevision || Instance.Status.StartsWith("Apply failed", StringComparison.Ordinal));
+        return pending > 0 ? $"{pending} of {Running.Length} instances need attention" : "Instances have different reporting settings";
+    }
+    private static string Overrides(IntegrationInstanceResponse[] Instances)
+    {
+        var fields = Instances.SelectMany(Instance => Instance.Overrides).Distinct().Select(Key => Key switch
+        {
+            "SENTRY_DSN" => "Project DSN", "SENTRY_ENABLED" => "Reporting enabled", "SENTRY_ENVIRONMENT" => "Environment",
+            "SENTRY_SAMPLE_RATE" => "Error sample rate", _ => Key
+        }).ToArray();
+        return fields.Length == 0 ? "None" : string.Join(", ", fields);
+    }
 }
