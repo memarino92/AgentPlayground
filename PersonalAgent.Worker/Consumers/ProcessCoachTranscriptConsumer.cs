@@ -46,6 +46,7 @@ internal class ProcessCoachTranscriptConsumer(
 
             await SaveResultAsync(connection, transaction, message, result, context.CancellationToken);
             await UpdateUploadStatusAsync(connection, message.UploadId, "Completed", null, context.CancellationToken);
+            await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new CoachCallStatusChangedEvent(message.UploadId, message.ProfileId, "Completed"), context.CancellationToken);
 
             await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema,
                 new CoachCallProcessingCompletedEvent(

@@ -309,6 +309,9 @@ These are possible selections, not assigned priorities. Parallel proposals with 
 
 ## Implementation progress: transactional transcription completion
 
+- Follow-up on 2026-09-11: upload, transcription start, speaker review/processing, review continuation, completion and terminal transcription failure now enqueue metadata-only status events with their database changes. Each Web instance receives its own SQL subscription; upload/admin/transcript pages refresh through authorized APIs and reconcile every 30 seconds. Draft speaker choices survive refresh and the first apply updates roles immediately. Local tests cover transactional replay, SQL fan-out to two instances, component refresh, disposal, subject filtering and speaker-review continuation. This completes live state refresh, not saga orchestration, granular chunk progress, or retry/reprocess controls. See [decision 0014](../decisions/0014-live-coach-processing.md).
+- Validation for live refresh: 116 API, 28 Worker, 35 Web and 23 Contracts tests passed locally. PostgreSQL tests use disposable databases and synthetic providers; no deployment or live-provider verification is claimed.
+
 - Added an Npgsql outbox in the domain schema and a retrying Worker dispatcher. Transcription, speaker-review continuation, and final processing commit domain changes with outgoing messages; processing commands target their queue directly.
 - Upload locks and state/subject/session checks make concurrent redelivery harmless after completion. Confirmed transcription failures also use the outbox. SQL/transport failures and cancellation remain retryable rather than overwriting committed state with Failed.
 - Seven new recovery tests cover partial-write rollback, cached provider recovery, lost acknowledgement, stable message IDs, concurrent replay, final-write identity, cancellation, terminal failure, speaker review, and PostgreSQL MassTransit host restart with queued delivery and hosted outbox draining.

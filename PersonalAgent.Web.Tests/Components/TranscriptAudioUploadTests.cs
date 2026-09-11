@@ -18,6 +18,20 @@ namespace PersonalAgent.Web.Tests.Components;
 
 public sealed class TranscriptAudioUploadTests : TestContext
 {
+    [Fact]
+    public async Task TranscriptPage_RefreshesCompletionFromLiveEvent()
+    {
+        using var Handler = new UploadHandler { Status = "Processing" };
+        Configure(Handler);
+        Services.AddMudServices();
+        var Cut = RenderComponent<CoachTranscripts>();
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic transcript"));
+        Cut.FindComponents<TranscriptAudioUpload>().Should().BeEmpty();
+        Handler.Status = "Completed";
+        await Task.Run(() => Services.GetRequiredService<CoachCallUpdates>().Notify(new(Handler.Id, "owner", "Completed")));
+        Cut.WaitForAssertion(() => Cut.FindComponents<TranscriptAudioUpload>().Should().ContainSingle());
+    }
+
     [Theory]
     [InlineData("Completed", true)]
     [InlineData("Processing", false)]
@@ -82,6 +96,7 @@ public sealed class TranscriptAudioUploadTests : TestContext
 
     private void Configure(UploadHandler Handler)
     {
+        Services.AddSingleton<CoachCallUpdates>();
         JSInterop.Mode = JSRuntimeMode.Loose;
         var Auth = new Mock<AuthenticationStateProvider>();
         Auth.Setup(Value => Value.GetAuthenticationStateAsync()).ReturnsAsync(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity([

@@ -22,7 +22,7 @@ public static class CoachCallOutbox
 
     public static async Task EnqueueAsync<T>(NpgsqlTransaction Transaction, string Schema, T Message, CancellationToken CancellationToken) where T : class
     {
-        if (Message is not (ProcessCoachTranscriptCommand or CoachCallTranscriptionCompletedEvent or CoachCallProcessingCompletedEvent or CoachCallProcessingFailedEvent))
+        if (Message is not (ProcessCoachTranscriptCommand or CoachCallStatusChangedEvent or CoachCallTranscriptionCompletedEvent or CoachCallProcessingCompletedEvent or CoachCallProcessingFailedEvent))
             throw new ArgumentException("Unsupported coach call outbox message.", nameof(Message));
         await using var Command = new NpgsqlCommand($"INSERT INTO {Table(Schema)} (message_id, message_type, payload) VALUES (@id, @type, @payload::jsonb)", Transaction.Connection, Transaction);
         Command.Parameters.AddWithValue("id", Guid.NewGuid());
@@ -48,6 +48,7 @@ public static class CoachCallOutbox
             Message = Reader.GetString(1) switch
             {
                 nameof(ProcessCoachTranscriptCommand) => JsonSerializer.Deserialize<ProcessCoachTranscriptCommand>(Payload)!,
+                nameof(CoachCallStatusChangedEvent) => JsonSerializer.Deserialize<CoachCallStatusChangedEvent>(Payload)!,
                 nameof(CoachCallTranscriptionCompletedEvent) => JsonSerializer.Deserialize<CoachCallTranscriptionCompletedEvent>(Payload)!,
                 nameof(CoachCallProcessingCompletedEvent) => JsonSerializer.Deserialize<CoachCallProcessingCompletedEvent>(Payload)!,
                 nameof(CoachCallProcessingFailedEvent) => JsonSerializer.Deserialize<CoachCallProcessingFailedEvent>(Payload)!,

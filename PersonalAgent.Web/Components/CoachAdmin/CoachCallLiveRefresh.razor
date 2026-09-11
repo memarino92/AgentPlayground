@@ -1,0 +1,61 @@
+@implements IAsyncDisposable
+@inject CoachCallUpdates Updates
+@inject ILogger<CoachCallLiveRefresh> Logger
+
+@code {
+    [Parameter] public string? ProfileId { get; set; }
+    [Parameter] public Guid? UploadId { get; set; }
+    [Parameter] public EventCallback OnRefresh { get; set; }
+
+    private readonly CancellationTokenSource Lifetime = new();
+    private CoachCallUpdates.Subscription? Subscription;
+    private Task? Listening;
+    private bool Disposed;
+
+    protected override void OnInitialized()
+    {
+        Subscription = Updates.Subscribe(ProfileId, UploadId);
+        Listening = ListenAsync();
+    }
+
+    private async Task ListenAsync()
+    {
+        try
+        {
+            while (!Lifetime.IsCancellationRequested)
+            {
+                using var Wake = CancellationTokenSource.CreateLinkedTokenSource(Lifetime.Token);
+                Wake.CancelAfter(TimeSpan.FromSeconds(30));
+                try
+                {
+                    if (!await Subscription!.Reader.WaitToReadAsync(Wake.Token)) return;
+                    while (Subscription.Reader.TryRead(out _)) { }
+                }
+                catch (OperationCanceledException) when (!Lifetime.IsCancellationRequested) { }
+                if (Lifetime.IsCancellationRequested) return;
+                try
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        if (!Disposed) await OnRefresh.InvokeAsync();
+                    });
+                }
+                catch (Exception Exception) when (!Lifetime.IsCancellationRequested)
+                {
+                    Logger.LogWarning(Exception, "Could not refresh coach call data; will retry on the next update");
+                }
+            }
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Disposed) return;
+        Disposed = true;
+        await Lifetime.CancelAsync();
+        Subscription?.Dispose();
+        if (Listening is not null) await Listening;
+        Lifetime.Dispose();
+    }
+}

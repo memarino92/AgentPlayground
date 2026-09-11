@@ -62,7 +62,7 @@ else
                                                        Dense="true"
                                                        Value="@GetOverrideSelection(label)"
                                                        ValueChanged="(role) => OnRoleChanged.InvokeAsync(new SpeakerRoleChanged(SelectedItem.UploadId, label.SpeakerLabel, role))"
-                                                       Disabled="@IsApplyingOverride">
+                                                       Disabled="@(!CanApplyOverride)">
                                                 <MudSelectItem Value="@("coach")">coach</MudSelectItem>
                                                 <MudSelectItem Value="@("athlete")">athlete</MudSelectItem>
                                                 <MudSelectItem Value="@("unknown")">unknown</MudSelectItem>
@@ -84,7 +84,7 @@ else
                         </MudGrid>
                         <MudButton Variant="Variant.Filled"
                                    Color="Color.Warning"
-                                   Disabled="@IsApplyingOverride"
+                                   Disabled="@(!CanApplyOverride)"
                                    OnClick="() => OnApplyOverride.InvokeAsync(SelectedItem)">
                             @(IsApplyingOverride ? "Applying..." : "Apply speaker override")
                         </MudButton>
@@ -147,6 +147,7 @@ else
     }
 
     private bool NeedsSpeakerSamples => SelectedItem?.SpeakerLabels.Any(label => NormalizeRole(label.SpeakerRole) == "unknown") is true;
+    private bool CanApplyOverride => !IsApplyingOverride && string.Equals(SelectedItem?.Status, "AwaitingSpeakerOverride", StringComparison.OrdinalIgnoreCase);
 
     private IReadOnlyDictionary<string, object> GetOverridesOpenAttribute() => NeedsSpeakerSamples
         ? new Dictionary<string, object> { ["open"] = "open" }

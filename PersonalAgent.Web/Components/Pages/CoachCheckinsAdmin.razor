@@ -7,6 +7,7 @@
 @inject IJSRuntime JsRuntime
 
 <PageTitle>PersonalAgent - Coach Check-ins Admin</PageTitle>
+<CoachCallLiveRefresh OnRefresh="RefreshLiveAsync" />
 
 <MudContainer MaxWidth="MaxWidth.False" Class="coach-admin-page">
     <MudPaper Class="pa-3 mb-3 coach-admin-upload" Elevation="1">
@@ -65,6 +66,8 @@
     private IBrowserFile? selectedFile;
     private List<CoachCheckinAdminItemResponse> items = [];
     private readonly Dictionary<Guid, Dictionary<int, string>> overrideSelections = [];
+    private readonly HashSet<(Guid UploadId, int SpeakerLabel)> editedRoles = [];
+    private readonly SemaphoreSlim refreshGate = new(1, 1);
     private Guid? selectedUploadId;
     private readonly HashSet<Guid> loadingTranscriptUploadIds = [];
     private readonly Dictionary<Guid, string> transcriptErrorsByUploadId = [];
@@ -88,6 +91,7 @@
 
     private async Task LoadAsync()
     {
+        await refreshGate.WaitAsync();
         isLoading = true;
         errorMessage = null;
         try
@@ -95,16 +99,24 @@
             items = await ApiClient.GetCoachCheckinAdminItemsAsync();
             Logger.LogInformation("Loaded {Count} coach check-in admin items", items.Count);
 
-            overrideSelections.Clear();
             foreach (var item in items)
             {
-                overrideSelections[item.UploadId] = item.SpeakerLabels
+                var refreshedSelections = item.SpeakerLabels
                     .GroupBy(label => label.SpeakerLabel)
                     .ToDictionary(
                         group => group.Key,
                         group => group.Select(label => NormalizeRole(label.SpeakerRole)).Distinct().Count() == 1
                             ? group.Select(label => NormalizeRole(label.SpeakerRole)).First()
                             : "unknown");
+                if (overrideSelections.TryGetValue(item.UploadId, out var existing))
+                    foreach (var entry in existing.Where(entry => editedRoles.Contains((item.UploadId, entry.Key))))
+                        refreshedSelections[entry.Key] = entry.Value;
+                overrideSelections[item.UploadId] = refreshedSelections;
+            }
+            foreach (var removedId in overrideSelections.Keys.Where(id => items.All(item => item.UploadId != id)).ToList())
+            {
+                overrideSelections.Remove(removedId);
+                editedRoles.RemoveWhere(entry => entry.UploadId == removedId);
             }
 
             if (selectedUploadId is null || items.All(item => item.UploadId != selectedUploadId.Value))
@@ -118,11 +130,13 @@
         finally
         {
             isLoading = false;
+            refreshGate.Release();
         }
     }
 
     private async Task ApplyOverrideAsync(CoachCheckinAdminItemResponse item)
     {
+        if (isApplyingOverride) return;
         if (!overrideSelections.TryGetValue(item.UploadId, out var selectionMap) || selectionMap.Count is 0)
         {
             errorMessage = "No speaker override choices found for this upload.";
@@ -140,8 +154,10 @@
         try
         {
             await ApiClient.ApplySpeakerOverridesAsync(item.UploadId, item.ProfileId, overrides);
+            editedRoles.RemoveWhere(entry => entry.UploadId == item.UploadId);
             Logger.LogInformation("Applied speaker override for upload {UploadId}", item.UploadId);
             await LoadAsync();
+            await LoadTranscriptAsync(item.UploadId);
         }
         catch (Exception ex)
         {
@@ -187,6 +203,13 @@
         }
 
         selections[speakerLabel] = normalizedRole;
+        editedRoles.Add((uploadId, speakerLabel));
+    }
+
+    private async Task RefreshLiveAsync()
+    {
+        await LoadAsync();
+        if (selectedUploadId is Guid uploadId) await LoadTranscriptAsync(uploadId);
     }
 
     private static string NormalizeRole(string? role)

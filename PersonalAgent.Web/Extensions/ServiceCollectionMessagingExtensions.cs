@@ -1,8 +1,10 @@
 using AgentPlayground.Contracts.Messaging;
+using AgentPlayground.Contracts.Events;
 using MassTransit;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.Extensions.Options;
 using PersonalAgent.Web.Services;
+using PersonalAgent.Web.Consumers;
 
 namespace PersonalAgent.Web.Extensions;
 
@@ -27,7 +29,17 @@ internal static class ServiceCollectionMessagingExtensions
         });
 
         services.AddScoped<ProtectedSessionStorage>();
-        services.AddMassTransit(x => x.ConfigureSharedPostgresTransport());
+        services.AddSingleton<CoachCallUpdates>();
+        services.AddMassTransit(x =>
+        {
+            x.AddConsumer<CoachCallStatusChangedConsumer>().Endpoint(e =>
+            {
+                e.Name = $"personal-agent-web-coach-updates-{Guid.NewGuid():N}";
+                e.Temporary = true;
+                e.AddSqlConfigureEndpointCallback((_, cfg) => cfg.Subscribe<CoachCallStatusChangedEvent>(_ => { }));
+            });
+            x.ConfigureSharedPostgresTransport();
+        });
         return services;
     }
 }

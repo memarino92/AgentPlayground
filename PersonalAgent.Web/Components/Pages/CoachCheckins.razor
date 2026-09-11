@@ -4,6 +4,10 @@
 @inject ILogger<CoachCheckins> Logger
 
 <PageTitle>PersonalAgent - Coach Check-ins</PageTitle>
+@if (trackedUploadId is Guid uploadId && !string.IsNullOrWhiteSpace(profileId))
+{
+    <CoachCallLiveRefresh @key="uploadId" ProfileId="@profileId" UploadId="uploadId" OnRefresh="RefreshStatusAsync" />
+}
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="coach-upload-page">
     <MudPaper Elevation="1" Class="pa-4">
@@ -12,7 +16,7 @@
             <MudText Typo="Typo.body2">Upload a call recording and track processing until summary generation completes.</MudText>
 
             <div class="coach-upload-page__picker">
-                <InputFile OnChange="HandleFileSelected" accept=".m4a,audio/mp4" />
+                <InputFile OnChange="HandleFileSelected" accept=".m4a,audio/mp4" disabled="@isUploading" />
             </div>
 
             @if (selectedFile is not null)
@@ -28,7 +32,7 @@
                     @GetUploadButtonText()
                 </MudButton>
 
-                @if (isUploading || isPolling)
+                @if (isUploading || isProcessing)
                 {
                     <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" />
                 }
@@ -71,13 +75,15 @@
     private string selectedFileName = "call.m4a";
     private string selectedContentType = "audio/m4a";
     private bool isUploading;
-    private bool isPolling;
+    private bool isProcessing;
+    private Guid? trackedUploadId;
+    private readonly SemaphoreSlim refreshGate = new(1, 1);
     private bool hasUploadSubmitted;
     private string? statusMessage;
     private CoachCheckinStatusResponse? latestStatus;
     private string? summaryMarkdown;
 
-    private bool IsUploadLocked => isUploading || isPolling;
+    private bool IsUploadLocked => isUploading || isProcessing;
 
     protected override async Task OnInitializedAsync() => profileId = await ResolveProfileIdAsync();
 
@@ -89,6 +95,8 @@
         selectedContentType = string.IsNullOrWhiteSpace(selectedFile.ContentType) ? "audio/m4a" : selectedFile.ContentType;
         hasUploadSubmitted = false;
         latestStatus = null;
+        trackedUploadId = null;
+        isProcessing = false;
         summaryMarkdown = null;
         statusMessage = $"Selected {selectedFile.Name} ({FormatKb(selectedFile.Size)} KB)";
     }
@@ -119,7 +127,8 @@
                 ? $"Duplicate detected. Reusing upload {upload.UploadId}."
                 : $"Uploaded {upload.UploadId}. Waiting for processing...";
             Logger.LogInformation("Coach check-in upload response {UploadId}, duplicate={IsDuplicate}", upload.UploadId, upload.IsDuplicate);
-            await PollStatusAsync(upload.UploadId);
+            trackedUploadId = upload.UploadId;
+            await RefreshStatusAsync();
         }
         catch (Exception ex)
         {
@@ -132,53 +141,35 @@
         }
     }
 
-    private async Task PollStatusAsync(Guid uploadId)
+    private async Task RefreshStatusAsync()
     {
-        if (string.IsNullOrWhiteSpace(profileId)) return;
+        await refreshGate.WaitAsync();
+        try { await LoadStatusAsync(); }
+        finally { refreshGate.Release(); }
+    }
 
-        isPolling = true;
-
-        for (var i = 0; i < 120; i++)
+    private async Task LoadStatusAsync()
+    {
+        if (trackedUploadId is not Guid uploadId || string.IsNullOrWhiteSpace(profileId)) return;
+        var status = await ApiClient.GetCoachCheckinStatusAsync(uploadId, profileId);
+        if (trackedUploadId != uploadId) return;
+        latestStatus = status;
+        if (status is null)
         {
-            latestStatus = await ApiClient.GetCoachCheckinStatusAsync(uploadId, profileId);
-            if (latestStatus is null)
-            {
-                statusMessage = "Upload status unavailable.";
-                isPolling = false;
-                return;
-            }
-
-            statusMessage = $"Current status: {latestStatus.Status}";
-            Logger.LogInformation("Coach check-in {UploadId} status {Status}", uploadId, latestStatus.Status);
-            if (latestStatus.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
-            {
-                var summary = await ApiClient.GetCoachCheckinSummaryAsync(uploadId, profileId);
-                summaryMarkdown = summary?.SummaryMarkdown;
-                hasUploadSubmitted = false;
-                isPolling = false;
-                return;
-            }
-
-            if (latestStatus.Status.Equals("AwaitingSpeakerOverride", StringComparison.OrdinalIgnoreCase))
-            {
-                statusMessage = "Speaker override is required before processing can continue.";
-                hasUploadSubmitted = false;
-                isPolling = false;
-                return;
-            }
-
-            if (latestStatus.Status.Equals("Failed", StringComparison.OrdinalIgnoreCase))
-            {
-                hasUploadSubmitted = false;
-                isPolling = false;
-                return;
-            }
-            await Task.Delay(TimeSpan.FromSeconds(4));
+            statusMessage = "Upload status unavailable. Retrying automatically...";
+            return;
         }
 
-        statusMessage = "Processing is still running. Refresh in a few minutes.";
+        statusMessage = $"Current status: {status.Status}";
+        isProcessing = status.Status is "Uploaded" or "Queued" or "Transcribing" or "Processing";
         hasUploadSubmitted = false;
-        isPolling = false;
+        if (status.Status == "AwaitingSpeakerOverride")
+            statusMessage = "Speaker override is required before processing can continue.";
+        if (status.Status == "Completed")
+        {
+            var summary = await ApiClient.GetCoachCheckinSummaryAsync(uploadId, profileId);
+            if (trackedUploadId == uploadId) summaryMarkdown = summary?.SummaryMarkdown;
+        }
     }
 
     private async Task<string?> ResolveProfileIdAsync()
@@ -190,7 +181,7 @@
 
     private string GetUploadButtonText()
     {
-        if (isPolling) return "Processing...";
+        if (isProcessing) return "Processing...";
         if (isUploading) return "Uploading...";
         if (hasUploadSubmitted) return "Working...";
         return "Upload call";
