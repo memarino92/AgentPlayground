@@ -82,6 +82,7 @@ public sealed class EvidenceDrawerTests : TestContext
         Cut.WaitForAssertion(() => Cut.FindAll("audio").Should().ContainSingle());
         Cut.Find(".message-list").TextContent.Should().Contain("Brace before the pull");
         Cut.FindComponent<EvidenceDrawer>().Instance.StartMs.Should().Be(4000);
+        Cut.FindComponent<EvidenceDrawer>().Instance.ProfileId.Should().Be("owner");
     }
     private sealed class OwnerAuthentication : AuthenticationStateProvider
     {

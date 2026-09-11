@@ -32,7 +32,7 @@
 </div>
 @if (SelectedEvidence is not null)
 {
-    <EvidenceDrawer @key="SelectedEvidence" UploadId="SelectedEvidence.UploadId" ProfileId="SelectedEvidence.ProfileId" StartMs="SelectedEvidence.StartMs" OnClose="() => SelectedEvidence = null" />
+    <EvidenceDrawer @key="SelectedEvidence" UploadId="SelectedEvidence.UploadId" ProfileId="@SelectedEvidence.ProfileId" StartMs="SelectedEvidence.StartMs" OnClose="() => SelectedEvidence = null" />
 }
 
 @code {

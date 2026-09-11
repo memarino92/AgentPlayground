@@ -1,0 +1,10 @@
+@implements IAsyncDisposable
+
+<section aria-label="Call recording">
+    <label>@(HasAudio ? "Replace audio" : "Upload audio")
+        <InputFile OnChange="UploadAsync" accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm,.flac" disabled="@Uploading" />
+    </label>
+    <p>Choose the recording for this call. The transcript and timestamps stay as they are.</p>
+    @if (Message is not null) { <p role="status">@Message</p> }
+    @if (Error is not null) { <p role="alert">@Error</p> }
+</section>

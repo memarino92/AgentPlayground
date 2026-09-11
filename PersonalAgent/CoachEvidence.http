@@ -14,6 +14,17 @@ X-Agent-Role: Owner
 X-Agent-Timestamp: {{timestamp}}
 X-Agent-Signature: {{signature}}
 
+### Manually attach or replace audio on a completed call (Owner attests it is correct)
+PUT {{baseUrl}}/api/coach-checkins/{{uploadId}}/audio?profileId={{profileId}}
+Content-Type: audio/mp4
+X-Internal-Api-Key: {{internalKey}}
+X-Agent-Actor: {{profileId}}
+X-Agent-Role: Owner
+X-Agent-Timestamp: {{timestamp}}
+X-Agent-Signature: {{signature}}
+
+< ./chosen-recording.m4a
+
 ### Original recording range
 GET {{baseUrl}}/api/coach-checkins/{{uploadId}}/audio?profileId={{profileId}}
 Range: bytes=0-1023
