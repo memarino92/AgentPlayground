@@ -8,6 +8,13 @@ namespace PersonalAgent.Web.Tests.Components;
 
 public class ChatMessageListTests : TestContext
 {
+    public ChatMessageListTests()
+    {
+        var Module = JSInterop.SetupModule("./Components/Pages/ChatMessageList.razor.js");
+        Module.SetupVoid("initialize", _ => true);
+        Module.SetupVoid("dispose", _ => true);
+    }
+
     [Fact]
     public void MessageList_RendersEachMessageWithRoleLabels()
     {
