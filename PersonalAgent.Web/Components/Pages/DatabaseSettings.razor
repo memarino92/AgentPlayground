@@ -2,10 +2,11 @@
     <h2>Database settings</h2>
     <p>Edit all existing database settings, including inactive entries.</p>
     <section class="explanation">
-        <h3>Restart required after saving</h3>
-        <p>These values load when each service starts. Saving does not reload running services. Restart the affected services through your deployment platform. Shared settings are defaults for API, Web and Worker; service-specific settings override them.</p>
+        <h3>When changes take effect</h3>
+        <p>OpenAI and AssemblyAI API keys reload automatically in API within 15 seconds, or use the reload button below. New provider requests use accepted credentials; requests already in progress continue with their original client. Other settings require a service restart.</p>
+        <p>Shared settings are defaults for API, Web and Worker; service-specific settings override them. A Shared credential can be hidden by an API-specific entry.</p>
         <p>This editor shows stored values, not confirmed running values. Deployment environment overrides may take precedence. Database connection and encryption bootstrap variables remain in your deployment configuration.</p>
-        <p>Values are saved as text; provider credentials and application-specific formats are not verified here. Coordinate matching API keys and signing keys across services before restarting.</p>
+        <p>Credential syntax is checked, but provider acceptance is not verified. Rotate within the same provider account so existing transcription jobs remain accessible. Other values remain text. Coordinate matching internal API keys and signing keys across services before restarting.</p>
     </section>
     @if (Error is not null) { <p role="alert">@Error</p> }
     @if (Notice is not null) { <p role="status">@Notice</p> }
@@ -23,7 +24,14 @@
                 { <option value="@scope">@ScopeName(scope)</option> }
             </select></label>
             <button disabled="@Busy" @onclick="RefreshAsync">Refresh / discard unsaved edits</button>
+            <button disabled="@Busy" @onclick="ReloadCredentialsAsync">Reload supported credentials in API</button>
         </div>
+        @if (CredentialStatus is not null)
+        {
+            <p role="status">@CredentialStatus.Status. Checked: @CredentialStatus.LastChecked?.ToLocalTime().ToString("g")</p>
+            @if (CredentialStatus.Overrides.Length > 0)
+            { <p>Deployment overrides take precedence: @string.Join(", ", CredentialStatus.Overrides)</p> }
+        }
         <EditForm Model="Rows" OnSubmit="SaveAsync">
             <fieldset disabled="@Busy">
                 @foreach (var group in VisibleRows.GroupBy(Row => (Row.Original.Scope, Integration: Row.Original.Key.Split(':')[0])))
@@ -34,15 +42,16 @@
                         {
                             <div class="setting-row" @key="row.Original">
                                 <label for="@row.Id"><code>@row.Original.Key</code></label>
+                                <small>@(row.Original.SupportsLiveReload ? "Live reload in API · new provider requests" : "Restart required for affected services")</small>
                                 @if (row.Original.IsSecret)
                                 {
                                     <label>Secret action <select aria-label="@($"{row.Original.Key} secret action")" value="@row.SecretAction" @onchange="Event => ChangeSecretAction(row, Event)">
                                         <option value="keep">Keep stored secret (hidden)</option>
                                         <option value="replace">Replace secret</option>
-                                        <option value="clear">Clear secret</option>
+                                        @if (!row.Original.SupportsLiveReload) { <option value="clear">Clear secret</option> }
                                     </select></label>
                                     @if (row.SecretAction == "replace")
-                                    { <input id="@row.Id" type="password" autocomplete="new-password" maxlength="262144" @bind="row.Value" /> }
+                                    { <input id="@row.Id" type="password" autocomplete="new-password" maxlength="@(row.Original.SupportsLiveReload ? 4096 : 262144)" @bind="row.Value" /> }
                                     @if (row.SecretAction == "clear") { <p>The stored secret will be replaced with an empty value.</p> }
                                 }
                                 else
@@ -55,7 +64,7 @@
                 }
                 @if (!VisibleRows.Any()) { <p>No settings match. Only rows already present in the database appear here.</p> }
                 <p>@Rows.Count(Row => Row.Changed) unsaved changes across all filters.</p>
-                <button type="submit" disabled="@(!Rows.Any(Row => Row.Changed))">Save all changes — restart required</button>
+                <button type="submit" disabled="@(!Rows.Any(Row => Row.Changed))">Save all changes</button>
             </fieldset>
         </EditForm>
     }

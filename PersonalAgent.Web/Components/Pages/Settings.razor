@@ -1,12 +1,13 @@
 @page "/admin/settings"
 @page "/admin/integration-settings"
 @attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
+@inject NavigationManager Navigation
 
 <PageTitle>Settings</PageTitle>
 <div class="settings-hub">
     <h1>Settings</h1>
     <nav aria-label="Settings sections">
-        <a href="#sentry-settings">Sentry</a> · <a href="#database-settings">Database settings</a> · <a href="/admin/integrations">Tool access</a>
+        <a href="@(Navigation.Uri.Split('#')[0] + "#sentry-settings")">Sentry</a> · <a href="@(Navigation.Uri.Split('#')[0] + "#database-settings")">Database settings</a> · <a href="/admin/integrations">Tool access</a>
     </nav>
     <section id="sentry-settings" aria-label="Sentry settings">
         <IntegrationSettings />

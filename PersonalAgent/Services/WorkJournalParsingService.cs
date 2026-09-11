@@ -9,7 +9,7 @@ namespace PersonalAgent.Services;
 
 internal class WorkJournalParsingService : IWorkJournalParsingService
 {
-    private readonly OpenAIClient _openAiClient;
+    private readonly OpenAiClientProvider _clients;
     private readonly IChatModelCatalog _chatModelCatalog;
     private readonly ILogger<WorkJournalParsingService> _logger;
 
@@ -18,8 +18,7 @@ internal class WorkJournalParsingService : IWorkJournalParsingService
         IChatModelCatalog chatModelCatalog,
         ILogger<WorkJournalParsingService> logger)
     {
-        var apiKey = apiKeyOptions.Value.OpenAiKey;
-        _openAiClient = new OpenAIClient(apiKey);
+        _clients = new(apiKeyOptions);
         _chatModelCatalog = chatModelCatalog;
         _logger = logger;
     }
@@ -54,7 +53,7 @@ internal class WorkJournalParsingService : IWorkJournalParsingService
 
         var model = await _chatModelCatalog.GetDefaultModelAsync(cancellationToken);
         _logger.LogInformation("Parsing work journal with model {ModelId}", model.Id);
-        var response = await _openAiClient.GetChatClient(model.Id).CompleteChatAsync(
+        var response = await _clients.Current.GetChatClient(model.Id).CompleteChatAsync(
             [new UserChatMessage(prompt)],
             new ChatCompletionOptions { ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() },
             cancellationToken);

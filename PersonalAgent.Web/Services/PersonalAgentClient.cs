@@ -251,6 +251,14 @@ internal class PersonalAgentClient(
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task<DatabaseCredentialStatus> ReloadDatabaseCredentialsAsync(CancellationToken CancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, "/api/admin/settings/reload", cancellationToken: CancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<DatabaseCredentialStatus>(JsonOptions, CancellationToken)
+            ?? throw new InvalidOperationException("No credential status was returned.");
+    }
+
     private async Task<T> IntegrationRequestAsync<T>(HttpMethod Method, string Suffix, object? Body, CancellationToken CancellationToken)
     {
         using var response = await SendAsync(Method, "/api/admin/integrations/sentry" + Suffix,

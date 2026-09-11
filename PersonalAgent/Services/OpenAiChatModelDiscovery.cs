@@ -2,11 +2,12 @@ using OpenAI.Models;
 
 namespace PersonalAgent.Services;
 
-internal sealed class OpenAiChatModelDiscovery(OpenAIModelClient Client) : IChatModelDiscovery
+internal sealed class OpenAiChatModelDiscovery(Func<OpenAIModelClient> ClientFactory) : IChatModelDiscovery
 {
+    public OpenAiChatModelDiscovery(OpenAIModelClient Client) : this(() => Client) { }
     public async Task<IReadOnlyList<string>> GetModelIdsAsync(CancellationToken CancellationToken = default)
     {
-        var result = await Client.GetModelsAsync(CancellationToken);
+        var result = await ClientFactory().GetModelsAsync(CancellationToken);
         return result.Value.Select(Model => Model.Id).ToArray();
     }
 }

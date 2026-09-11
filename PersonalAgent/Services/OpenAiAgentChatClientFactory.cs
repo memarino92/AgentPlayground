@@ -8,6 +8,6 @@ namespace PersonalAgent.Services;
 
 internal sealed class OpenAiAgentChatClientFactory(IOptions<ApiKeyOptions> Options) : IAgentChatClientFactory
 {
-    private readonly OpenAIClient Client = new(Options.Value.OpenAiKey);
-    public IChatClient Create(string ModelId) => Client.GetChatClient(ModelId).AsIChatClient();
+    private readonly OpenAiClientProvider Clients = new(Options);
+    public IChatClient Create(string ModelId) => Clients.Current.GetChatClient(ModelId).AsIChatClient();
 }
