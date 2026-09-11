@@ -3,7 +3,7 @@
     <p>Edit all existing database settings, including inactive entries.</p>
     <section class="explanation">
         <h3>When changes take effect</h3>
-        <p>OpenAI and AssemblyAI API keys reload automatically in API within 15 seconds, or use the reload button below. New provider requests use accepted credentials; requests already in progress continue with their original client. Other settings require a service restart.</p>
+        <p>OpenAI and AssemblyAI API keys reload automatically in API within 15 seconds, or use the reload button below. New provider requests use accepted credentials; requests already in progress continue with their original client. Chat model settings apply on the next catalog request; reload the chat page to refresh its choices. Other settings require a service restart.</p>
         <p>Shared settings are defaults for API, Web and Worker; service-specific settings override them. A Shared credential can be hidden by an API-specific entry.</p>
         <p>This editor shows stored values, not confirmed running values. Deployment environment overrides may take precedence. Database connection and encryption bootstrap variables remain in your deployment configuration.</p>
         <p>Credential syntax is checked, but provider acceptance is not verified. Rotate within the same provider account so existing transcription jobs remain accessible. Other values remain text. Coordinate matching internal API keys and signing keys across services before restarting.</p>
@@ -42,7 +42,7 @@
                         {
                             <div class="setting-row" @key="row.Original">
                                 <label for="@row.Id"><code>@row.Original.Key</code></label>
-                                <small>@(row.Original.SupportsLiveReload ? "Live reload in API · new provider requests" : "Restart required for affected services")</small>
+                                <small>@(row.Original.IsLiveChatModelPolicy ? "Live in API · reload chat choices; existing chats keep their model" : row.Original.SupportsLiveReload ? "Live reload in API · new provider requests" : "Restart required for affected services")</small>
                                 @if (row.Original.IsSecret)
                                 {
                                     <label>Secret action <select aria-label="@($"{row.Original.Key} secret action")" value="@row.SecretAction" @onchange="Event => ChangeSecretAction(row, Event)">
@@ -56,8 +56,8 @@
                                 }
                                 else
                                 { <textarea id="@row.Id" rows="2" maxlength="262144" spellcheck="false" @bind="row.Value"></textarea> }
-                                <label><input type="checkbox" @bind="row.IsActive" /> Use this setting at startup</label>
-                                @if (!row.IsActive) { <small>Inactive: this entry is ignored; another configuration source may supply the value.</small> }
+                                <label><input type="checkbox" @bind="row.IsActive" /> @(row.Original.IsLiveChatModelPolicy ? "Use this database setting" : "Use this setting at startup")</label>
+                                @if (!row.IsActive) { <small>@(row.Original.IsLiveChatModelPolicy ? "Inactive: this row is ignored. An active Shared database row can still supply the value." : "Inactive: this entry is ignored; another configuration source may supply the value.")</small> }
                             </div>
                         }
                     </section>

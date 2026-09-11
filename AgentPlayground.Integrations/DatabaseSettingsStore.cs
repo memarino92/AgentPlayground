@@ -6,6 +6,7 @@ namespace AgentPlayground.Integrations;
 public sealed record DatabaseSetting(string Scope, string Key, string Version, string? Value, bool IsSecret, bool IsActive)
 {
     public bool SupportsLiveReload => LiveCredentialPolicy.Supports(Scope, Key);
+    public bool IsLiveChatModelPolicy => Scope is "Shared" or "Api" && Key.StartsWith("ChatModels:", StringComparison.OrdinalIgnoreCase);
 }
 public sealed record DatabaseSettingEdit(string Scope, string Key, string Version, string? Value, bool IsActive);
 public sealed record SaveDatabaseSettingsRequest(List<DatabaseSettingEdit> Changes);

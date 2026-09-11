@@ -35,6 +35,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0013: Retained call audio](decisions/0013-retained-call-audio.md) | Proposed; retention and evidence drawer implemented | Preserve and play original recordings with subject access and active deletion |
 | [0014: Live coach processing](decisions/0014-live-coach-processing.md) | Accepted; implemented | Refresh open coach pages from transactional MassTransit status events |
 | [0015: Coach retrieval hints](decisions/0015-coach-retrieval-hints.md) | Accepted, retrospective; implemented | Recover untagged exercise cues and scope follow-ups by recording filename |
+| [0016: Database chat model policy](decisions/0016-database-chat-model-policy.md) | Accepted; implemented | Database-owned model policy with live catalog updates and insert-only migration |
 
 ## Working agreement
 

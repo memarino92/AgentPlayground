@@ -30,8 +30,4 @@
     <ProjectReference Include="..\AgentPlayground.Contracts\AgentPlayground.Contracts.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Include="..\PersonalAgent\appsettings.json" Link="Fixtures\chat-model-policy.json" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
 </Project>
