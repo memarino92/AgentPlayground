@@ -1,6 +1,6 @@
 # Roadmap
 
-Recorded 2026-09-07; selectable backlog expanded 2026-09-10. The numbered themes below retain the original suggested sequence; the [selectable backlog](#selectable-backlog) is an unprioritized menu for a predominantly single-maintainer application. Estimates are deliberately omitted until the first slices expose their integration work.
+Recorded 2026-09-07; selectable backlog expanded 2026-09-10; evidence audio playback expanded 2026-09-11. The numbered themes below retain the original suggested sequence; the [selectable backlog](#selectable-backlog) is an unprioritized menu for a predominantly single-maintainer application. Estimates are deliberately omitted until the first slices expose their integration work.
 
 ## 1. Reproducible local data and proven recovery — in progress
 
@@ -130,7 +130,7 @@ When an item is selected, add its ID to the selection table and define the exact
 
 | ID | Idea and first slice | Done when | Dependencies / scope notes |
 | --- | --- | --- | --- |
-| PRODUCT-01 | **Evidence drawer:** open a cited coaching answer beside the exact transcript excerpt, speaker, and timestamp. | Every displayed citation opens the correct authorized source; missing or deleted evidence has an explicit state. | Existing retrieval and transcript data; audio playback optional. |
+| PRODUCT-01 | **Evidence drawer with original call audio:** open a cited coaching answer beside the exact transcript excerpt, speaker, and timestamp, and listen from that point in the retained recording. | Citations open the correct authorized source and audio position; podcast controls support seeking, speed, and ±15 seconds. Missing or deleted evidence has an explicit state. | Detailed plan below; retain recordings after processing; coordinate DATA-01/04. Follow-along is an exploratory later slice. |
 | PRODUCT-02 | **Coaching timeline:** browse cues and corrections by date, coach, and topic. | A synthetic sequence shows how advice changed and links each entry to its source. | Use existing source records first; inferred relationships require review. |
 | PRODUCT-03 | **Weekly reflection draft:** summarize wins, recurring difficulties, and open questions from a chosen week. | The user can edit and save a draft with evidence links; unsupported claims are omitted or clearly flagged. | On-demand first; automated delivery depends on TRUST-01. |
 | PRODUCT-04 | **Follow-up inbox:** collect proposed tasks and questions from coaching notes. | The user can accept, edit, dismiss, and trace each suggestion to its source without creating duplicate tasks. | Build on existing task and approval records; TRUST-01 before scheduled execution. |
@@ -138,6 +138,19 @@ When an item is selected, add its ID to the selection table and define the exact
 | PRODUCT-06 | **Session preparation brief:** prepare a short agenda before a coaching call. | The brief contains recent corrections, unresolved questions, and relevant sources that the user can edit. | Existing records; start on demand. |
 | PRODUCT-07 | **Unified search:** search journals, transcripts, and conversations with date/source filters. | Results enforce subject access and open the right source; empty states and pagination work. | MEMORY-02 can improve ranking later. |
 | PRODUCT-08 | **Export a useful artifact:** turn a selected coaching recap into Markdown with source references. | Preview and export contain only selected, authorized content and preserve useful citations. | Start with Markdown; other formats are separate slices. |
+
+### Future plan: evidence drawer and retained call audio — proposed, not implemented
+
+Recorded 2026-09-11 at the maintainer's request; expands `PRODUCT-01`. Retain original call recordings after successful transcription and downstream processing so evidence can be read and heard in context. This is roadmap work only; the current processing flow still cleans up audio as described in the [transcription runbook](../runbooks/transcription-gateway.md).
+
+**Deliver in slices:**
+
+1. Retain the original recording with a durable link to its call, transcript, and subject instead of deleting it on successful processing. Preserve completion/outbox atomicity and replay safety from [0009](../decisions/0009-transcription-outbox.md). Before implementation, record the storage and lifecycle decision, including database versus object storage, capacity/cost, backup and restore, and authorized deletion under `DATA-04`.
+2. Preserve source call identity and transcript start/end offsets through chunking, retrieval, and citations. Open the evidence drawer with the retrieved excerpt, speaker, timestamp, and surrounding transcript; offer playback of the original call starting at the cited timestamp. Keep offsets tied to the original audio timeline so transcript corrections do not silently shift playback targets.
+3. Add podcast-style play/pause, a seekable progress bar, elapsed/total time, playback-speed selection, and skip backward/forward 15 seconds, clamped to the recording bounds. Let the user keep listening beyond the excerpt for context. Include accessible labels and keyboard controls, and clear loading/playback-error states.
+4. Explore optional follow-along: highlight the active timestamped utterance and scroll the transcript as audio plays, with a toggle to pause automatic scrolling while reading elsewhere. Clicking a timestamped utterance seeks the audio; seeking or changing speed keeps highlighting aligned. Use utterance-level timing initially; finer highlighting depends on available alignment data.
+
+**Done when:** a synthetic cited answer opens the correct excerpt and retained original audio at its source timestamp after processing and a service restart. Playback, seeking, speed changes, and ±15-second skips work across recording boundaries; follow-along, if delivered, stays synchronized and can be disabled. Transcript and audio requests enforce the same server-side subject/access policy, including playback range requests. Older calls whose audio was already deleted remain readable with an explicit audio-unavailable state; missing timing never produces a fabricated seek target. Authorized deletion removes active audio access and leaves clear unavailable evidence states, with backup retention limits documented. Recovery validation includes retained recordings and their citation links.
 
 ### Memory and answer quality
 
@@ -191,7 +204,7 @@ When an item is selected, add its ID to the selection table and define the exact
 | DATA-01 | **Versioned database migrations:** establish explicit schema history and startup ownership. | Fresh and existing databases reach the expected version; concurrent startup and partial failure are handled deliberately. | Existing deferred work; prerequisite for larger persistence changes. |
 | DATA-02 | **Full application recovery rehearsal:** restore a production-format archive into an isolated target. | Scoped chat, configuration decryption, vector search, and controlled background work pass with measured recovery time and backup age. | Existing recovery runbooks; synthetic startup alone does not close this item. |
 | DATA-03 | **Backup manifests and freshness monitoring:** attach checksums/version metadata and report stale or failed backups. | Corrupt/missing archives are detected and a stale-backup condition is observable; retention behavior is documented. | Existing backup uploader; OPS-05 can host alerts later. |
-| DATA-04 | **Retention and deletion:** define how source audio, transcripts, derived memory, and telemetry expire. | A preview identifies affected records and authorized deletion removes active derived retrieval data; backup retention limits are explicit. | DATA-01; policy decision before destructive implementation. |
+| DATA-04 | **Retention and deletion:** define lifecycle policies for source audio, transcripts, derived memory, and telemetry; retain original call audio after successful processing for PRODUCT-01 rather than deleting it on completion. | A preview identifies affected records; authorized deletion removes active audio access and derived retrieval data, with explicit unavailable citation states; backup retention limits are documented. | DATA-01 and PRODUCT-01; storage/retention decision before implementation, including capacity and recovery implications. |
 | DATA-05 | **Release confidence:** extend CI with reproducible service smoke checks and an Android release build. | A clean build exercises the synthetic server flow and produces a mobile artifact without production credentials. | Extend existing CI rather than duplicating it; record remote results. |
 | DATA-06 | **Focused maintainability work:** split endpoint groups or consumer persistence while implementing a related feature. | The selected capability has clear ownership and existing route/auth/replay behavior remains covered. | Couple to a selected feature; no repository-wide rename or speculative rewrite. |
 
