@@ -5,7 +5,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 ## Start here
 
 - [Architecture](architecture.md): current responsibilities and boundaries.
-- [Roadmap](plans/roadmap.md): ordered work, evidence, and acceptance criteria.
+- [Roadmap](plans/roadmap.md): work themes, evidence, and acceptance criteria; includes a [selectable backlog](plans/roadmap.md#selectable-backlog) of unprioritized ideas.
 - [Local development](runbooks/local-development.md): current setup and known gaps.
 - [Synthetic demo](runbooks/synthetic-demo.md): start API/Web/Worker without private data or provider accounts.
 - [Snapshot commands](runbooks/snapshot-commands.md): implemented export and guarded local restore.
@@ -27,6 +27,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0007: MIT license](decisions/0007-mit-license.md) | Accepted | Permit broad reuse under standard MIT terms |
 | [0008: Synthetic local environment](decisions/0008-synthetic-local-environment.md) | Accepted | Exercise real storage and delivery with deterministic providers and guarded sample sign-in |
 | [0009: Transcription outbox](decisions/0009-transcription-outbox.md) | Accepted; implemented | Commit transcription and processing completion with durable outgoing messages |
+| [0010: Runtime integration settings](decisions/0010-runtime-integration-settings.md) | Proposed | Enter, validate, and apply integration settings in the app, starting with Sentry |
 
 ## Working agreement
 
