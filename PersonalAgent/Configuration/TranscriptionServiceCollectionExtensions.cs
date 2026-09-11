@@ -32,6 +32,7 @@ internal static class TranscriptionServiceCollectionExtensions
     public static void AddTranscription(this IServiceCollection Services, IConfiguration Configuration)
     {
         Services.AddAssemblyAiOptions(Configuration);
+        Services.AddLiveOptions<AssemblyAiOptions>(Configuration);
         Services.AddHttpClient("AssemblyAi", (Provider, Client) =>
         {
             var Options = Provider.GetRequiredService<IOptions<AssemblyAiOptions>>().Value;

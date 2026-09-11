@@ -312,6 +312,8 @@ These are possible selections, not assigned priorities. Parallel proposals with 
 
 ## Implementation progress: runtime integration settings and Sentry
 
+- Follow-up on 2026-09-11: one Settings page contains Sentry and existing database settings. OpenAI and AssemblyAI API keys in Shared/Api scopes now reload for new API requests automatically or through an explicit reload check. Invalid credential syntax preserves the running snapshot; other settings retain restart labels. All 96 API and 20 Web tests pass, including real PostgreSQL reload and fake HTTP credential rotation. Remaining consumers and lifecycle constraints are recorded in [decision 0012](../decisions/0012-live-provider-credentials.md).
+
 - Added `AgentPlayground.Integrations`, a dedicated host-infrastructure library with encrypted immutable configuration revisions, optimistic concurrency, promotion history, an additive versioned schema migration, and per-instance acknowledgement records.
 - Added a deployment-administrator settings page with secret keep/replace/clear, field validation, save/apply/reload, synthetic test event, and pending/offline status. API requires the signed actor plus an explicit administrator allowlist. Saved secrets are never included in read responses.
 - API, Web, and Worker reconcile the active pointer every 15 seconds and replace privately owned Sentry clients without a host restart. Invalid candidates/overrides retain the last working client. Existing startup-only configuration is unchanged.

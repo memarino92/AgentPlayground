@@ -15,11 +15,13 @@ public partial class DatabaseSettings : IAsyncDisposable
     private string Scope = "";
     private string? Error;
     private string? Notice;
+    private DatabaseCredentialStatus? CredentialStatus;
     private IEnumerable<SettingRow> VisibleRows => (Rows ?? []).Where(Row =>
         (Scope.Length == 0 || Row.Original.Scope == Scope) && Row.Original.Key.Contains(Search, StringComparison.OrdinalIgnoreCase));
 
     protected override Task OnInitializedAsync() => RefreshAsync();
     private Task RefreshAsync() => RunAsync(LoadAsync);
+    private Task ReloadCredentialsAsync() => RunAsync(async () => CredentialStatus = await ApiClient.ReloadDatabaseCredentialsAsync(Lifetime.Token));
     private async Task LoadAsync() => Rows = (await ApiClient.GetDatabaseSettingsAsync(Lifetime.Token)).Select(Row => new SettingRow(Row)).ToList();
     private Task SaveAsync() => RunAsync(async () =>
     {
@@ -31,7 +33,8 @@ public partial class DatabaseSettings : IAsyncDisposable
         await ApiClient.SaveDatabaseSettingsAsync(new(changes), Lifetime.Token);
         // Discard entered credentials immediately, even if the subsequent refresh fails.
         Rows = null;
-        Notice = "Saved to the database. Restart affected services to use these values; running configuration has not been verified.";
+        CredentialStatus = null;
+        Notice = "Saved to the database. Supported credentials reload automatically; other changes require restarting affected services. Use the API reload check to see its result.";
         await LoadAsync();
     });
 
@@ -57,7 +60,7 @@ public partial class DatabaseSettings : IAsyncDisposable
             {
                 HttpStatusCode.Forbidden => "Deployment administrator access is required. Configure INTEGRATION_SETTINGS_ADMINISTRATORS on the API host.",
                 HttpStatusCode.Conflict => "A setting changed or was removed. Nothing in this batch was saved. Refresh and review before retrying.",
-                HttpStatusCode.BadRequest => "Save rejected. Submit at most 500 changed settings with values no longer than 262144 characters.",
+                HttpStatusCode.BadRequest => "Save rejected. OpenAI and AssemblyAI keys must be nonempty printable tokens (at most 4096 characters). Submit at most 500 changed settings; other values can be at most 262144 characters.",
                 _ => "Settings operation could not be confirmed. Refresh to check stored values before retrying."
             };
         }

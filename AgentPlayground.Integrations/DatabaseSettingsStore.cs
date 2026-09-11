@@ -3,7 +3,10 @@ using Npgsql;
 
 namespace AgentPlayground.Integrations;
 
-public sealed record DatabaseSetting(string Scope, string Key, string Version, string? Value, bool IsSecret, bool IsActive);
+public sealed record DatabaseSetting(string Scope, string Key, string Version, string? Value, bool IsSecret, bool IsActive)
+{
+    public bool SupportsLiveReload => LiveCredentialPolicy.Supports(Scope, Key);
+}
 public sealed record DatabaseSettingEdit(string Scope, string Key, string Version, string? Value, bool IsActive);
 public sealed record SaveDatabaseSettingsRequest(List<DatabaseSettingEdit> Changes);
 
@@ -33,6 +36,10 @@ public sealed class DatabaseSettingsStore(IntegrationDatabase Database)
                 || Edit.Value?.Length > 262144)
             || Request.Changes.Select(Edit => (Edit.Scope, Edit.Key)).Distinct().Count() != Request.Changes.Count)
             throw new IntegrationValidationException(new() { ["Changes"] = ["Submit 1–500 distinct existing settings; values must be at most 262144 characters."] });
+
+        if (Request.Changes.Any(Edit => LiveCredentialPolicy.Supports(Edit.Scope, Edit.Key)
+            && Edit.Value is not null && !LiveCredentialPolicy.IsValid(Edit.Value)))
+            throw new IntegrationValidationException(new() { ["Credentials"] = ["OpenAI and AssemblyAI keys must be nonempty printable tokens of at most 4096 characters."] });
 
         await using var connection = await Database.OpenAsync(CancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(CancellationToken);

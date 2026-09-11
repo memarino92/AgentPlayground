@@ -13,6 +13,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
 - [Integration settings](runbooks/integration-settings.md): in-app Sentry configuration, encrypted revisions, and runtime reload.
 - [Existing settings editor](decisions/0011-existing-settings-editor.md): edit database configuration with masked secrets and explicit restart requirements.
+- [Live provider credentials](decisions/0012-live-provider-credentials.md): OpenAI/AssemblyAI key rotation for new requests; remaining startup-bound consumers.
 - [Database recovery](runbooks/database-recovery.md): full recovery procedure and remaining evidence.
 - [Public release](runbooks/public-release.md): publication readiness and cleanup inventory.
 

@@ -18,6 +18,8 @@ builder.Services.AddPersonalAgentServices(builder.Configuration);
 builder.Services.AddRuntimeIntegrations(builder.Configuration, "Api");
 builder.Services.AddSingleton<IIntegrationSettingsService, IntegrationSettingsService>();
 builder.Services.AddSingleton<DatabaseSettingsStore>();
+builder.Services.AddSingleton<DatabaseCredentialRuntime>();
+builder.Services.AddHostedService<DatabaseCredentialReloadWorker>();
 if (syntheticDemo) builder.Services.AddSyntheticServices();
 
 var app = builder.Build();

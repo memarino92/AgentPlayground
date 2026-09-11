@@ -40,11 +40,11 @@ public sealed class IntegrationSettingsEndpointsTests
             ((int)response.StatusCode).Should().Be(Expected);
         }
         service.VerifyNoOtherCalls();
-        foreach (var method in new[] { HttpMethod.Get, HttpMethod.Put })
+        foreach (var method in new[] { HttpMethod.Get, HttpMethod.Put, HttpMethod.Post })
         {
             using var client = app.GetTestClient();
             Sign(client, Actor, Role, InternalKey, ForgeSignature);
-            using var request = new HttpRequestMessage(method, "/api/admin/settings");
+            using var request = new HttpRequestMessage(method, "/api/admin/settings" + (method == HttpMethod.Post ? "/reload" : ""));
             if (method == HttpMethod.Put) request.Content = JsonContent.Create(new SaveDatabaseSettingsRequest([]));
             using var response = await client.SendAsync(request);
             ((int)response.StatusCode).Should().Be(Expected);
@@ -76,6 +76,7 @@ public sealed class IntegrationSettingsEndpointsTests
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["IntegrationSettings:AdministratorIds"] = "admin" });
         builder.Services.AddSingleton(Service);
         builder.Services.AddSingleton(new DatabaseSettingsStore(new IntegrationDatabase("", "")));
+        builder.Services.AddSingleton<DatabaseCredentialRuntime>();
         var app = builder.Build();
         var group = app.MapGroup("/api").AddEndpointFilter(new InternalApiKeyFilter(Options.Create(new ApiKeyOptions { InternalApiKey = "internal" })));
         group.MapIntegrationSettings(Options.Create(new SecurityOptions { ActorSigningKey = "signing-key" }), builder.Configuration);

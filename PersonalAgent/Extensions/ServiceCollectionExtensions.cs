@@ -98,8 +98,9 @@ internal static class ServiceCollectionExtensions
             .ValidateOnStart();
         services.AddHostedService<AgentMemorySchemaInitializer>();
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton(sp => new OpenAI.Models.OpenAIModelClient(sp.GetRequiredService<IOptions<ApiKeyOptions>>().Value.OpenAiKey));
-        services.AddSingleton<IChatModelDiscovery, OpenAiChatModelDiscovery>();
+        services.AddLiveOptions<ApiKeyOptions>(configuration);
+        services.AddSingleton<OpenAiClientProvider>();
+        services.AddSingleton<IChatModelDiscovery>(sp => new OpenAiChatModelDiscovery(() => sp.GetRequiredService<OpenAiClientProvider>().Current.GetOpenAIModelClient()));
         services.AddSingleton<IChatModelCatalog, ChatModelCatalog>();
         services.AddSingleton<IAgentSessionStore, PostgresAgentSessionStore>();
         services.AddSingleton<IAgentSemanticMemoryStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());

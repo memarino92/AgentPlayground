@@ -16,6 +16,9 @@ internal static class IntegrationSettingsEndpoints
         settings.MapGet("", ([Microsoft.AspNetCore.Mvc.FromServices] DatabaseSettingsStore Store, CancellationToken CancellationToken) =>
             ExecuteAsync(async () => TypedResults.Ok(await Store.ReadAsync(CancellationToken))))
             .WithName("GetDatabaseSettings").WithSummary("Read all startup settings with secrets omitted");
+        settings.MapPost("/reload", ([Microsoft.AspNetCore.Mvc.FromServices] DatabaseCredentialRuntime Runtime, CancellationToken CancellationToken) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Runtime.ReloadAsync(CancellationToken))))
+            .WithName("ReloadDatabaseCredentials").WithSummary("Reload supported API provider credentials; other settings retain startup values");
         settings.MapPut("", (SaveDatabaseSettingsRequest Request, [Microsoft.AspNetCore.Mvc.FromServices] DatabaseSettingsStore Store, CancellationToken CancellationToken) =>
             ExecuteAsync(async () =>
             {
