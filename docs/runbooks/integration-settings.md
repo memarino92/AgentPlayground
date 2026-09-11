@@ -6,7 +6,19 @@ The first supported integration is Sentry error reporting. Its settings can be e
 
 1. Use the normal database configuration bootstrap: `DATABASE_URL` and the matching `CONFIG_ENCRYPTION_KEY` on each service. With local user secrets, `Messaging:ConnectionString` is also supported if the encryption key is supplied externally. Do not enter bootstrap credentials in the UI.
 2. On API, set `INTEGRATION_SETTINGS_ADMINISTRATORS` to a comma-separated list of allowed GitHub logins. The equivalent startup setting is `IntegrationSettings:AdministratorIds`; the environment variable takes precedence. The default is no administrators. Only signed Owner actors on this allowlist can access these endpoints. Profile ownership alone grants no deployment administration rights.
-3. Sign in normally, open **Integration settings** in the menu, and configure Sentry. The synthetic Compose environment already permits `demo-owner`; `demo-other` is deliberately denied.
+3. Sign in normally, open **Sentry settings** in the menu, and configure Sentry. Use **Application settings** for existing database rows. The synthetic Compose environment already permits `demo-owner`; `demo-other` is deliberately denied.
+
+## Existing database settings
+
+Open **Application settings** (`/admin/settings`). Every existing row from `app.configuration_settings` is shown, including inactive rows and keys not listed in the seed script. Search by key or select a service scope. Shared rows provide defaults; service-specific rows override them. Unknown scopes are shown verbatim and only take effect if a consumer loads that scope.
+
+Edit text values, or choose **Keep**, **Replace**, or **Clear** for encrypted secrets. Clear stores an encrypted empty string; unchecking **Use this setting at startup** instead makes the provider ignore that row and may reveal a fallback value. The editor preserves the stored secret classification and never returns encrypted values or decrypted secrets to the browser.
+
+**Save all changes** includes changed rows hidden by the current filter. The batch is atomic. A stale row rejects the entire save with HTTP 409, including changes made outside the UI. Refresh explicitly discards drafts. Values remain text: structural limits are checked, but credentials, URLs, JSON and application-specific constraints are not verified by this editor.
+
+After saving, restart affected services through the deployment platform. Shared settings may require restarting API, Web and Worker. Coordinate matching internal API and actor-signing keys before restarting services; verify sign-in and service connectivity afterward. A browser refresh or Sentry reload does not reload these settings. The page does not claim saved values are currently running, and deployment overrides may still win. `DATABASE_URL` and `CONFIG_ENCRYPTION_KEY` remain external bootstrap configuration.
+
+This editor updates existing rows in place; it does not create/delete keys, change encryption flags, retain immutable history, or provide rollback. Keep database recovery procedures available before rotating credentials. Sentry's revision history and live application behavior below remain separate.
 
 No Sentry management token is needed for basic error reporting. Enter the project's ingestion DSN. The first slice supports hosted endpoints shaped like `o123.ingest.sentry.io`, `o123.ingest.us.sentry.io`, or `o123.ingest.de.sentry.io`, with HTTPS on port 443, a public key, and a numeric project ID. Self-hosted/legacy endpoints require a separately reviewed destination policy.
 

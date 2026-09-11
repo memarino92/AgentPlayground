@@ -12,6 +12,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Adding agent tools](runbooks/adding-agent-tools.md): register a capability with shared metadata, binding, and authorization.
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
 - [Integration settings](runbooks/integration-settings.md): in-app Sentry configuration, encrypted revisions, and runtime reload.
+- [Existing settings editor](decisions/0011-existing-settings-editor.md): edit database configuration with masked secrets and explicit restart requirements.
 - [Database recovery](runbooks/database-recovery.md): full recovery procedure and remaining evidence.
 - [Public release](runbooks/public-release.md): publication readiness and cleanup inventory.
 

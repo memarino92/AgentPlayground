@@ -10,6 +10,20 @@ internal static class IntegrationSettingsEndpoints
 {
     public static void MapIntegrationSettings(this RouteGroupBuilder Api, IOptions<SecurityOptions> Security, IConfiguration Configuration)
     {
+        var settings = Api.MapGroup("/admin/settings")
+            .AddEndpointFilter(new SignedActorFilter(Security, ownerOnly: true))
+            .AddEndpointFilter(new IntegrationAdministratorFilter(Configuration));
+        settings.MapGet("", ([Microsoft.AspNetCore.Mvc.FromServices] DatabaseSettingsStore Store, CancellationToken CancellationToken) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Store.ReadAsync(CancellationToken))))
+            .WithName("GetDatabaseSettings").WithSummary("Read all startup settings with secrets omitted");
+        settings.MapPut("", (SaveDatabaseSettingsRequest Request, [Microsoft.AspNetCore.Mvc.FromServices] DatabaseSettingsStore Store, CancellationToken CancellationToken) =>
+            ExecuteAsync(async () =>
+            {
+                await Store.SaveAsync(Request, CancellationToken);
+                return TypedResults.NoContent();
+            }))
+            .WithName("SaveDatabaseSettings").WithSummary("Save existing settings atomically; affected services require restart");
+
         var group = Api.MapGroup("/admin/integrations/sentry")
             .AddEndpointFilter(new SignedActorFilter(Security, ownerOnly: true))
             .AddEndpointFilter(new IntegrationAdministratorFilter(Configuration));

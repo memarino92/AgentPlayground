@@ -40,6 +40,15 @@ public sealed class IntegrationSettingsEndpointsTests
             ((int)response.StatusCode).Should().Be(Expected);
         }
         service.VerifyNoOtherCalls();
+        foreach (var method in new[] { HttpMethod.Get, HttpMethod.Put })
+        {
+            using var client = app.GetTestClient();
+            Sign(client, Actor, Role, InternalKey, ForgeSignature);
+            using var request = new HttpRequestMessage(method, "/api/admin/settings");
+            if (method == HttpMethod.Put) request.Content = JsonContent.Create(new SaveDatabaseSettingsRequest([]));
+            using var response = await client.SendAsync(request);
+            ((int)response.StatusCode).Should().Be(Expected);
+        }
     }
 
     [Fact]
@@ -66,6 +75,7 @@ public sealed class IntegrationSettingsEndpointsTests
         builder.WebHost.UseTestServer();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["IntegrationSettings:AdministratorIds"] = "admin" });
         builder.Services.AddSingleton(Service);
+        builder.Services.AddSingleton(new DatabaseSettingsStore(new IntegrationDatabase("", "")));
         var app = builder.Build();
         var group = app.MapGroup("/api").AddEndpointFilter(new InternalApiKeyFilter(Options.Create(new ApiKeyOptions { InternalApiKey = "internal" })));
         group.MapIntegrationSettings(Options.Create(new SecurityOptions { ActorSigningKey = "signing-key" }), builder.Configuration);
