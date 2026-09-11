@@ -9,6 +9,10 @@
             {
                 <div class="message-list__content">
                     @((MarkupString)RenderMarkdown(msg.Content))
+                    @foreach (var Citation in EvidenceCitation.Parse(msg.Content))
+                    {
+                        <button type="button" @onclick="() => SelectedEvidence = Citation">Open call evidence @(Citation.StartMs is int Start ? TimeSpan.FromMilliseconds(Start).ToString(@"hh\:mm\:ss") : "(timing unavailable)")</button>
+                    }
                 </div>
             }
             else
@@ -26,8 +30,13 @@
         </div>
     }
 </div>
+@if (SelectedEvidence is not null)
+{
+    <EvidenceDrawer @key="SelectedEvidence" UploadId="SelectedEvidence.UploadId" ProfileId="SelectedEvidence.ProfileId" StartMs="SelectedEvidence.StartMs" OnClose="() => SelectedEvidence = null" />
+}
 
 @code {
+    private EvidenceCitation? SelectedEvidence;
     private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
         .DisableHtml()
         .Build();

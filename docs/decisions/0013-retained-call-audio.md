@@ -1,6 +1,6 @@
 # 0013: Retained original call audio
 
-- Status: Proposed; retention foundation implemented on this branch
+- Status: Proposed; retention, authorized playback and active deletion implemented on this branch
 - Recorded: 2026-09-11
 - Evidence: PRODUCT-01 roadmap request; `CoachCheckinService`, `ProcessCoachTranscriptConsumer`, `CoachCallCleanupService`, and recovery tests
 - Extends: [0009](0009-transcription-outbox.md)
@@ -13,7 +13,9 @@ Uploads already store original bytes, MIME type, file hash, size, subject and se
 
 Keep original bytes in the existing upload row after successful processing. Keep the upload/session/profile relationship and completion/outbox transaction unchanged. Retain successful recordings without automatic expiry for this initial slice; failed uploads still expire under `FailedUploadRetentionDays`. No schema migration or copy of the recording is needed.
 
-Before exposing playback, add subject-authorized evidence reads and range requests, and owner-authorized audio deletion under DATA-04. Deletion should clear bytes while preserving source identity and transcript readability, be idempotent, and serialize with processing using the upload row lock. Processing must never restore cleared bytes. Pending jobs need an explicit cancellation/deletion policy before permitting their deletion. These endpoints are future work, not delivered by this retention foundation.
+Evidence reads and range requests use the same subject policy as chat: Owners can access their own profile; Coaches need a current assignment. Transcript JSON/text routes now apply that policy to Owners too. Web forwards each media request with the authenticated cookie identity signed server-side; no internal credentials enter the media URL. Responses disable caching.
+
+Owner-authorized audio deletion under DATA-04 clears bytes while preserving source identity and transcript readability, is idempotent, and serializes with processing using the upload row lock. It is allowed only for Completed/Failed uploads; pending jobs return 409 until a cancellation policy exists. Processing never restores cleared bytes. After deletion commits, subsequent audio reads return 404. Already downloaded/buffered bytes cannot be revoked. This is audio-only deletion, not deletion of transcripts or derived memory.
 
 ## Alternatives
 
@@ -27,4 +29,8 @@ Full database backups include these bytes and their source links. Development re
 
 ## Delivery and verification
 
-This branch removes successful-processing byte cleanup and tests byte identity after transaction rollback, concurrent completion, lost acknowledgement and replacement service/transport hosts. Failed cleanup must continue to spare completed and pending uploads. Playback, authorized deletion, citation/drawer integration, and a recording-inclusive backup/restore rehearsal remain outstanding. Older calls with null audio remain unchanged; future evidence responses must report unavailable audio and never invent missing timestamps.
+This branch retains successful recordings, adds authorized evidence/audio/delete endpoints and a cookie-authenticated media proxy, and opens a transcript/player drawer from chat citation buttons or the transcript page. Retrieval returns source links with upload ID, subject and original start milliseconds. The player supports native play/pause, elapsed/total time and seek bar, speed selection, timestamp clicks and clamped 15-second skips. Missing audio/timing is explicit; no alignment or transcript timeline is rewritten. Follow-along is deferred.
+
+PostgreSQL tests verify retained bytes, rollback, concurrent replay, lost acknowledgement, host replacement, range semantics, current assignments, cross-subject denial, pending-delete rejection and transcript availability after deletion/restart. Component tests cover citations, missing timing/audio and deletion confirmation. The synthetic smoke script validates real upload-to-processing and Web cookie/range access for three personas. Browser checks verify playback controls against a 30-second silent PCM fixture, not spoken alignment or live-provider quality.
+
+The API currently materializes the original blob for each range request; the Web proxy streams the response body. This is bounded by the existing upload limit but warrants measurement before concurrent/high-volume playback. A recording-inclusive backup/restore rehearsal, deletion-ledger reconciliation across restores, actual archive expiry, and optional follow-along remain outstanding.

@@ -433,12 +433,14 @@ internal class CoachCheckinService(
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            lines.Add($"Upload {reader.GetGuid(0)} [{FormatTimestamp(reader.GetInt32(1))}-{FormatTimestamp(reader.GetInt32(2))}] {reader.GetString(3)}");
+            var startMs = reader.GetInt32(1);
+            var timing = startMs >= 0 && reader.GetInt32(2) >= startMs ? $"&startMs={startMs}" : string.Empty;
+            lines.Add($"[Call evidence {FormatTimestamp(startMs)}](/evidence/{reader.GetGuid(0)}?profileId={Uri.EscapeDataString(profileId)}{timing}) [{FormatTimestamp(startMs)}-{FormatTimestamp(reader.GetInt32(2))}] {reader.GetString(3)}");
         }
 
         return lines.Count is 0
             ? "No matching coach check-in chunks found."
-            : string.Join("\n\n", lines);
+            : "Cite supporting excerpts using their exact Call evidence Markdown links.\n\n" + string.Join("\n\n", lines);
     }
 
     private static CoachCallUploadStatus ParseStatus(string value) => Enum.TryParse<CoachCallUploadStatus>(value, true, out var status)
@@ -555,5 +557,5 @@ internal class CoachCheckinService(
     private string CoachCallUtterancesTable => QualifiedTableName("coach_call_utterances");
     private string CoachCallSpeakerOverridesTable => QualifiedTableName("coach_call_speaker_overrides");
 
-    private static string FormatTimestamp(int milliseconds) => TimeSpan.FromMilliseconds(milliseconds).ToString(@"mm\:ss");
+    private static string FormatTimestamp(int milliseconds) => TimeSpan.FromMilliseconds(milliseconds).ToString(@"hh\:mm\:ss");
 }

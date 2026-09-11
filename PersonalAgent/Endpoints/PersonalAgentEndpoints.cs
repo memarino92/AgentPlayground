@@ -25,6 +25,7 @@ internal static class PersonalAgentEndpoints
 
         apiGroup.AddEndpointFilter(new InternalApiKeyFilter(apiKeyOptions));
         apiGroup.MapIntegrationSettings(securityOptions, app.Configuration);
+        apiGroup.MapCoachEvidence(securityOptions);
 
         apiGroup.MapGet("/models", async (IChatModelCatalog chatModelCatalog, CancellationToken cancellationToken) =>
         {
@@ -298,12 +299,10 @@ internal static class PersonalAgentEndpoints
         apiGroup.MapGet("/coach-checkins/{uploadId:guid}/transcript", async (HttpContext httpContext, Guid uploadId, string? profileId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
             var actor = SignedActorFilter.Get(httpContext);
-            if (actor.Role == AgentRoles.Coach
-                && (string.IsNullOrWhiteSpace(profileId) || await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null))
+            profileId = string.IsNullOrWhiteSpace(profileId) && actor.Role == AgentRoles.Owner ? actor.ActorId : profileId;
+            if (string.IsNullOrWhiteSpace(profileId) || await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null)
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var transcript = string.IsNullOrWhiteSpace(profileId)
-                ? await agentService.GetCoachCheckinTranscriptAsync(uploadId)
-                : await agentService.GetCoachCheckinTranscriptAsync(uploadId, profileId);
+            var transcript = await agentService.GetCoachCheckinTranscriptAsync(uploadId, profileId);
             return transcript is null
                 ? Results.NotFound(new { error = "Coach check-in transcript not found" })
                 : Results.Ok(new
@@ -329,12 +328,10 @@ internal static class PersonalAgentEndpoints
         apiGroup.MapGet("/coach-checkins/{uploadId:guid}/transcript.txt", async (HttpContext httpContext, Guid uploadId, string? profileId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
             var actor = SignedActorFilter.Get(httpContext);
-            if (actor.Role == AgentRoles.Coach
-                && (string.IsNullOrWhiteSpace(profileId) || await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null))
+            profileId = string.IsNullOrWhiteSpace(profileId) && actor.Role == AgentRoles.Owner ? actor.ActorId : profileId;
+            if (string.IsNullOrWhiteSpace(profileId) || await ResolveAccessAsync(httpContext, profileId, assignmentStore) is null)
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var transcript = string.IsNullOrWhiteSpace(profileId)
-                ? await agentService.GetCoachCheckinTranscriptAsync(uploadId)
-                : await agentService.GetCoachCheckinTranscriptAsync(uploadId, profileId);
+            var transcript = await agentService.GetCoachCheckinTranscriptAsync(uploadId, profileId);
             if (transcript is null)
                 return Results.NotFound(new { error = "Coach check-in transcript not found" });
 
@@ -461,7 +458,7 @@ internal static class PersonalAgentEndpoints
         return count is 1;
     }
 
-    private static async Task<AgentAccessContext?> ResolveAccessAsync(HttpContext context, string subjectProfileId, ICoachAssignmentStore assignmentStore)
+    internal static async Task<AgentAccessContext?> ResolveAccessAsync(HttpContext context, string subjectProfileId, ICoachAssignmentStore assignmentStore)
     {
         var actor = SignedActorFilter.Get(context);
         if (actor.Role == AgentRoles.Owner)

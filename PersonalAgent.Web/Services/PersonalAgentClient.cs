@@ -268,10 +268,28 @@ internal class PersonalAgentClient(
             ?? throw new InvalidOperationException("No integration settings response was returned.");
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string uri, HttpContent? content = null, CancellationToken cancellationToken = default)
+    public async Task<CoachEvidenceResponse?> GetCoachEvidenceAsync(Guid UploadId, string ProfileId, CancellationToken CancellationToken = default)
+    {
+        using var Response = await SendAsync(HttpMethod.Get, $"/api/coach-checkins/{UploadId}/evidence?profileId={Uri.EscapeDataString(ProfileId)}", cancellationToken: CancellationToken);
+        if (Response.StatusCode == HttpStatusCode.NotFound) return null;
+        Response.EnsureSuccessStatusCode();
+        return await Response.Content.ReadFromJsonAsync<CoachEvidenceResponse>(JsonOptions, CancellationToken);
+    }
+
+    public async Task DeleteCoachAudioAsync(Guid UploadId, string ProfileId)
+    {
+        using var Response = await SendAsync(HttpMethod.Delete, $"/api/coach-checkins/{UploadId}/audio?profileId={Uri.EscapeDataString(ProfileId)}");
+        Response.EnsureSuccessStatusCode();
+    }
+
+    public Task<HttpResponseMessage> GetCoachAudioAsync(Guid UploadId, string ProfileId, ClaimsPrincipal User, string? Range, CancellationToken CancellationToken) =>
+        SendAsync(HttpMethod.Get, $"/api/coach-checkins/{UploadId}/audio?profileId={Uri.EscapeDataString(ProfileId)}", cancellationToken: CancellationToken, requestUser: User, range: Range);
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string uri, HttpContent? content = null, CancellationToken cancellationToken = default, ClaimsPrincipal? requestUser = null, string? range = null)
     {
         using var request = new HttpRequestMessage(method, uri) { Content = content };
-        var user = (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var user = requestUser ?? (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
+        if (!string.IsNullOrWhiteSpace(range)) request.Headers.TryAddWithoutValidation("Range", range);
         if (user.Identity?.IsAuthenticated == true)
         {
             var role = user.IsInRole("Owner") ? "Owner" : user.IsInRole("Coach") ? "Coach" : null;
@@ -296,7 +314,7 @@ internal class PersonalAgentClient(
                 request.Headers.Add("X-Agent-Signature", signature);
             }
         }
-        return await httpClient.SendAsync(request, cancellationToken);
+        return await httpClient.SendAsync(request, requestUser is null ? HttpCompletionOption.ResponseContentRead : HttpCompletionOption.ResponseHeadersRead, cancellationToken);
     }
 }
 
@@ -323,6 +341,7 @@ public record CoachCheckinStatusResponse(Guid UploadId, Guid SessionId, string P
 public record CoachCheckinSummaryResponse(Guid UploadId, Guid SessionId, string SummaryMarkdown, string SummaryJson, DateTimeOffset UpdatedAtUtc);
 public record CoachCheckinTranscriptResponse(Guid UploadId, Guid SessionId, string ProfileId, string Status, string TranscriptText, DateTimeOffset UpdatedAtUtc, List<CoachCheckinTranscriptUtteranceResponse> Utterances);
 public record CoachCheckinTranscriptUtteranceResponse(int SpeakerLabel, string SpeakerRole, int StartMs, int EndMs, string Text, double Confidence);
+public record CoachEvidenceResponse(CoachCheckinTranscriptResponse Transcript, bool AudioAvailable);
 public record SpeakerOverrideItem(int SpeakerLabel, string Role);
 public record CoachCheckinSpeakerLabelInfoResponse(int SpeakerLabel, string SpeakerRole, int UtteranceCount, List<string> SampleTexts);
 public record CoachCheckinAdminItemResponse(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount, List<CoachCheckinSpeakerLabelInfoResponse> SpeakerLabels);
