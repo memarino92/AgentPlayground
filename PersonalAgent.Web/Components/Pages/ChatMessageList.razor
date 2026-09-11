@@ -1,6 +1,10 @@
 @using Markdig
+@using Markdig.Syntax
+@using Markdig.Syntax.Inlines
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
-<div class="message-list" id="@ContainerId">
+<div class="message-list" id="@ContainerId" @ref="Root">
     @foreach (var msg in Messages)
     {
         <div class="message-list__item message-list__item--@msg.Role" data-role="@msg.Role">
@@ -9,9 +13,9 @@
             {
                 <div class="message-list__content">
                     @((MarkupString)RenderMarkdown(msg.Content))
-                    @foreach (var Citation in EvidenceCitation.Parse(msg.Content))
+                    @foreach (var Citation in EvidenceCitation.Parse(msg.Content, ProfileId))
                     {
-                        <button type="button" @onclick="() => SelectedEvidence = Citation">Open call evidence @(Citation.StartMs is int Start ? TimeSpan.FromMilliseconds(Start).ToString(@"hh\:mm\:ss") : "(timing unavailable)")</button>
+                        <button type="button" data-evidence-url="@Citation.Url" @onclick="() => SelectedEvidence = Citation">Open call evidence @(Citation.StartMs is int Start ? TimeSpan.FromMilliseconds(Start).ToString(@"hh\:mm\:ss") : "(timing unavailable)")</button>
                     }
                 </div>
             }
@@ -37,6 +41,8 @@
 
 @code {
     private EvidenceCitation? SelectedEvidence;
+    private ElementReference Root;
+    private EvidenceLinksInterop? EvidenceLinks;
     private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
         .DisableHtml()
         .Build();
@@ -44,6 +50,28 @@
     [Parameter] public required List<ConversationMessage> Messages { get; set; }
     [Parameter] public required bool IsSendingMessage { get; set; }
     [Parameter] public required string ContainerId { get; set; }
+    [Parameter] public string? ProfileId { get; set; }
 
-    private static string RenderMarkdown(string content) => Markdown.ToHtml(content, MarkdownPipeline).Trim();
+    private string RenderMarkdown(string Content)
+    {
+        var Document = Markdown.Parse(Content, MarkdownPipeline);
+        foreach (var Link in Document.Descendants<LinkInline>())
+        {
+            if (Link.IsImage || EvidenceCitation.FromUrl(Link.Url, ProfileId) is not { } Citation) continue;
+            Link.Url = Citation.Url;
+        }
+        return Markdown.ToHtml(Document, MarkdownPipeline).Trim();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool FirstRender)
+    {
+        if (!FirstRender) return;
+        EvidenceLinks = new(JS);
+        await EvidenceLinks.InitializeAsync(Root);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (EvidenceLinks is not null) await EvidenceLinks.DisposeAsync();
+    }
 }

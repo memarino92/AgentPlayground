@@ -84,6 +84,34 @@ public sealed class EvidenceDrawerTests : TestContext
         Cut.FindComponent<EvidenceDrawer>().Instance.StartMs.Should().Be(4000);
         Cut.FindComponent<EvidenceDrawer>().Instance.ProfileId.Should().Be("owner");
     }
+    [Theory]
+    [InlineData("/evidence/", "?profileId=source&startMs=4000", "source", 4000)]
+    [InlineData("https://evidence/", "?startMs=4000", "owner", 4000)]
+    [InlineData("https://evidence/", "", "owner", null)]
+    public void TimestampLink_TargetsDrawerAction_WithSourceAndTiming(string Prefix, string Query, string ExpectedProfile, int? ExpectedStart)
+    {
+        using var Handler = new EvidenceHandler(true);
+        Configure(Handler);
+        const string Id = "80b16b37-10ac-4c41-9352-4faf4d06d2b6";
+        var Cut = RenderComponent<ChatMessageList>(Parameters => Parameters
+            .Add(Value => Value.Messages, [new("assistant", $"[00:04]({Prefix}{Id}{Query}) [Reference](https://example.com/evidence/{Id})")])
+            .Add(Value => Value.ProfileId, "owner")
+            .Add(Value => Value.ContainerId, "test-chat"));
+        var Link = Cut.Find("a");
+        Link.TextContent.Should().Be("00:04");
+        Link.GetAttribute("href").Should().StartWith($"/evidence/{Id}?profileId={ExpectedProfile}");
+        var Button = Cut.Find("button[data-evidence-url]");
+        Button.GetAttribute("data-evidence-url").Should().Be(Link.GetAttribute("href"));
+        Cut.FindAll("button[data-evidence-url]").Should().ContainSingle();
+        Cut.Find("a[href^='https://example.com']").GetAttribute("href").Should().Be($"https://example.com/evidence/{Id}");
+        Button.Click();
+        Cut.WaitForAssertion(() => Cut.FindAll("audio").Should().ContainSingle());
+        var Drawer = Cut.FindComponent<EvidenceDrawer>().Instance;
+        Drawer.UploadId.Should().Be(Guid.Parse(Id));
+        Drawer.ProfileId.Should().Be(ExpectedProfile);
+        Drawer.StartMs.Should().Be(ExpectedStart);
+    }
+
     private sealed class OwnerAuthentication : AuthenticationStateProvider
     {
         public override Task<AuthenticationState> GetAuthenticationStateAsync() => Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity([

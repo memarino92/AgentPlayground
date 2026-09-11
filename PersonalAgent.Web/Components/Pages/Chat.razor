@@ -53,7 +53,7 @@
             }
             else
             {
-                <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" ContainerId="@MessageListContainerId" />
+                <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" ContainerId="@MessageListContainerId" ProfileId="@profileId" />
 
                 <ChatComposer CurrentMessage="@currentMessage"
                               CurrentMessageChanged="HandleCurrentMessageChanged"
