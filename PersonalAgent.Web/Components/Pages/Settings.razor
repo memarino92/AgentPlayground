@@ -1,0 +1,17 @@
+@page "/admin/settings"
+@page "/admin/integration-settings"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
+
+<PageTitle>Settings</PageTitle>
+<div class="settings-hub">
+    <h1>Settings</h1>
+    <nav aria-label="Settings sections">
+        <a href="#sentry-settings">Sentry</a> · <a href="#database-settings">Database settings</a> · <a href="/admin/integrations">Tool access</a>
+    </nav>
+    <section id="sentry-settings" aria-label="Sentry settings">
+        <IntegrationSettings />
+    </section>
+    <section id="database-settings" aria-label="Database settings">
+        <DatabaseSettings />
+    </section>
+</div>
