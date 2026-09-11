@@ -65,7 +65,34 @@ public sealed class IntegrationSettingsTests : TestContext
             Instances = [new("Api", "instance-a", 1, "Applied", ["SENTRY_DSN"], DateTimeOffset.UtcNow),
                 new("Web", "instance-w", 2, "Applied", [], DateTimeOffset.UtcNow.AddMinutes(-2))]
         }));
-        cut.Markup.Should().Contain("Pending").And.Contain("Offline or not reporting").And.Contain("Not yet seen").And.Contain("SENTRY_DSN");
+        cut.Markup.Should().Contain("Update pending").And.Contain("Offline or not reporting").And.Contain("Not yet seen").And.Contain("SENTRY_DSN");
+    }
+
+    [Fact]
+    public void Status_ShowsFriendlyServices_AndMovesOldInstancesIntoCollapsedDetails()
+    {
+        var cut = RenderComponent<IntegrationServiceStatus>(Parameters => Parameters.Add(Component => Component.Settings, Settings() with
+        {
+            Instances = [new("Api", "old-instance", 0, "Applied", [], DateTimeOffset.UtcNow.AddMinutes(-2)),
+                new("Api", "current-instance", 1, "Applied", [], DateTimeOffset.UtcNow)]
+        }));
+        var overview = cut.Find("table");
+        overview.QuerySelectorAll("tbody tr").Length.Should().Be(3);
+        overview.TextContent.Should().Contain("API service").And.Contain("Web application").And.Contain("Background worker").And.Contain("Up to date");
+        overview.TextContent.Should().NotContain("old-instance").And.NotContain("current-instance").And.NotContain("Offline");
+        cut.Find("details").HasAttribute("open").Should().BeFalse();
+        cut.Find("details").TextContent.Should().Contain("old-instance");
+    }
+
+    [Fact]
+    public void Status_DoesNotHideAPendingLiveReplicaBehindAHealthyOne()
+    {
+        var cut = RenderComponent<IntegrationServiceStatus>(Parameters => Parameters.Add(Component => Component.Settings, Settings() with
+        {
+            Instances = [new("Api", "ready", 1, "Applied", [], DateTimeOffset.UtcNow),
+                new("Api", "pending", 0, "Applied", [], DateTimeOffset.UtcNow)]
+        }));
+        cut.Find("table").TextContent.Should().Contain("1 of 2 instances need attention");
     }
 
     private static IntegrationSettingsResponse Settings() => new("sentry", 1, 1, IntegrationRegistry.Fields,
