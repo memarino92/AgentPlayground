@@ -7,6 +7,7 @@ namespace PersonalAgent.Services;
 
 internal sealed class CoachEvidenceService(
     IOptions<AgentMemoryOptions> Options,
+    IOptions<CoachCheckinOptions> UploadOptions,
     CoachCheckinService Checkins) : ICoachEvidenceService
 {
     private readonly string Table = $"{new NpgsqlCommandBuilder().QuoteIdentifier(Options.Value.Schema)}.coach_call_uploads";
@@ -19,7 +20,7 @@ internal sealed class CoachEvidenceService(
         await Connection.OpenAsync(CancellationToken);
         await using var Command = new NpgsqlCommand($"SELECT audio_bytes IS NOT NULL FROM {Table} WHERE upload_id = @id AND profile_id = @profile", Connection);
         Bind(Command, UploadId, ProfileId);
-        return new(Transcript, await Command.ExecuteScalarAsync(CancellationToken) is true);
+        return new(Transcript, await Command.ExecuteScalarAsync(CancellationToken) is true, UploadOptions.Value.MaxUploadMb * 1024L * 1024L);
     }
 
     public async Task<CoachAudio?> GetAudioAsync(Guid UploadId, string ProfileId, CancellationToken CancellationToken)
@@ -64,5 +65,26 @@ internal sealed class CoachEvidenceService(
     {
         Command.Parameters.AddWithValue("id", UploadId);
         Command.Parameters.AddWithValue("profile", ProfileId);
+    }
+
+    public async Task<AttachCoachAudioResult> AttachAudioAsync(Guid UploadId, string ProfileId, byte[] Bytes, string ContentType, CancellationToken CancellationToken)
+    {
+        await using var Connection = new NpgsqlConnection(Options.Value.ConnectionString);
+        await Connection.OpenAsync(CancellationToken);
+        await using var Transaction = await Connection.BeginTransactionAsync(CancellationToken);
+        await using var Command = new NpgsqlCommand($"SELECT status FROM {Table} WHERE upload_id = @id AND profile_id = @profile FOR UPDATE", Connection, Transaction);
+        Bind(Command, UploadId, ProfileId);
+        var Status = await Command.ExecuteScalarAsync(CancellationToken);
+        if (Status is null) return AttachCoachAudioResult.NotFound;
+        if (Status is not "Completed") return AttachCoachAudioResult.NotCompleted;
+        // Keep ingestion identity/hash and all processed evidence unchanged. The Owner
+        // chooses the recording; attaching audio never queues transcription or embeddings.
+        Command.CommandText = $"UPDATE {Table} SET audio_bytes = @bytes, mime_type = @mime, size_bytes = @size, updated_at = now() WHERE upload_id = @id AND profile_id = @profile";
+        Command.Parameters.AddWithValue("bytes", Bytes);
+        Command.Parameters.AddWithValue("mime", ContentType);
+        Command.Parameters.AddWithValue("size", Bytes.LongLength);
+        await Command.ExecuteNonQueryAsync(CancellationToken);
+        await Transaction.CommitAsync(CancellationToken);
+        return AttachCoachAudioResult.Stored;
     }
 }

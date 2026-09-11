@@ -26,6 +26,73 @@ namespace PersonalAgent.Tests.Endpoints;
 public sealed class CoachEvidenceEndpointsTests(PostgresVectorFixture Database) : IClassFixture<PostgresVectorFixture>
 {
     [Fact]
+    public async Task ManualAudioAttachment_TrustsOwnerSelection_AndPreservesProcessedEvidenceAcrossRestart()
+    {
+        var State = await SeedAsync();
+        await using (var App = await CreateAsync(State.Options))
+        {
+            using var Client = ClientFor(App, "owner", "Owner");
+            var Uri = $"/api/coach-checkins/{State.Id}/audio?profileId=owner";
+            (await Client.DeleteAsync(Uri)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+            foreach (var Bytes in new byte[][] { [9, 8, 7], [6, 5] })
+            {
+                using var Audio = new ByteArrayContent(Bytes);
+                Audio.Headers.ContentType = new("audio/mpeg");
+                (await Client.PutAsync(Uri, Audio)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+                (await Client.GetByteArrayAsync(Uri)).Should().Equal(Bytes);
+            }
+        }
+        await using var Restarted = await CreateAsync(State.Options);
+        using var Reader = ClientFor(Restarted, "owner", "Owner");
+        var Evidence = await Reader.GetFromJsonAsync<CoachEvidenceResponse>($"/api/coach-checkins/{State.Id}/evidence?profileId=owner");
+        Evidence!.AudioAvailable.Should().BeTrue();
+        Evidence.Transcript.Status.Should().Be(CoachCallUploadStatus.Completed);
+        Evidence.Transcript.SessionId.Should().Be(State.Id);
+        Evidence.Transcript.TranscriptText.Should().Be("Synthetic evidence");
+        Evidence.MaxAudioUploadBytes.Should().Be(1024 * 1024);
+        await using var Connection = new NpgsqlConnection(State.Options.ConnectionString);
+        await Connection.OpenAsync();
+        await using var Command = new NpgsqlCommand($"SELECT file_hash FROM {State.Options.Schema}.coach_call_uploads WHERE upload_id = @id", Connection);
+        Command.Parameters.AddWithValue("id", State.Id);
+        (await Command.ExecuteScalarAsync()).Should().Be("synthetic");
+        Command.CommandText = $"SELECT count(*) FROM {State.Options.Schema}.coach_call_outbox";
+        (await Command.ExecuteScalarAsync()).Should().Be(0L);
+    }
+
+    [Theory]
+    [InlineData("owner", "Owner", "owner", "Processing", 409)]
+    [InlineData("owner", "Owner", "owner", "Failed", 409)]
+    [InlineData("other", "Owner", "owner", "Completed", 403)]
+    [InlineData("other", "Owner", "other", "Completed", 404)]
+    [InlineData("coach", "Coach", "owner", "Completed", 403)]
+    public async Task Attachment_RejectsUnauthorizedOrUnprocessedCalls(string Actor, string Role, string Profile, string Status, int Expected)
+    {
+        var State = await SeedAsync(Status);
+        await using var App = await CreateAsync(State.Options);
+        using var Client = ClientFor(App, Actor, Role);
+        using var Audio = new ByteArrayContent([9, 8]);
+        ((int)(await Client.PutAsync($"/api/coach-checkins/{State.Id}/audio?profileId={Profile}", Audio)).StatusCode).Should().Be(Expected);
+        using var Owner = ClientFor(App, "owner", "Owner");
+        (await Owner.GetByteArrayAsync($"/api/coach-checkins/{State.Id}/audio?profileId=owner")).Should().Equal(1, 2, 3, 4);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Attachment_EnforcesByteLimitWithoutChangingExistingAudio(bool Chunked)
+    {
+        var State = await SeedAsync();
+        await using var App = await CreateAsync(State.Options);
+        using var Client = ClientFor(App, "owner", "Owner");
+        var Uri = $"/api/coach-checkins/{State.Id}/audio?profileId=owner";
+        using var Request = new HttpRequestMessage(HttpMethod.Put, Uri) { Content = new ByteArrayContent(new byte[1024 * 1024 + 1]) };
+        Request.Headers.TransferEncodingChunked = Chunked;
+        (await Client.SendAsync(Request)).StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        (await Client.PutAsync(Uri, new ByteArrayContent([]))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Client.GetByteArrayAsync(Uri)).Should().Equal(1, 2, 3, 4);
+    }
+
+    [Fact]
     public async Task RangePlayback_DeletionAndReplacementHost_PreserveReadableEvidence()
     {
         var State = await SeedAsync();
@@ -101,7 +168,7 @@ public sealed class CoachEvidenceEndpointsTests(PostgresVectorFixture Database) 
         await using var App = await CreateAsync(State.Options);
         using var Client = App.GetTestClient();
         Client.DefaultRequestHeaders.Add("X-Internal-Api-Key", "internal");
-        foreach (var Method in new[] { HttpMethod.Get, HttpMethod.Delete })
+        foreach (var Method in new[] { HttpMethod.Get, HttpMethod.Delete, HttpMethod.Put })
         {
             using var Request = new HttpRequestMessage(Method, $"/api/coach-checkins/{State.Id}/audio?profileId=owner");
             (await Client.SendAsync(Request)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -138,7 +205,7 @@ public sealed class CoachEvidenceEndpointsTests(PostgresVectorFixture Database) 
         Builder.WebHost.UseTestServer();
         Builder.Services.AddSingleton(Options.Create(Memory));
         Builder.Services.AddSingleton(Options.Create(new SqlTransportOptions { ConnectionString = Memory.ConnectionString }));
-        Builder.Services.AddSingleton(Options.Create(new CoachCheckinOptions()));
+        Builder.Services.AddSingleton(Options.Create(new CoachCheckinOptions { MaxUploadMb = 1 }));
         Builder.Services.AddSingleton(Mock.Of<IBus>());
         Builder.Services.AddSingleton(Mock.Of<IAgentEmbeddingService>());
         Builder.Services.AddSingleton(Assignments ?? Mock.Of<ICoachAssignmentStore>());

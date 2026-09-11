@@ -48,6 +48,11 @@
                         }
                         else
                         {
+                            @if (isOwner && transcript.Status == "Completed")
+                            {
+                                <TranscriptAudioUpload @key="SelectedItem.UploadId" UploadId="SelectedItem.UploadId" ProfileId="@SelectedItem.ProfileId"
+                                                       HasAudio="SelectedItem.HasAudioBlob" MaxUploadBytes="maxAudioUploadBytes" OnUploaded="AudioUploaded" />
+                            }
                             <div class="coach-admin-detail__timeline">
                                 @foreach (var utterance in transcript.Utterances)
                                 {
@@ -69,7 +74,7 @@
 </MudContainer>
 @if (showEvidence && SelectedItem is not null)
 {
-    <EvidenceDrawer @key="SelectedItem.UploadId" UploadId="SelectedItem.UploadId" ProfileId="SelectedItem.ProfileId" OnClose="() => showEvidence = false" />
+    <EvidenceDrawer @key="SelectedItem.UploadId" UploadId="SelectedItem.UploadId" ProfileId="@SelectedItem.ProfileId" OnClose="CloseEvidenceAsync" />
 }
 
 @code {
@@ -83,6 +88,7 @@
     private string? profileId;
     private bool isOwner;
     private bool showEvidence;
+    private long maxAudioUploadBytes = 25 * 1024 * 1024;
 
     private CoachCheckinAdminItemResponse? SelectedItem => selectedUploadId is null ? null : items.FirstOrDefault(item => item.UploadId == selectedUploadId);
 
@@ -130,7 +136,12 @@
         transcriptError = null;
         try
         {
-            transcript = await ApiClient.GetCoachCheckinTranscriptAsync(uploadId, profileId);
+            var evidence = await ApiClient.GetCoachEvidenceAsync(uploadId, profileId ?? string.Empty);
+            if (selectedUploadId != uploadId) return;
+            transcript = evidence?.Transcript;
+            maxAudioUploadBytes = evidence?.MaxAudioUploadBytes ?? 25 * 1024 * 1024;
+            if (evidence is not null)
+                items = items.Select(item => item.UploadId == uploadId ? item with { HasAudioBlob = evidence.AudioAvailable } : item).ToList();
         }
         catch (Exception ex)
         {
@@ -160,6 +171,18 @@
         {
             isDownloading = false;
         }
+    }
+
+    private void AudioUploaded(Guid uploadId)
+    {
+        items = items.Select(item => item.UploadId == uploadId ? item with { HasAudioBlob = true } : item).ToList();
+        if (selectedUploadId == uploadId) showEvidence = false;
+    }
+
+    private async Task CloseEvidenceAsync()
+    {
+        showEvidence = false;
+        if (selectedUploadId is Guid uploadId) await LoadTranscriptAsync(uploadId);
     }
 
     private static string FormatTimestampRange(int startMs, int endMs) => $"{TimeSpan.FromMilliseconds(startMs):mm\\:ss} - {TimeSpan.FromMilliseconds(endMs):mm\\:ss}";

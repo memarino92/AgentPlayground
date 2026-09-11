@@ -282,6 +282,14 @@ internal class PersonalAgentClient(
         Response.EnsureSuccessStatusCode();
     }
 
+    public async Task AttachCoachAudioAsync(Guid UploadId, string ProfileId, Stream Audio, string ContentType, CancellationToken CancellationToken)
+    {
+        using var Content = new StreamContent(Audio);
+        Content.Headers.ContentType = MediaTypeHeaderValue.TryParse(ContentType, out var Mime) ? Mime : new("application/octet-stream");
+        using var Response = await SendAsync(HttpMethod.Put, $"/api/coach-checkins/{UploadId}/audio?profileId={Uri.EscapeDataString(ProfileId)}", Content, CancellationToken);
+        Response.EnsureSuccessStatusCode();
+    }
+
     public Task<HttpResponseMessage> GetCoachAudioAsync(Guid UploadId, string ProfileId, ClaimsPrincipal User, string? Range, CancellationToken CancellationToken) =>
         SendAsync(HttpMethod.Get, $"/api/coach-checkins/{UploadId}/audio?profileId={Uri.EscapeDataString(ProfileId)}", cancellationToken: CancellationToken, requestUser: User, range: Range);
 
@@ -341,7 +349,7 @@ public record CoachCheckinStatusResponse(Guid UploadId, Guid SessionId, string P
 public record CoachCheckinSummaryResponse(Guid UploadId, Guid SessionId, string SummaryMarkdown, string SummaryJson, DateTimeOffset UpdatedAtUtc);
 public record CoachCheckinTranscriptResponse(Guid UploadId, Guid SessionId, string ProfileId, string Status, string TranscriptText, DateTimeOffset UpdatedAtUtc, List<CoachCheckinTranscriptUtteranceResponse> Utterances);
 public record CoachCheckinTranscriptUtteranceResponse(int SpeakerLabel, string SpeakerRole, int StartMs, int EndMs, string Text, double Confidence);
-public record CoachEvidenceResponse(CoachCheckinTranscriptResponse Transcript, bool AudioAvailable);
+public record CoachEvidenceResponse(CoachCheckinTranscriptResponse Transcript, bool AudioAvailable, long MaxAudioUploadBytes = 25 * 1024 * 1024);
 public record SpeakerOverrideItem(int SpeakerLabel, string Role);
 public record CoachCheckinSpeakerLabelInfoResponse(int SpeakerLabel, string SpeakerRole, int UtteranceCount, List<string> SampleTexts);
 public record CoachCheckinAdminItemResponse(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount, List<CoachCheckinSpeakerLabelInfoResponse> SpeakerLabels);

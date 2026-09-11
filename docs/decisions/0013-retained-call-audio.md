@@ -17,6 +17,10 @@ Evidence reads and range requests use the same subject policy as chat: Owners ca
 
 Owner-authorized audio deletion under DATA-04 clears bytes while preserving source identity and transcript readability, is idempotent, and serializes with processing using the upload row lock. It is allowed only for Completed/Failed uploads; pending jobs return 409 until a cancellation policy exists. Processing never restores cleared bytes. After deletion commits, subsequent audio reads return 404. Already downloaded/buffered bytes cannot be revoked. This is audio-only deletion, not deletion of transcripts or derived memory.
 
+### Manual attachment of historical audio
+
+At the maintainer's request on 2026-09-11, Owners can upload or replace audio on their own Completed calls from the transcript page, outside the evidence drawer. File selection is the attestation that it belongs to the call: no hash match, transcript comparison, duration/alignment check, provider submission or reprocessing occurs. Existing transcript offsets remain unchanged. The upload row lock serializes attachment with deletion and processing; incomplete/failed calls reject attachment. The new bytes, MIME type and byte count replace the active recording. The original ingestion filename/hash and call identity stay unchanged so existing deduplication and source references remain stable. The configured upload-size limit and subject authorization still apply. A mistaken selection can be corrected by choosing another file.
+
 ## Alternatives
 
 Object storage would separate media capacity and streaming from database traffic, but requires another storage lifecycle, access policy, backup manifest and reconciliation across stores. Revisit it when measured recording volume or playback traffic warrants that work. Continuing to delete completed recordings prevents the requested evidence playback. A second database media table would duplicate an existing durable relationship without reducing byte storage.
