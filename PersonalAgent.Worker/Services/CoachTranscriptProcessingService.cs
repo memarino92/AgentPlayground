@@ -68,7 +68,7 @@ internal class CoachTranscriptProcessingService(IRequestClient<GenerateEmbedding
         };
 
         var lower = content.ToLowerInvariant();
-        var exerciseTags = BuildTagArray(lower, ["squat", "bench", "deadlift", "press", "row", "pull", "conditioning"]);
+        var exerciseTags = BuildTagArray(lower, ["squat", "bench", "deadlift", "press", "row", "pull", "conditioning", "yoke"]);
         var intentTags = BuildTagArray(lower, ["cue", "technique", "programming", "recovery", "pain", "nutrition", "mindset"]);
         var priorityTags = BuildTagArray(lower, ["action", "warning", "goal", "followup"]);
 
