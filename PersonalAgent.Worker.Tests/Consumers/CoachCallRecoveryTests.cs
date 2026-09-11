@@ -79,6 +79,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         {
             (await Received.Task.WaitAsync(TimeSpan.FromSeconds(15))).Should().Be(SentId);
             (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Completed");
+            (await Scalar(State, "SELECT encode(audio_bytes, 'hex') FROM {0}.coach_call_uploads")).Should().Be("010203");
             using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             while ((long)(await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox"))! != 0)
                 await Task.Delay(50, Timeout.Token);
@@ -172,7 +173,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         (await Scalar(State, "SELECT chunk_id FROM {0}.coach_call_chunks")).Should().Be(ChunkId);
         (await Scalar(State, "SELECT updated_at FROM {0}.coach_call_sessions")).Should().Be(UpdatedAt);
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Completed");
-        (await Scalar(State, "SELECT audio_bytes IS NULL FROM {0}.coach_call_uploads")).Should().Be(true);
+        (await Scalar(State, "SELECT encode(audio_bytes, 'hex') FROM {0}.coach_call_uploads")).Should().Be("010203");
         State.EmbeddingCalls.Should().Be(1);
         State.Provider.Submissions.Should().Be(1);
     }
@@ -194,6 +195,39 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_chunks")).Should().Be(1L);
         (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'CoachCallProcessingCompletedEvent'")).Should().Be(1L);
         State.EmbeddingCalls.Should().Be(2); // Failed transaction plus one committed attempt.
+        (await Scalar(State, "SELECT encode(audio_bytes, 'hex') FROM {0}.coach_call_uploads")).Should().Be("010203");
+    }
+
+    [Theory]
+    [InlineData("Completed", 30, true)]
+    [InlineData("Processing", 30, true)]
+    [InlineData("AwaitingSpeakerOverride", 30, true)]
+    [InlineData("Failed", 30, false)]
+    [InlineData("Failed", 1, true)]
+    public async Task Cleanup_ExpiresOnlyOldFailedAudio(string Status, int AgeDays, bool Retained)
+    {
+        var State = await SetupAsync();
+        await Execute(State, $"UPDATE {State.Schema}.coach_call_uploads SET status = '{Status}', updated_at = now() - interval '{AgeDays} days'");
+        var Cleanup = new CoachCallCleanupService(State.Sql, State.Worker, NullLogger<CoachCallCleanupService>.Instance);
+        await Cleanup.CleanupAsync(default);
+        await Cleanup.CleanupAsync(default);
+        (await Scalar(State, "SELECT COALESCE(encode(audio_bytes, 'hex'), 'unavailable') FROM {0}.coach_call_uploads"))
+            .Should().Be(Retained ? "010203" : "unavailable");
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_sessions")).Should().Be(1L);
+    }
+
+    [Fact]
+    public async Task LegacyMissingAudio_ProcessingDoesNotRecreateRecording()
+    {
+        var State = await SetupAsync();
+        State.Provider.Complete = true;
+        await Transcribe(State);
+        await Execute(State, $"UPDATE {State.Schema}.coach_call_uploads SET audio_bytes = NULL");
+        await Process(State, State.Command);
+        await Process(State, State.Command);
+        (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Completed");
+        (await Scalar(State, "SELECT audio_bytes IS NULL FROM {0}.coach_call_uploads")).Should().Be(true);
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_chunks")).Should().Be(1L);
     }
 
     [Fact]

@@ -45,7 +45,6 @@ internal class ProcessCoachTranscriptConsumer(
             var result = await processingService.ProcessAsync(message.CorrelationId, enrichedUtterances, context.CancellationToken);
 
             await SaveResultAsync(connection, transaction, message, result, context.CancellationToken);
-            await ClearAudioBytesAsync(connection, message.UploadId, context.CancellationToken);
             await UpdateUploadStatusAsync(connection, message.UploadId, "Completed", null, context.CancellationToken);
 
             await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema,
@@ -202,20 +201,6 @@ internal class ProcessCoachTranscriptConsumer(
             chunkCommand.Parameters.AddWithValue("createdAt", DateTimeOffset.UtcNow);
             await chunkCommand.ExecuteNonQueryAsync(cancellationToken);
         }
-    }
-
-    private async Task ClearAudioBytesAsync(NpgsqlConnection connection, Guid uploadId, CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            UPDATE {CoachCallUploadsTable}
-            SET audio_bytes = NULL,
-                updated_at = @updatedAt
-            WHERE upload_id = @uploadId;
-            """;
-        command.Parameters.AddWithValue("uploadId", uploadId);
-        command.Parameters.AddWithValue("updatedAt", DateTimeOffset.UtcNow);
-        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private async Task UpdateUploadStatusAsync(NpgsqlConnection connection, Guid uploadId, string status, string? error, CancellationToken cancellationToken)
