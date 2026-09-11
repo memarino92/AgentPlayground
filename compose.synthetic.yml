@@ -4,6 +4,7 @@ x-demo-environment: &demo-environment
   ASPNETCORE_ENVIRONMENT: Development
   DOTNET_ENVIRONMENT: Development
   SyntheticDemo__Enabled: "true"
+  INTEGRATION_SETTINGS_ADMINISTRATORS: "demo-owner"
   DATABASE_URL: "Host=postgres-demo;Database=agentplayground_demo;Username=demo;Password=synthetic-local-password"
   # Public, local-only demo key. Never use these values for a hosted installation.
   CONFIG_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="

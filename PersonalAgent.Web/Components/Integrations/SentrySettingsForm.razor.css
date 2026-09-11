@@ -1,0 +1,9 @@
+.settings-card { padding: 1.5rem; border: 1px solid #8993a444; border-radius: .75rem; }
+fieldset { border: 0; padding: 0; display: grid; gap: .6rem; }
+label { margin-top: .6rem; font-weight: 600; }
+::deep input:not([type=checkbox]), ::deep select { padding: .6rem; border: 1px solid #8993a4; border-radius: .3rem; max-width: 36rem; background: white; color: #172033; }
+button { padding: .65rem 1rem; justify-self: start; margin-top: .75rem; background: #174f73; color: white; border-radius: .4rem; }
+button:disabled { opacity: .55; }
+p { margin: .5rem 0 1rem; }
+.toggle { display: flex; align-items: center; gap: .5rem; }
+::deep .validation-message, ::deep .validation-errors { color: #bd3434; }

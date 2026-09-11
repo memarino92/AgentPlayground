@@ -1,0 +1,54 @@
+@baseUrl = http://localhost:5100
+@internalKey = REPLACE_LOCALLY
+@actor = YOUR_ALLOWLISTED_GITHUB_LOGIN
+@timestamp = FRESH_UNIX_TIMESTAMP
+@signature = HMAC_SHA256_OF_ACTOR_NEWLINE_OWNER_NEWLINE_EMPTY_EMAIL_NEWLINE_TIMESTAMP
+
+### Read settings. Generate signed actor headers as documented in the integration-settings runbook.
+GET {{baseUrl}}/api/admin/integrations/sentry
+X-Internal-Api-Key: {{internalKey}}
+X-Agent-Actor: {{actor}}
+X-Agent-Role: Owner
+X-Agent-Timestamp: {{timestamp}}
+X-Agent-Signature: {{signature}}
+
+### Save a disabled candidate, retaining an existing DSN. A stale expectedRevision returns 409.
+PUT {{baseUrl}}/api/admin/integrations/sentry
+X-Internal-Api-Key: {{internalKey}}
+X-Agent-Actor: {{actor}}
+X-Agent-Role: Owner
+X-Agent-Timestamp: {{timestamp}}
+X-Agent-Signature: {{signature}}
+Content-Type: application/json
+
+{"expectedRevision": 0, "values": {"Enabled": "false", "Environment": "development", "SampleRate": "1"}}
+
+### Apply the revision returned by save (replace example revision).
+POST {{baseUrl}}/api/admin/integrations/sentry/apply
+X-Internal-Api-Key: {{internalKey}}
+X-Agent-Actor: {{actor}}
+X-Agent-Role: Owner
+X-Agent-Timestamp: {{timestamp}}
+X-Agent-Signature: {{signature}}
+Content-Type: application/json
+
+{"revision": 1}
+
+### Reload the active revision in API. Web and Worker reconcile automatically.
+POST {{baseUrl}}/api/admin/integrations/sentry/reload
+X-Internal-Api-Key: {{internalKey}}
+X-Agent-Actor: {{actor}}
+X-Agent-Role: Owner
+X-Agent-Timestamp: {{timestamp}}
+X-Agent-Signature: {{signature}}
+
+### Explicitly queue a synthetic test event using the active revision (replace example revision).
+POST {{baseUrl}}/api/admin/integrations/sentry/test
+X-Internal-Api-Key: {{internalKey}}
+X-Agent-Actor: {{actor}}
+X-Agent-Role: Owner
+X-Agent-Timestamp: {{timestamp}}
+X-Agent-Signature: {{signature}}
+Content-Type: application/json
+
+{"revision": 1}

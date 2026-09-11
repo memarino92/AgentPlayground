@@ -58,6 +58,9 @@ jobs:
       - name: Verify synthetic application flow
         shell: pwsh
         run: ./scripts/tests/Test-SyntheticDemo.ps1
+      - name: Verify integration settings and restarted Worker reconciliation
+        shell: pwsh
+        run: ./scripts/tests/Test-IntegrationSettings.ps1 -RestartWorker
       - name: Capture demo logs
         if: failure()
         run: docker compose -f compose.synthetic.yml logs --tail 100

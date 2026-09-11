@@ -1,0 +1,58 @@
+@using AgentPlayground.Integrations
+
+<section class="settings-card">
+    <h2>Sentry settings</h2>
+    <p>Report application errors from API, Web, and Worker. Private log contents are excluded.</p>
+    <EditForm Model="Model" OnValidSubmit="SaveAsync" FormName="sentry-settings">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <fieldset disabled="@Busy">
+            <label class="toggle"><InputCheckbox @bind-Value="Model.Enabled" /> Enable error reporting</label>
+            <label for="sentry-environment">Environment</label>
+            <InputText id="sentry-environment" @bind-Value="Model.Environment" />
+            <ValidationMessage For="() => Model.Environment" />
+            <label for="sentry-sample">Error sample rate (0–1)</label>
+            <InputNumber id="sentry-sample" @bind-Value="Model.SampleRate" step="0.1" min="0" max="1" />
+            <ValidationMessage For="() => Model.SampleRate" />
+            <p>1 sends every eligible error; 0 sends none. Release identity comes from the deployed build.</p>
+            <label for="sentry-secret-action">Project DSN — @(Model.DsnConfigured ? "configured" : "missing")</label>
+            <InputSelect id="sentry-secret-action" @bind-Value="Model.DsnAction" @bind-Value:after="ClearUnusedSecret">
+                <option value="keep">Keep saved value</option>
+                <option value="replace">Enter a new value</option>
+                <option value="clear">Clear saved value</option>
+            </InputSelect>
+            <ValidationMessage For="() => Model.DsnAction" />
+            @if (Model.DsnAction == "replace")
+            {
+                <label for="sentry-dsn">New DSN</label>
+                <InputText id="sentry-dsn" type="password" autocomplete="new-password" @bind-Value="Model.Dsn" />
+                <ValidationMessage For="() => Model.Dsn" />
+                <p>Use the project DSN from Sentry, not an account management token. Hosted Sentry endpoints are supported.</p>
+            }
+            <button type="submit">@(Busy ? "Working…" : "Validate and save")</button>
+        </fieldset>
+    </EditForm>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public IntegrationSettingsResponse Settings { get; set; } = default!;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback<SaveIntegrationRequest> OnSave { get; set; }
+    private SentrySettingsFormModel Model = new();
+    private long LoadedRevision = -1;
+
+    protected override void OnParametersSet()
+    {
+        if (LoadedRevision == Settings.SavedRevision) return;
+        LoadedRevision = Settings.SavedRevision;
+        Model = new()
+        {
+            Enabled = bool.Parse(Settings.Values["Enabled"]), Environment = Settings.Values["Environment"],
+            SampleRate = double.Parse(Settings.Values["SampleRate"], System.Globalization.CultureInfo.InvariantCulture),
+            DsnConfigured = Settings.ConfiguredSecrets.Contains("Dsn")
+        };
+    }
+
+    private Task SaveAsync() => OnSave.InvokeAsync(Model.ToRequest(LoadedRevision));
+    private void ClearUnusedSecret() { if (Model.DsnAction != "replace") Model.Dsn = ""; }
+}

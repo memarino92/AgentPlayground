@@ -1,0 +1,37 @@
+@using AgentPlayground.Integrations
+
+<section class="status-card">
+    <h2>Application status</h2>
+    <p>Saved revision: @Settings.SavedRevision · Active revision: @Settings.ActiveRevision</p>
+    <p>Saving validates a candidate. Apply makes it active. Services reload within 15 seconds; refresh to check their acknowledgements.</p>
+    <div class="status-table">
+        <table>
+            <thead><tr><th>Service / instance</th><th>Applied revision</th><th>Status</th><th>Environment overrides</th></tr></thead>
+            <tbody>
+                @foreach (var service in new[] { "Api", "Web", "Worker" })
+                {
+                    var instances = Settings.Instances.Where(Instance => Instance.Service == service).ToArray();
+                    if (instances.Length == 0)
+                    {
+                        <tr @key="service"><td>@service</td><td>—</td><td>Not yet seen</td><td>Unknown</td></tr>
+                    }
+                    @foreach (var instance in instances)
+                    {
+                        <tr @key="instance.Instance">
+                            <td>@instance.Service / @instance.Instance[..Math.Min(8, instance.Instance.Length)]</td>
+                            <td>@instance.Revision</td>
+                            <td>@Status(instance)</td>
+                            <td>@(instance.Overrides.Length == 0 ? "None" : string.Join(", ", instance.Overrides))</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public IntegrationSettingsResponse Settings { get; set; } = default!;
+    private string Status(IntegrationInstanceResponse Instance) => DateTimeOffset.UtcNow - Instance.LastSeen > TimeSpan.FromSeconds(45)
+        ? "Offline or not reporting" : Instance.Revision != Settings.ActiveRevision ? $"Pending — {Instance.Status}" : Instance.Status;
+}

@@ -1,9 +1,10 @@
 # 0010: Configure integrations through validated application settings
 
-- Status: Proposed
+- Status: Accepted; Sentry first slice implemented
 - Recorded: 2026-09-10
+- Decision date: 2026-09-10; maintainer authorized implementation
 - Evidence: maintainer request; `AgentPlayground.Contracts/Configuration/PostgresConfigurationSource.cs`, `ConfigurationValueResolver.cs`, and `PersonalAgent.Web/Components/Pages/IntegrationsAdmin.razor`
-- Related: [0001: Database configuration](0001-database-configuration.md); extends its startup-only behavior if accepted
+- Related: [0001: Database configuration](0001-database-configuration.md); adds a dedicated runtime store while preserving existing startup-only consumers
 
 ## Context
 
@@ -11,7 +12,7 @@ The maintainer wants to enter integration settings in the app and validate/reloa
 
 ## Decision
 
-Propose a reusable integration settings registry and administration flow, with Sentry as the first implementation. This is a future design, not implemented behavior or a commitment to hot-reload every SDK.
+Use a registered integration settings model and administration flow, with Sentry as the first implementation. The following describes the accepted direction; the delivery section distinguishes the implemented slice from remaining extensions. It does not commit to hot-reloading every SDK.
 
 Each registered integration defines typed fields, required/conditional validation, secret handling, service scope, effective-value precedence, and an application policy: live update, controlled client reinitialization, or restart required. New supported integrations contribute a definition and adapter in code; users configure their values without editing deployment variables or SQL. Arbitrary key entry cannot install an integration or make an unbound setting take effect.
 
@@ -39,9 +40,15 @@ First verify lifecycle behavior with the chosen Sentry SDK and host integration:
 
 ## Consequences
 
-The integration setup experience becomes reusable and inspectable. It adds lifecycle, authorization, revision, and distributed-application responsibilities. The first slice should cover Sentry and shared settings machinery; migrating every existing provider setting is separate work. SDK compatibility and rollout behavior remain implementation questions.
+The integration setup experience becomes reusable and inspectable. It adds lifecycle, authorization, revision, and distributed-application responsibilities. The first slice covers Sentry and shared settings machinery; migrating every existing provider setting is separate work.
 
 ## Delivery and verification
+
+Implemented: a separate `AgentPlayground.Integrations` host-infrastructure library, encrypted immutable revisions, explicit administrator allowlist, field validation, save/apply/reload/test endpoints and Blazor UI, 15-second durable pointer reconciliation, per-instance status, and replaceable Sentry 6.9.0 clients in API/Web/Worker. Existing AI provider ownership remains unchanged. Error export is limited to metadata through one logging provider; raw exception and log contents are excluded. No global SDK initialization or general configuration reload is used.
+
+The additive integration schema has its own versioned transaction under an advisory lock; broader database migration work remains open. Revisions retain encrypted values plus author/time; promotions retain actor/time. Historical encrypted revisions are retained with the database and backups. UI history/revert, field-level audit presentation, additional integrations, self-hosted Sentry, tracing, and alerts remain follow-ups. Validation is performed synchronously on save and apply; no external credential-validity claim is made. The test action reports queue acceptance, not confirmed ingestion.
+
+Local verification: 90 API tests, 16 Web tests, and 19 Worker tests passed, along with 22 synthetic application checks and 13 integration checks including a Worker process restart. The real SDK test uses an in-memory transport. See [setup and operational limits](../runbooks/integration-settings.md). Live Sentry project receipt is not yet verified.
 
 Track `CONFIG-01` and `OPS-01` in the [roadmap](../plans/roadmap.md#selectable-backlog). Acceptance: an administrator configures Sentry through the UI, tests it with a synthetic event, and sees accurate applied/restart status. Invalid settings preserve working behavior; secrets are not echoed; unauthorized users and stale edits are rejected; overrides are explained; offline/restarted instances converge; SDK lifecycle tests demonstrate supported reload behavior and no duplicate reports.
 

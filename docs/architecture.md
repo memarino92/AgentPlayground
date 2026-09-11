@@ -27,9 +27,12 @@ Web is the trusted authentication boundary for browser users. The API resolves a
 
 The intended AI gateway boundary is stronger than today's implementation: all AI vendor adapters, provider-specific configuration, SDKs, model selection policy, and error translation belong to the API project. Domain behavior should depend on capability interfaces and neutral DTOs. API hosts AssemblyAI and persists provider jobs behind a neutral upload-reference bus contract. Scheduled tasks now request the API default model; Web loads the current API catalog at chat initialization. The catalog refreshes provider availability on demand through an API-local adapter, with reviewed eligibility policy and outage fallback; saved sessions retain their model ID. See [0004](decisions/0004-agent-service-boundary.md).
 
+`AgentPlayground.Integrations` is host infrastructure shared by API/Web/Worker for runtime integration configuration and metadata-only Sentry error reporting. Web provides the settings form; API authorizes administrators and owns revision edits/promotions; each host independently reconciles the active database revision and replaces its own client. This adds an observability SDK to the hosts without moving AI provider adapters out of API. See [0010](decisions/0010-runtime-integration-settings.md).
+
 ## Current persistence and operations
 
 - `PostgresConfigurationSource` loads encrypted configuration at startup; bootstrap credentials remain external.
+- Runtime Sentry configuration uses separate encrypted revision/pointer tables with a transactionally versioned migration. Acknowledgements report each instance's applied revision; existing configuration consumers remain startup-only. See [integration operations](runbooks/integration-settings.md).
 - `PostgresAgentSessionStore` persists sessions/messages. Chat recreates the framework session per request and replays user/assistant history; it does not persist full framework tool/workflow state.
 - `AgentMemorySchemaInitializer` creates and alters tables at startup. Worker also creates journal tables. There is no explicit versioned migration history in these paths.
 - Journal vectors currently use a hard-coded `vector(1536)` in `SyncWorkJournalConsumer`; embedding compatibility must be addressed in the gateway design.
