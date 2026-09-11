@@ -30,6 +30,7 @@
                     <MudStack Spacing="2">
                         <MudText Typo="Typo.h6">@SelectedItem.OriginalFileName</MudText>
                         <MudText Typo="Typo.caption">Updated @SelectedItem.UpdatedAtUtc.ToLocalTime().ToString("g")</MudText>
+                        <MudButton OnClick="() => showEvidence = true">Read and listen to evidence</MudButton>
                         <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@isDownloading" OnClick="DownloadTranscriptAsync">
                             @(isDownloading ? "Preparing download..." : "Download .txt")
                         </MudButton>
@@ -66,6 +67,10 @@
         </MudItem>
     </MudGrid>
 </MudContainer>
+@if (showEvidence && SelectedItem is not null)
+{
+    <EvidenceDrawer @key="SelectedItem.UploadId" UploadId="SelectedItem.UploadId" ProfileId="SelectedItem.ProfileId" OnClose="() => showEvidence = false" />
+}
 
 @code {
     private List<CoachCheckinAdminItemResponse> items = [];
@@ -77,6 +82,7 @@
     private string? transcriptError;
     private string? profileId;
     private bool isOwner;
+    private bool showEvidence;
 
     private CoachCheckinAdminItemResponse? SelectedItem => selectedUploadId is null ? null : items.FirstOrDefault(item => item.UploadId == selectedUploadId);
 
@@ -84,6 +90,7 @@
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         isOwner = authState.User.IsInRole("Owner");
+        if (isOwner) profileId = authState.User.FindFirst("urn:github:login")?.Value;
         if (!isOwner)
         {
             var subject = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -99,9 +106,7 @@
         isLoading = true;
         try
         {
-            items = isOwner
-                ? await ApiClient.GetCoachCheckinAdminItemsAsync()
-                : string.IsNullOrWhiteSpace(profileId) ? [] : await ApiClient.GetCoachCheckinItemsAsync(profileId);
+            items = string.IsNullOrWhiteSpace(profileId) ? [] : await ApiClient.GetCoachCheckinItemsAsync(profileId);
             if (selectedUploadId is null || items.All(item => item.UploadId != selectedUploadId))
                 selectedUploadId = items.FirstOrDefault()?.UploadId;
             if (selectedUploadId is not null) await LoadTranscriptAsync(selectedUploadId.Value);
@@ -125,7 +130,7 @@
         transcriptError = null;
         try
         {
-            transcript = await ApiClient.GetCoachCheckinTranscriptAsync(uploadId, isOwner ? null : profileId);
+            transcript = await ApiClient.GetCoachCheckinTranscriptAsync(uploadId, profileId);
         }
         catch (Exception ex)
         {
@@ -144,7 +149,7 @@
         isDownloading = true;
         try
         {
-            var download = await ApiClient.DownloadCoachCheckinTranscriptAsync(selectedUploadId.Value, isOwner ? null : profileId);
+            var download = await ApiClient.DownloadCoachCheckinTranscriptAsync(selectedUploadId.Value, profileId);
             await JsRuntime.InvokeVoidAsync("downloadTextFileFromBase64", download.FileName, Convert.ToBase64String(download.Bytes), "text/plain;charset=utf-8");
         }
         catch (Exception ex)

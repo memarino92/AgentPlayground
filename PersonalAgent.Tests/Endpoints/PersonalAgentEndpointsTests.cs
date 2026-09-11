@@ -25,6 +25,16 @@ namespace PersonalAgent.Tests.Endpoints;
 
 public class PersonalAgentEndpointsTests
 {
+    [Theory]
+    [InlineData("transcript")]
+    [InlineData("transcript.txt")]
+    public async Task TranscriptReads_RejectOtherOwnerSubject(string Suffix)
+    {
+        await using var app = await BuildAppAsync();
+        using var client = app.GetTestClient();
+        (await client.GetAsync($"/api/coach-checkins/{Guid.NewGuid()}/{Suffix}?profileId=other-owner")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     [Fact]
     public async Task GetModels_ReturnsConfiguredModels()
     {
@@ -560,6 +570,7 @@ public class PersonalAgentEndpointsTests
         builder.Services.AddSingleton<PushNotificationService>();
         builder.Services.AddSingleton<IOptions<PushNotificationsOptions>>(Options.Create(new PushNotificationsOptions()));
         builder.Services.AddSingleton<CoachCheckinService>();
+        builder.Services.AddSingleton<ICoachEvidenceService, CoachEvidenceService>();
         builder.Services.AddSingleton<AgentChatService>();
         builder.Services.AddSingleton<AgentService>();
         builder.Services.AddSingleton(_ => Mock.Of<IBus>());

@@ -139,9 +139,9 @@ When an item is selected, add its ID to the selection table and define the exact
 | PRODUCT-07 | **Unified search:** search journals, transcripts, and conversations with date/source filters. | Results enforce subject access and open the right source; empty states and pagination work. | MEMORY-02 can improve ranking later. |
 | PRODUCT-08 | **Export a useful artifact:** turn a selected coaching recap into Markdown with source references. | Preview and export contain only selected, authorized content and preserve useful citations. | Start with Markdown; other formats are separate slices. |
 
-### Evidence drawer and retained call audio — retention foundation implemented
+### Evidence drawer and retained call audio — first playback slice implemented
 
-Recorded 2026-09-11 at the maintainer's request; expands `PRODUCT-01`. Original call recordings now remain in the existing PostgreSQL upload row after successful processing, with the subject/session link intact. The storage/lifecycle proposal is recorded in [0013](../decisions/0013-retained-call-audio.md); see operational limits in the [transcription runbook](../runbooks/transcription-gateway.md). Evidence endpoints, authorized deletion, citations, and the drawer/player remain unimplemented.
+Recorded 2026-09-11 at the maintainer's request; expands `PRODUCT-01`. Original call recordings remain in the PostgreSQL upload row after successful processing. Subject-authorized evidence and range playback, Owner-only terminal audio deletion, retrieval citation links, and the transcript/player drawer are implemented. The storage/lifecycle proposal is recorded in [0013](../decisions/0013-retained-call-audio.md); see operational limits in the [transcription runbook](../runbooks/transcription-gateway.md). Follow-along and recording-inclusive backup recovery validation remain outstanding.
 
 **Deliver in slices:**
 
@@ -152,7 +152,7 @@ Recorded 2026-09-11 at the maintainer's request; expands `PRODUCT-01`. Original 
 
 **Done when:** a synthetic cited answer opens the correct excerpt and retained original audio at its source timestamp after processing and a service restart. Playback, seeking, speed changes, and ±15-second skips work across recording boundaries; follow-along, if delivered, stays synchronized and can be disabled. Transcript and audio requests enforce the same server-side subject/access policy, including playback range requests. Older calls whose audio was already deleted remain readable with an explicit audio-unavailable state; missing timing never produces a fabricated seek target. Authorized deletion removes active audio access and leaves clear unavailable evidence states, with backup retention limits documented. Recovery validation includes retained recordings and their citation links.
 
-**Retention foundation validation (2026-09-11):** all 25 Worker tests passed, with no skipped tests. PostgreSQL recovery coverage verifies exact retained bytes after completion, concurrent replay, lost acknowledgement and transport-host replacement. Six added cases cover cleanup status/age boundaries and legacy missing audio. A recording-inclusive backup/restore rehearsal, authorized playback/deletion and the evidence drawer remain outstanding; PRODUCT-01 is not complete.
+**Validation (2026-09-11):** all 108 API, 25 Web and 25 Worker tests passed. Coverage includes retention/recovery, range playback, subject isolation, assignment revocation, terminal-only deletion, readable transcripts after deletion/restart, citation opening, missing media/timing and deletion confirmation. The synthetic smoke suite passed 30 checks through real processing and authenticated Web media requests; CI now runs it in place of the original 22-check suite. Browser checks verified the 4-second source seek, play/pause, seek bar, 1.5× speed, timestamp clicks and 15-second skips clamped to both ends of a 30-second fixture. A recording-inclusive backup/restore rehearsal and archive-deletion reconciliation remain outstanding; PRODUCT-01's full recovery acceptance is not complete.
 
 ### Memory and answer quality
 

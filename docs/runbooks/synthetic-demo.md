@@ -19,7 +19,7 @@ Open [the demo sign-in page](http://127.0.0.1:15000/login). API is bound to `127
 
 The persona mapping is fixed: `demo-owner`, `google:synthetic-coach` / `coach@example.test`, and `demo-other`. Synthetic sign-in does not accept arbitrary role or profile claims. It requires a form antiforgery token.
 
-Owner accounts retain the application's existing global transcript-administration access. The other-owner scenario verifies private chat and subject-scoped endpoints; it does not make the Owner administrator role tenant-isolated. Coach access remains assignment-scoped.
+Transcript content, evidence and audio now require the Owner's own subject or a current Coach assignment. Some older administration listings remain global Owner capabilities; this change does not make every administrator endpoint tenant-isolated.
 
 ## Verify
 
@@ -46,6 +46,12 @@ docker compose -f compose.synthetic.yml up --detach --wait --wait-timeout 180
 ```
 
 The default project name is `agentplayground-demo`; its volume is separate from `start-postgres.ps1` and `docker-compose.yml`. Do not override the project/database names or mount private data into this stack. An existing database without the synthetic marker is rejected. Seed inserts are repeatable and retain edits on restart.
+
+## Retained audio fixture
+
+Run `pwsh -NoProfile -File scripts/tests/Test-RetainedAudioEvidence.ps1` against the running demo. It runs the existing 22 checks, uploads a valid 30-second silent PCM recording, completes speaker review, verifies retained timing/audio and checks authenticated Web ranges for all three personas (30 checks total). It prints a source link seeking to the coach utterance at four seconds. Sign in as Demo owner to inspect playback. The legacy upload route still requires an `.m4a` filename; this synthetic fixture deliberately uses that suffix with `audio/wav` bytes. It tests playback/transport, not speech alignment or format validation. Avoid rapidly repeating the suite because the API rate limit also applies to test requests.
+
+Use **Read and listen to evidence** on the transcript page to open the drawer. Test speed, seeking, timestamp buttons and skips at both recording ends. Missing historical audio remains readable. Removal requires an explicit confirmation in the drawer and applies only to Completed/Failed calls. The script retains its synthetic recording for browser inspection and does not claim a backup/restore rehearsal.
 
 ## Limits
 

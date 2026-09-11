@@ -38,6 +38,7 @@ internal static class WebApplicationPipelineExtensions
 
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
+        app.MapCoachAudio();
 
         return app;
     }

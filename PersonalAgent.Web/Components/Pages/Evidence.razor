@@ -1,0 +1,13 @@
+@page "/evidence/{UploadId:guid}"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy)]
+@inject NavigationManager Navigation
+
+<PageTitle>Call evidence</PageTitle>
+<EvidenceDrawer @key="UploadId" UploadId="UploadId" ProfileId="@(ProfileId ?? string.Empty)" StartMs="StartMs" OnClose="Close" />
+
+@code {
+    [Parameter] public Guid UploadId { get; set; }
+    [SupplyParameterFromQuery] public string? ProfileId { get; set; }
+    [SupplyParameterFromQuery] public int? StartMs { get; set; }
+    private void Close() => Navigation.NavigateTo("/chat");
+}

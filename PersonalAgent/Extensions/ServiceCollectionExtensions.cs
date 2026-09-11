@@ -115,6 +115,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IAgentChatClientFactory, OpenAiAgentChatClientFactory>();
         services.AddSingleton<WorkJournalService>();
         services.AddSingleton<CoachCheckinService>();
+        services.AddSingleton<ICoachEvidenceService, CoachEvidenceService>();
         services.AddSingleton<SchedulingService>();
         services.AddSingleton<TavilyMcpToolProvider>();
         services.AddSingleton<ITavilyMcpToolProvider>(sp => sp.GetRequiredService<TavilyMcpToolProvider>());

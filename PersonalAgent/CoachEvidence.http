@@ -1,0 +1,32 @@
+# Supply current server-side signed actor headers; never copy production credentials here.
+@baseUrl = http://localhost:15100
+@uploadId = 00000000-0000-0000-0000-000000000000
+@profileId = demo-owner
+@internalKey = replace-locally
+@timestamp = replace-locally
+@signature = replace-locally
+
+### Transcript and audio availability
+GET {{baseUrl}}/api/coach-checkins/{{uploadId}}/evidence?profileId={{profileId}}
+X-Internal-Api-Key: {{internalKey}}
+X-Agent-Actor: {{profileId}}
+X-Agent-Role: Owner
+X-Agent-Timestamp: {{timestamp}}
+X-Agent-Signature: {{signature}}
+
+### Original recording range
+GET {{baseUrl}}/api/coach-checkins/{{uploadId}}/audio?profileId={{profileId}}
+Range: bytes=0-1023
+X-Internal-Api-Key: {{internalKey}}
+X-Agent-Actor: {{profileId}}
+X-Agent-Role: Owner
+X-Agent-Timestamp: {{timestamp}}
+X-Agent-Signature: {{signature}}
+
+### Delete only a disposable completed/failed recording
+DELETE {{baseUrl}}/api/coach-checkins/{{uploadId}}/audio?profileId={{profileId}}
+X-Internal-Api-Key: {{internalKey}}
+X-Agent-Actor: {{profileId}}
+X-Agent-Role: Owner
+X-Agent-Timestamp: {{timestamp}}
+X-Agent-Signature: {{signature}}
