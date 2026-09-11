@@ -11,6 +11,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Snapshot commands](runbooks/snapshot-commands.md): implemented export and guarded local restore.
 - [Adding agent tools](runbooks/adding-agent-tools.md): register a capability with shared metadata, binding, and authorization.
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
+- [Coaching retrieval evaluation](runbooks/coach-retrieval-evaluation.md): synthetic regression baseline and live-model evaluation limits.
 - [Integration settings](runbooks/integration-settings.md): in-app Sentry configuration, encrypted revisions, and runtime reload.
 - [Existing settings editor](decisions/0011-existing-settings-editor.md): edit database configuration with masked secrets and explicit restart requirements.
 - [Live provider credentials](decisions/0012-live-provider-credentials.md): OpenAI/AssemblyAI key rotation for new requests; remaining startup-bound consumers.
@@ -33,6 +34,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0010: Runtime integration settings](decisions/0010-runtime-integration-settings.md) | Accepted; Sentry first slice implemented | Enter, validate, and apply integration settings in the app |
 | [0013: Retained call audio](decisions/0013-retained-call-audio.md) | Proposed; retention and evidence drawer implemented | Preserve and play original recordings with subject access and active deletion |
 | [0014: Live coach processing](decisions/0014-live-coach-processing.md) | Accepted; implemented | Refresh open coach pages from transactional MassTransit status events |
+| [0015: Coach retrieval hints](decisions/0015-coach-retrieval-hints.md) | Accepted, retrospective; implemented | Recover untagged exercise cues and scope follow-ups by recording filename |
 
 ## Working agreement
 

@@ -23,10 +23,10 @@ internal sealed class AgentToolRegistry(ITavilyMcpToolProvider TavilyProvider) :
             OwnerDefault: true, CoachDefault: false, HasSideEffects: false,
             (Services, _) => Services.GetRequiredService<WorkJournalService>().SearchWorkJournalAsync),
         Local(AgentToolKeys.SearchCoachCheckins, "Search coach check-ins", "Coach check-ins",
-            "Search transcribed coach check-ins for exercise cues, notes, and attributed coaching advice. Provide a query and optionally an exerciseTag like squat or bench. Athlete scope is applied by the server.",
+            "Search transcribed coach check-ins for exercise cues, notes, and attributed coaching advice. Provide a focused query and optionally an exerciseTag like yoke or squat as a relevance hint. When the user names a recording, pass its exact filename in fileName. Athlete scope is applied by the server.",
             OwnerDefault: true, CoachDefault: true, HasSideEffects: false,
-            (Services, Access) => (string query, string? exerciseTag, CancellationToken token) =>
-                Services.GetRequiredService<CoachCheckinService>().SearchCoachCheckinsAsync(query, Access.SubjectProfileId, exerciseTag, token)),
+            (Services, Access) => (string query, string? exerciseTag, string? fileName, CancellationToken token) =>
+                Services.GetRequiredService<CoachCheckinService>().SearchCoachCheckinsAsync(query, Access.SubjectProfileId, exerciseTag, token, fileName)),
         Local(AgentToolKeys.ScheduleNotification, "Schedule notification", "Notifications",
             "Schedule a mobile notification for the current user using delay, absolute executeAt datetime, or natural when text like 'tonight'.",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,

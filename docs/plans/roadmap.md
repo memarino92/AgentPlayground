@@ -49,6 +49,8 @@ Recorded 2026-09-07; selectable backlog expanded 2026-09-10; evidence audio play
 
 Introduce a versioned evaluation set for retrieval relevance, grounded answers, extraction accuracy, authorization, tool errors, latency, and cost. Capture user corrections. Let a review workflow propose prompt/memory/tool-policy improvements; compare against the baseline, approve, deploy, and roll back if results worsen.
 
+2026-09-11 partial LAB-01/MEMORY-02 delivery: a synthetic PostgreSQL baseline reproduces missing untagged exercise cues, verifies timestamped citations and subject isolation, and exercises exact filename follow-ups. Search now treats exercise tags as relevance hints with transcript lexical recovery; newly processed yoke chunks receive a tag. Fourteen retrieval/chat cases and the second-utterance processing regression pass locally, including vector ranking without tags and new chats across service recreation against unchanged legacy chunks. This is deterministic retrieval coverage, not live model quality, full hybrid ranking comparison, or completed LAB-01. See [procedure and remaining evaluation scope](../runbooks/coach-retrieval-evaluation.md) and [decision 0015](../decisions/0015-coach-retrieval-hints.md).
+
 **Done when:** a reviewer can understand the problem, run a demo without private data, inspect tests/decisions, and see measurable engineering tradeoffs. Complete the [public-release review](../runbooks/public-release.md) before changing visibility.
 
 ### Future plan: Learning Lab — proposed, not implemented

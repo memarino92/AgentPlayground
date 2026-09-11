@@ -230,6 +230,7 @@ internal class AgentChatService
             If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
 
             When the user asks about strongman coaching calls, cues by exercise, or prior check-in guidance, use search_coach_checkins. Athlete scope is applied by the server.
+            Use a focused exercise/cue query. If the user supplies a recording filename, search again with that exact fileName and the exercise/cue query. A failed search is not proof the coach never gave the advice; explain the retrieval limit without speculating that the recording was not captured. Only attribute advice supported by the returned excerpts.
             """);
 
         if (webToolCount > 0)
