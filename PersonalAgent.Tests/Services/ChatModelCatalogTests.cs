@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Moq;
 using PersonalAgent.Configuration;
@@ -10,6 +11,27 @@ namespace PersonalAgent.Tests.Services;
 
 public class ChatModelCatalogTests
 {
+    [Fact]
+    public async Task ShippedPolicy_ExposesNewerModelsOnlyWhenProviderMakesThemAvailable()
+    {
+        var Configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory, "Fixtures", "chat-model-policy.json")).Build();
+        var Policy = Configuration.GetSection(ChatModelCatalogOptions.SectionName).Get<ChatModelCatalogOptions>()!;
+        var Clock = new TestClock();
+        var Source = new Mock<IChatModelDiscovery>();
+        string[] NewModels = ["gpt-5.5", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-6-astra"];
+        Source.SetupSequence(Value => Value.GetModelIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["gpt-4o-mini"])
+            .ReturnsAsync(["gpt-4o-mini", .. NewModels, "text-embedding-3-small", "gpt-realtime", "unknown-model"]);
+        using var Catalog = Create(Source.Object, Clock, Policy);
+        (await Catalog.GetModelsAsync()).Should().ContainSingle().Which.Id.Should().Be("gpt-4o-mini");
+        Clock.Advance(300);
+        var Models = await Catalog.GetModelsAsync();
+        Models.Select(Value => Value.Id).Should().BeEquivalentTo(["gpt-4o-mini", .. NewModels]);
+        Models.Should().ContainSingle(Value => Value.IsDefault).Which.Id.Should().Be("gpt-4o-mini");
+        (await Catalog.FindModelAsync("gpt-6-astra"))!.Id.Should().Be("gpt-6-astra");
+        Source.Verify(Value => Value.GetModelIdsAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
     [Fact]
     public async Task Discovery_IntersectsConfiguredPolicy_AndSelectsOneDefault()
     {

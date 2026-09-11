@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -25,6 +26,29 @@ namespace PersonalAgent.Tests.Endpoints;
 
 public class PersonalAgentEndpointsTests
 {
+    [Theory]
+    [InlineData("gpt-5.5")]
+    [InlineData("gpt-5.6-luna")]
+    [InlineData("gpt-5.6-terra")]
+    [InlineData("gpt-5.6-sol")]
+    [InlineData("gpt-6-astra")]
+    public async Task ShippedPolicy_AllowsNewSessionWithAvailableNewerModel(string ModelId)
+    {
+        var Configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory, "Fixtures", "chat-model-policy.json")).Build();
+        var Policy = Configuration.GetSection(ChatModelCatalogOptions.SectionName).Get<ChatModelCatalogOptions>()!;
+        var Source = new Mock<IChatModelDiscovery>();
+        Source.Setup(Value => Value.GetModelIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([ModelId, "text-embedding-3-small"]);
+        using var Catalog = new ChatModelCatalog(Options.Create(Policy), Source.Object, TimeProvider.System, NullLogger<ChatModelCatalog>.Instance);
+        await using var App = await BuildAppAsync(modelCatalog: Catalog);
+        var Client = App.GetTestClient();
+        var Models = (await ReadJsonAsync(await Client.GetAsync("/api/models"))).GetProperty("models");
+        Models.GetArrayLength().Should().Be(1);
+        Models[0].GetProperty("id").GetString().Should().Be(ModelId);
+        var Response = await Client.PostAsJsonAsync("/api/sessions", new { profileId = "test-user", modelId = ModelId });
+        Response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ReadJsonAsync(Response)).GetProperty("modelId").GetString().Should().Be(ModelId);
+    }
+
     [Theory]
     [InlineData("transcript")]
     [InlineData("transcript.txt")]
