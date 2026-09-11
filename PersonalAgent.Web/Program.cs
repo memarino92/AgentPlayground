@@ -1,4 +1,5 @@
 using AgentPlayground.Contracts.Hosting;
+using AgentPlayground.Integrations;
 using AgentPlayground.Contracts.Configuration;
 using MudBlazor.Services;
 using PersonalAgent.Web.Extensions;
@@ -11,6 +12,7 @@ builder.ConfigurePlatformHosting();
 if (builder.Environment.IsDevelopment()) builder.Configuration.AddUserSecrets<Program>();
 var syntheticDemo = SyntheticEnvironment.IsEnabled(builder.Configuration, builder.Environment);
 builder.Configuration.AddPostgresConfiguration("Web");
+builder.Services.AddRuntimeIntegrations(builder.Configuration, "Web");
 builder.Services.AddPostgresDataProtection(builder.Configuration);
 builder.Services.AddPersonalAgentApiClient(builder.Configuration);
 if (syntheticDemo) builder.Services.AddSyntheticAuthentication();

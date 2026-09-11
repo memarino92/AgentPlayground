@@ -18,6 +18,7 @@
     <PackageVersion Include="Plugin.Firebase.CloudMessaging" Version="4.0.1" />
     <PackageVersion Include="Plugin.Firebase.Core" Version="4.1.0" />
     <!-- Messaging -->
+    <PackageVersion Include="Sentry" Version="6.9.0" />
     <PackageVersion Include="MassTransit" Version="8.5.8" />
     <PackageVersion Include="MassTransit.SqlTransport.PostgreSQL" Version="8.5.8" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.6.0" />

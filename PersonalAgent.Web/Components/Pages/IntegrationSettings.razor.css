@@ -1,0 +1,5 @@
+.integration-settings { max-width: 64rem; margin: 0 auto; padding: 1.5rem; display: grid; gap: 1.2rem; }
+.actions { display: flex; gap: .75rem; flex-wrap: wrap; }
+button { padding: .6rem 1rem; border: 1px solid #8993a4; border-radius: .4rem; background: white; color: #172033; }
+button:disabled { opacity: .5; }
+.error { color: #bd3434; }

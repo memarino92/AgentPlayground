@@ -1,0 +1,33 @@
+@page "/admin/integration-settings"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
+@using PersonalAgent.Web.Components.Integrations
+
+<PageTitle>Integration settings</PageTitle>
+<div class="integration-settings">
+    <h1>Integration settings</h1>
+    <p>Configure Sentry for this deployment. <a href="/admin/integrations">Manage tool access</a></p>
+    @if (Error is not null) { <p role="alert" class="error">@Error</p> }
+    @if (Notice is not null) { <p role="status">@Notice</p> }
+    @if (Settings is null)
+    {
+        <p>@(Busy ? "Loading settings…" : "Settings could not be loaded.")</p>
+        <button disabled="@Busy" @onclick="RefreshAsync">Retry</button>
+    }
+    else
+    {
+        <SentrySettingsForm @key="FormGeneration" Settings="Settings" Busy="Busy" OnSave="SaveAsync" />
+        <div class="actions">
+            <button disabled="@(Busy || Settings.SavedRevision == 0 || Settings.SavedRevision == Settings.ActiveRevision)" @onclick="ApplyAsync">Apply saved revision</button>
+            <button disabled="@Busy" @onclick="RefreshAsync">Refresh / discard unsaved edits</button>
+            <button disabled="@Busy" @onclick="ReloadAsync">Reload active settings</button>
+            <button disabled="@(Busy || Settings.ActiveRevision == 0)" @onclick="TestAsync">Send test event from API</button>
+        </div>
+        <IntegrationServiceStatus Settings="Settings" />
+        @if (TestResult is not null)
+        {
+            <section role="status"><h2>Test event</h2><p>@TestResult.Status</p>
+                @if (TestResult.EventId.Length > 0) { <p>Event ID: <code>@TestResult.EventId</code></p> }
+            </section>
+        }
+    }
+</div>

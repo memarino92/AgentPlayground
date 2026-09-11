@@ -4,6 +4,7 @@ WORKDIR /src
 COPY ["Directory.Build.props", "."]
 COPY ["Directory.Packages.props", "."]
 COPY ["AgentPlayground.Contracts/AgentPlayground.Contracts.csproj", "AgentPlayground.Contracts/"]
+COPY ["AgentPlayground.Integrations/AgentPlayground.Integrations.csproj", "AgentPlayground.Integrations/"]
 COPY ["PersonalAgent/PersonalAgent.csproj", "PersonalAgent/"]
 
 RUN dotnet restore "PersonalAgent/PersonalAgent.csproj"

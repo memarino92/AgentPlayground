@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="AgentPlayground.Integrations/AgentPlayground.Integrations.csproj" />
   <Project Path="AgentPlayground.Contracts/AgentPlayground.Contracts.csproj" />
   <Project Path="AgentPlayground.Contracts.Tests/AgentPlayground.Contracts.Tests.csproj" />
   <Project Path="PersonalAgent.Mobile/PersonalAgent.Mobile.csproj" />

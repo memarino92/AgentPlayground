@@ -102,9 +102,9 @@ Recorded 2026-09-10 at the maintainer's request. Make application failures and a
 
 **Done when:** a synthetic coaching request can be followed across service and message boundaries; an injected failure produces a correlated Sentry issue with release context; a retry or resumed job remains traceable; agent spans expose useful timing and available usage data. Verify content redaction, exporter-outage behavior, and absence of duplicate instrumentation. Provide an operational view of error rates, latency, queue/outbox delays, and provider failures, with a documented path from an alert to the relevant trace.
 
-## Future plan: in-app integration settings — proposed, Sentry first
+## In-app integration settings — Sentry first slice implemented
 
-Recorded 2026-09-10. The maintainer identified Sentry as the likely next integration and wants to enter required settings in the app, validate them, and reload or apply configuration. See [proposed decision 0010](../decisions/0010-runtime-integration-settings.md).
+Recorded 2026-09-10. The maintainer selected Sentry and in-app settings for implementation. Encrypted revision storage, the administration form, save/apply/reload, service acknowledgements, and metadata-only Sentry error reporting now exist. See [decision 0010](../decisions/0010-runtime-integration-settings.md) and [setup](../runbooks/integration-settings.md). Live Sentry project receipt remains to be verified; broader provider migration, history UI, tracing, and alerts remain future work.
 
 **Deliver:** a registered, typed settings form with encrypted secret storage, deployment-administrator authorization, immediate field validation, server validation, and explicit save/apply actions. Show configured secrets without revealing them, effective overrides, saved versus running revisions, validation results, and per-service application status. Bootstrap database access and the encryption key remain external. New integration adapters define their supported fields and reload policy; arbitrary keys do not add capabilities.
 
@@ -114,7 +114,7 @@ Recorded 2026-09-10. The maintainer identified Sentry as the likely next integra
 
 ## Selectable backlog
 
-Recorded 2026-09-10. All entries are **unprioritized proposals**, including remaining slices of existing roadmap themes. They are not implementation claims or commitments. This catalog includes the Learning Lab, scheduled authorization, and observability plans above; their detailed descriptions remain authoritative. Existing implementation evidence remains in the progress sections below.
+Recorded 2026-09-10. Entries are **unprioritized proposals unless selected below**, including remaining slices of existing roadmap themes. The catalog descriptions are acceptance targets, not implementation claims. This catalog includes the Learning Lab, scheduled authorization, and observability plans above; their detailed descriptions remain authoritative. Implementation evidence remains in the progress sections below.
 
 Use the stable IDs to pick work, for example `PRODUCT-01` or `OPS-02`. Categories do not imply delivery order. Each row describes a bounded first slice and an observable acceptance outcome, rather than the entire possible feature. Dependencies describe prerequisites for that slice; investigation can start earlier. Before selecting work, verify the current implementation and narrow scope. Record significant architecture choices using the decision template before implementation.
 
@@ -122,7 +122,7 @@ When an item is selected, add its ID to the selection table and define the exact
 
 | Selected ID | Status | Scope and completion evidence |
 | --- | --- | --- |
-| None selected from this catalog yet | — | Existing work in progress above retains its recorded status. |
+| CONFIG-01 + OPS-01 | In progress — first slice implemented | In-app Sentry settings and metadata-only error reporting pass local API/Web/Worker and synthetic checks. Live project ingestion, broader history UI, tracing, and alerts are not verified/implemented. See the integration progress section below. |
 
 ### Everyday product value
 
@@ -174,7 +174,7 @@ When an item is selected, add its ID to the selection table and define the exact
 
 | ID | Idea and first slice | Done when | Dependencies / scope notes |
 | --- | --- | --- | --- |
-| CONFIG-01 | **In-app integration settings:** enter, validate, save, and apply typed integration configuration with encrypted secrets. | Sentry setup and a synthetic test event work through the UI; saved/applied revisions, overrides, failure, and restart requirements are accurate per service. | Proposed decision 0010; DATA-01 for revision persistence; deliver alongside OPS-01 first. |
+| CONFIG-01 | **In-app integration settings:** enter, validate, save, and apply typed integration configuration with encrypted secrets. | Sentry setup and a synthetic test event work through the UI; saved/applied revisions, overrides, failure, and restart requirements are accurate per service. | Accepted decision 0010; dedicated integration migration implemented; broader DATA-01 remains open. |
 | OPS-01 | **Sentry integration:** capture application errors with service, environment, and release context, configured through the app. | An injected synthetic failure produces a useful issue with private content excluded and no duplicate report. | CONFIG-01; detailed observability plan above; verify SDK/exporter and reload lifecycle choices before implementation. |
 | OPS-02 | **OpenTelemetry across services:** correlate HTTP, SQL transport, outbox, and background execution. | A synthetic operation can be followed across boundaries and retries, and exporter failure does not break work. | Detailed observability plan; integrate error correlation with OPS-01. |
 | OPS-03 | **OpenInference agent traces:** describe model, retrieval, and tool operations consistently. | Compatible spans expose timing, outcomes, and available usage without exporting private prompts by default. | OPS-02; verify .NET/Agent Framework and backend attribute support. |
@@ -277,3 +277,12 @@ These are possible selections, not assigned priorities. Parallel proposals with 
 - Upload locks and state/subject/session checks make concurrent redelivery harmless after completion. Confirmed transcription failures also use the outbox. SQL/transport failures and cancellation remain retryable rather than overwriting committed state with Failed.
 - Seven new recovery tests cover partial-write rollback, cached provider recovery, lost acknowledgement, stable message IDs, concurrent replay, final-write identity, cancellation, terminal failure, speaker review, and PostgreSQL MassTransit host restart with queued delivery and hosted outbox draining.
 - Local validation on 2026-09-10: 19 Worker, 71 API, and 23 Contracts tests passed. Tests use synthetic providers and disposable PostgreSQL; OS process-kill and live-provider evidence remain outstanding. This completes the domain outbox slice, not the broader durable-workflow roadmap. See [decision 0009](../decisions/0009-transcription-outbox.md) and [operations](../runbooks/transcription-gateway.md).
+
+## Implementation progress: runtime integration settings and Sentry
+
+- Added `AgentPlayground.Integrations`, a dedicated host-infrastructure library with encrypted immutable configuration revisions, optimistic concurrency, promotion history, an additive versioned schema migration, and per-instance acknowledgement records.
+- Added a deployment-administrator settings page with secret keep/replace/clear, field validation, save/apply/reload, synthetic test event, and pending/offline status. API requires the signed actor plus an explicit administrator allowlist. Saved secrets are never included in read responses.
+- API, Web, and Worker reconcile the active pointer every 15 seconds and replace privately owned Sentry clients without a host restart. Invalid candidates/overrides retain the last working client. Existing startup-only configuration is unchanged.
+- Sentry error events carry redacted text and operational metadata; raw log values and exception messages/stacks are excluded. The SDK test uses an in-memory transport and verifies envelope content and bounded replacement. Actual project ingestion is not yet verified.
+- Local validation on 2026-09-10: 90 API, 16 Web, and 19 Worker tests passed; the final API suite includes 19 integration-specific tests after migration and exporter-failure refinements. The synthetic application suite passed 22 checks, and the integration suite passed 13 checks including a real Worker process restart and three-service revision reconciliation. Browser testing verified form save/apply behavior. CI now runs the integration smoke suite; its remote result is not recorded.
+- This delivers the first `CONFIG-01`/`OPS-01` slice. History/revert UI, other integration forms, broader schema migration ownership, OpenTelemetry/OpenInference, alerts, and live Sentry receipt remain separate work. See [decision 0010](../decisions/0010-runtime-integration-settings.md) and [operations](../runbooks/integration-settings.md).

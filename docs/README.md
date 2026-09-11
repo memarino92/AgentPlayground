@@ -11,6 +11,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Snapshot commands](runbooks/snapshot-commands.md): implemented export and guarded local restore.
 - [Adding agent tools](runbooks/adding-agent-tools.md): register a capability with shared metadata, binding, and authorization.
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
+- [Integration settings](runbooks/integration-settings.md): in-app Sentry configuration, encrypted revisions, and runtime reload.
 - [Database recovery](runbooks/database-recovery.md): full recovery procedure and remaining evidence.
 - [Public release](runbooks/public-release.md): publication readiness and cleanup inventory.
 
@@ -27,7 +28,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0007: MIT license](decisions/0007-mit-license.md) | Accepted | Permit broad reuse under standard MIT terms |
 | [0008: Synthetic local environment](decisions/0008-synthetic-local-environment.md) | Accepted | Exercise real storage and delivery with deterministic providers and guarded sample sign-in |
 | [0009: Transcription outbox](decisions/0009-transcription-outbox.md) | Accepted; implemented | Commit transcription and processing completion with durable outgoing messages |
-| [0010: Runtime integration settings](decisions/0010-runtime-integration-settings.md) | Proposed | Enter, validate, and apply integration settings in the app, starting with Sentry |
+| [0010: Runtime integration settings](decisions/0010-runtime-integration-settings.md) | Accepted; Sentry first slice implemented | Enter, validate, and apply integration settings in the app |
 
 ## Working agreement
 

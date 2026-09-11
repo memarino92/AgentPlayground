@@ -1,4 +1,5 @@
 using System.Net;
+using AgentPlayground.Integrations;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -221,7 +222,31 @@ internal class PersonalAgentClient(
     private Task<HttpResponseMessage> SendJsonAsync<T>(HttpMethod method, string uri, T value) =>
         SendAsync(method, uri, JsonContent.Create(value, options: JsonOptions));
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string uri, HttpContent? content = null)
+    public Task<IntegrationSettingsResponse> GetIntegrationSettingsAsync(CancellationToken CancellationToken = default) =>
+        IntegrationRequestAsync<IntegrationSettingsResponse>(HttpMethod.Get, "", null, CancellationToken);
+
+    public Task<IntegrationSettingsResponse> SaveIntegrationSettingsAsync(SaveIntegrationRequest Request, CancellationToken CancellationToken = default) =>
+        IntegrationRequestAsync<IntegrationSettingsResponse>(HttpMethod.Put, "", Request, CancellationToken);
+
+    public Task<IntegrationSettingsResponse> ApplyIntegrationSettingsAsync(long Revision, CancellationToken CancellationToken = default) =>
+        IntegrationRequestAsync<IntegrationSettingsResponse>(HttpMethod.Post, "/apply", new ApplyIntegrationRequest(Revision), CancellationToken);
+
+    public Task<IntegrationSettingsResponse> ReloadIntegrationSettingsAsync(CancellationToken CancellationToken = default) =>
+        IntegrationRequestAsync<IntegrationSettingsResponse>(HttpMethod.Post, "/reload", null, CancellationToken);
+
+    public Task<IntegrationTestResponse> TestIntegrationSettingsAsync(long Revision, CancellationToken CancellationToken = default) =>
+        IntegrationRequestAsync<IntegrationTestResponse>(HttpMethod.Post, "/test", new ApplyIntegrationRequest(Revision), CancellationToken);
+
+    private async Task<T> IntegrationRequestAsync<T>(HttpMethod Method, string Suffix, object? Body, CancellationToken CancellationToken)
+    {
+        using var response = await SendAsync(Method, "/api/admin/integrations/sentry" + Suffix,
+            Body is null ? null : JsonContent.Create(Body, options: JsonOptions), CancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<T>(JsonOptions, CancellationToken)
+            ?? throw new InvalidOperationException("No integration settings response was returned.");
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string uri, HttpContent? content = null, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(method, uri) { Content = content };
         var user = (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
@@ -249,7 +274,7 @@ internal class PersonalAgentClient(
                 request.Headers.Add("X-Agent-Signature", signature);
             }
         }
-        return await httpClient.SendAsync(request);
+        return await httpClient.SendAsync(request, cancellationToken);
     }
 }
 

@@ -10,6 +10,7 @@ The repository name remains `AgentPlayground` to preserve existing project and d
 - Private work-journal ingestion and retrieval with PostgreSQL vector search.
 - Coach audio uploads, transcription, speaker attribution, and searchable coaching notes.
 - GitHub owner and Google coach sign-in, athlete assignments, and a tool-permission admin UI.
+- In-app Sentry settings with encrypted revisions, validation, and runtime application across API/Web/Worker.
 - Scheduled agent tasks, push notifications, and approval records.
 - Android companion for notifications, approvals, and a WebView; still needs authentication and release polish.
 
@@ -21,6 +22,7 @@ The repository name remains `AgentPlayground` to preserve existing project and d
 | `PersonalAgent.Web` | Authenticated Blazor UI and trusted API client |
 | `PersonalAgent.Worker` | Background transcription, journal sync, transcript processing, and scheduled tasks |
 | `AgentPlayground.Contracts` | Shared message contracts and cross-service infrastructure configuration |
+| `AgentPlayground.Integrations` | Runtime integration settings, encrypted revisions, and metadata-only Sentry error reporting |
 | `PersonalAgent.Mobile` | Android MAUI companion |
 
 PostgreSQL stores application data, encrypted settings, vectors, and MassTransit SQL transport. Root `Dockerfile.personalagent-*` files define service builds; `infrastructure/backup/` contains the backup uploader.
@@ -60,6 +62,7 @@ Open [demo sign-in](http://127.0.0.1:15000/login). See the [synthetic walkthroug
 
 - [Roadmap](docs/plans/roadmap.md): local parity/recovery, AI gateway, Android, and durable agent workflows.
 - [Snapshot commands](docs/runbooks/snapshot-commands.md): export and restore locally with checksum and configuration-key verification.
+- [Integration settings](docs/runbooks/integration-settings.md): administrator setup, Sentry DSN input, validation, and reload.
 - [Recovery design and rehearsal](docs/runbooks/database-recovery.md): complete application recovery remains to be proven.
 - [Public-release review](docs/runbooks/public-release.md): cleanup completed and remaining publication work.
 - [Decision docs](docs/README.md): accepted choices, proposals, and how to record future decisions.

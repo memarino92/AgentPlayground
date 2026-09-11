@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentPlayground.Contracts\AgentPlayground.Contracts.csproj" />
+    <ProjectReference Include="..\AgentPlayground.Integrations\AgentPlayground.Integrations.csproj" />
   </ItemGroup>
 
   <ItemGroup>

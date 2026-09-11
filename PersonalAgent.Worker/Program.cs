@@ -1,5 +1,6 @@
 using AgentPlayground.Contracts.Commands;
 using AgentPlayground.Contracts.Hosting;
+using AgentPlayground.Integrations;
 using AgentPlayground.Contracts.Configuration;
 using AgentPlayground.Contracts.Messaging;
 using AgentPlayground.Contracts.Messaging.Events;
@@ -14,6 +15,7 @@ using PersonalAgent.Worker.Services;
 var builder = Host.CreateApplicationBuilder(args);
 var syntheticDemo = SyntheticEnvironment.IsEnabled(builder.Configuration, builder.Environment);
 builder.Configuration.AddPostgresConfiguration("Worker");
+builder.Services.AddRuntimeIntegrations(builder.Configuration, "Worker");
 
 builder.Services.AddHttpClient("GitHubWorkJournal", client =>
 {

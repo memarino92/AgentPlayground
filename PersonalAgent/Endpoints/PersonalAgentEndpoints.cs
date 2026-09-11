@@ -24,6 +24,7 @@ internal static class PersonalAgentEndpoints
         if (security.AllowedOrigins.Length > 0) apiGroup.RequireCors(PersonalAgentConstants.ApiCorsPolicy);
 
         apiGroup.AddEndpointFilter(new InternalApiKeyFilter(apiKeyOptions));
+        apiGroup.MapIntegrationSettings(securityOptions, app.Configuration);
 
         apiGroup.MapGet("/models", async (IChatModelCatalog chatModelCatalog, CancellationToken cancellationToken) =>
         {

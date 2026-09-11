@@ -1,0 +1,5 @@
+.status-card { padding: 1.5rem; border: 1px solid #8993a444; border-radius: .75rem; }
+.status-table { overflow-x: auto; margin-top: 1rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .7rem; border-bottom: 1px solid #8993a444; }
+p { margin-top: .6rem; }

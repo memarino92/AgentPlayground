@@ -1,4 +1,6 @@
 using AgentPlayground.Contracts.Hosting;
+using AgentPlayground.Integrations;
+using PersonalAgent.Services;
 using AgentPlayground.Contracts.Configuration;
 using PersonalAgent.Endpoints;
 using PersonalAgent.Extensions;
@@ -13,6 +15,8 @@ var syntheticDemo = SyntheticEnvironment.IsEnabled(builder.Configuration, builde
 if (syntheticDemo) await SyntheticConfiguration.InitializeAsync();
 builder.Configuration.AddPostgresConfiguration("Api");
 builder.Services.AddPersonalAgentServices(builder.Configuration);
+builder.Services.AddRuntimeIntegrations(builder.Configuration, "Api");
+builder.Services.AddSingleton<IIntegrationSettingsService, IntegrationSettingsService>();
 if (syntheticDemo) builder.Services.AddSyntheticServices();
 
 var app = builder.Build();
