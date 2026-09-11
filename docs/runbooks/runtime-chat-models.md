@@ -4,6 +4,10 @@
 
 The API calls OpenAI's model-list endpoint on demand through `IChatModelDiscovery`. `IChatModelCatalog` owns eligibility, labels, defaults, caching, and fallback. A provider replacement changes the adapter and its API registration, without changing this wire contract or client code.
 
+The 2026-09-11 policy update adds GPT-5.5, GPT-5.6 Luna/Terra/Sol, and GPT-6 Astra. Their documented chat/function support was checked against the official model pages: [GPT-5.5](https://developers.openai.com/api/docs/models/gpt-5.5), [Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna), [Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra), [Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol), and [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra). These are eligible options, not a guarantee of account access or a live inference validation. The default remains unchanged.
+
+If the picker stops at GPT-5.4, check the deployed `ChatModels:Models` policy first: the previous shipped allowlist ended there even when discovery succeeded. Deploy/restart the API with the updated policy and reload the chat page (the browser loads choices on page initialization). Provider availability is cached for up to five minutes. Active database/environment overrides can still restrict or replace policy entries; inspect model IDs and discovery warnings without exporting credentials. A new chat alone does not deploy backend changes or reload the page's model list.
+
 ## Policy and configuration
 
 `ChatModels:Models` is the ordered list of reviewed chat/tool-compatible model IDs and labels. Discovery intersects that list with the provider's available IDs. It does **not** automatically offer new or unknown provider models. OpenAI's [model inventory](https://developers.openai.com/api/reference/resources/models/methods/list) provides identity/availability information rather than chat/tool capability guarantees; name-prefix guessing would expose incompatible models. Review support before adding a model to API policy.
@@ -30,7 +34,7 @@ The database configuration provider still loads at startup. Changing the reviewe
 
 ## Verification
 
-The API test suite exercises refresh/default changes, eligibility filtering, empty inventories, fallback/backoff, cancellation, timeout, concurrent requests, the SDK's model-list HTTP request, and transcript model preservation. All provider traffic in these tests uses fakes; no paid inference or live credentials are required.
+The API test suite exercises refresh/default changes, eligibility filtering, empty inventories, fallback/backoff, cancellation, timeout, concurrent requests, the SDK's model-list HTTP request, and transcript model preservation. It loads the shipped policy to verify newer models appear after provider refresh and can create sessions through the HTTP endpoint. The Web `ChatModelDiscoveryTests` renders the full chat page, verifies the API-supplied picker choices, and creates a chat with a selected opaque model ID. All provider traffic in these tests uses fakes; no paid inference or live credentials are required.
 
 ```powershell
 dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj
