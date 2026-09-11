@@ -32,6 +32,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0009: Transcription outbox](decisions/0009-transcription-outbox.md) | Accepted; implemented | Commit transcription and processing completion with durable outgoing messages |
 | [0010: Runtime integration settings](decisions/0010-runtime-integration-settings.md) | Accepted; Sentry first slice implemented | Enter, validate, and apply integration settings in the app |
 | [0013: Retained call audio](decisions/0013-retained-call-audio.md) | Proposed; retention and evidence drawer implemented | Preserve and play original recordings with subject access and active deletion |
+| [0014: Live coach processing](decisions/0014-live-coach-processing.md) | Accepted; implemented | Refresh open coach pages from transactional MassTransit status events |
 
 ## Working agreement
 

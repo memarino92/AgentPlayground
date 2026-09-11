@@ -1,4 +1,5 @@
 using AgentPlayground.Contracts.Commands;
+using AgentPlayground.Contracts.Events;
 using AgentPlayground.Contracts.Messaging;
 using AgentPlayground.Contracts.Messaging.Requests;
 using AgentPlayground.Contracts.Messaging.Responses;
@@ -22,6 +23,106 @@ namespace PersonalAgent.Worker.Tests.Consumers;
 
 public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : IClassFixture<WorkerPostgresVectorFixture>
 {
+    [Fact]
+    public async Task StatusTransitions_RollBackWithState_AndPublishOncePerTransition()
+    {
+        var State = await SetupAsync();
+        State.Provider.Complete = true;
+        State.Provider.MultipleSpeakers = true;
+        await FailOutboxAsync(State, true);
+        await Assert.ThrowsAsync<PostgresException>(() => Transcribe(State));
+        (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Uploaded");
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox")).Should().Be(0L);
+        await FailOutboxAsync(State, false);
+        await Transcribe(State);
+        await Transcribe(State);
+        var Review = new CoachCheckinService(Mock.Of<IBus>(), State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
+        await Review.ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach"), new(1, "athlete")]);
+        await Review.ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach"), new(1, "athlete")]);
+        await Process(State, State.Command);
+        await Process(State, State.Command);
+
+        var Changes = new List<CoachCallStatusChangedEvent>();
+        while (await CoachCallOutbox.DispatchOneAsync(Database.ConnectionString, State.Schema, (_, Message, _) =>
+        {
+            if (Message is CoachCallStatusChangedEvent Change) Changes.Add(Change);
+            return Task.CompletedTask;
+        }, default)) { }
+        Changes.Select(Change => Change.Status).Should().Equal("Transcribing", "AwaitingSpeakerOverride", "Processing", "Completed");
+        Changes.Should().OnlyContain(Change => Change.UploadId == State.Id && Change.ProfileId == "owner");
+    }
+
+    [Fact]
+    public async Task StatusEvent_SqlSubscriptionsReachEveryWebInstance()
+    {
+        var State = await SetupAsync();
+        State.Provider.Complete = true;
+        await Transcribe(State);
+        var FirstReceived = new TaskCompletionSource<CoachCallStatusChangedEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var SecondReceived = new TaskCompletionSource<CoachCallStatusChangedEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        IHost CreateHost(TaskCompletionSource<CoachCallStatusChangedEvent> Received) => new HostBuilder().ConfigureServices(Services =>
+        {
+            Services.AddLogging();
+            Services.AddSingleton(Received);
+            Services.Configure<SqlTransportOptions>(Options =>
+            {
+                Options.ConnectionString = Database.ConnectionString;
+                Options.Schema = State.Schema + "_bus";
+            });
+            Services.Configure<MassTransitHostOptions>(Options => Options.WaitUntilStarted = true);
+            Services.AddPostgresMigrationHostedService(Options =>
+            {
+                Options.CreateDatabase = false;
+                Options.CreateSchema = true;
+                Options.CreateInfrastructure = true;
+            });
+            Services.AddMassTransit(Registration =>
+            {
+                Registration.AddConsumer<StatusReceiver>().Endpoint(Endpoint =>
+                {
+                    Endpoint.Name = $"web-updates-{Guid.NewGuid():N}";
+                    Endpoint.Temporary = true;
+                    Endpoint.AddSqlConfigureEndpointCallback((_, Config) => Config.Subscribe<CoachCallStatusChangedEvent>(_ => { }));
+                });
+                Registration.UsingPostgres((Context, Config) =>
+                {
+                    Config.UsePostgres(Context, Host =>
+                    {
+                        Host.ConnectionString = Database.ConnectionString;
+                        Host.Schema = State.Schema + "_bus";
+                    });
+                    Config.ConfigureEndpoints(Context);
+                });
+            });
+        }).Build();
+        using var First = CreateHost(FirstReceived);
+        using var Second = CreateHost(SecondReceived);
+        await First.StartAsync();
+        await Second.StartAsync();
+        try
+        {
+            var Bus = First.Services.GetRequiredService<IBus>();
+            while (await CoachCallOutbox.DispatchOneAsync(Database.ConnectionString, State.Schema,
+                (Id, Message, Token) => CoachCallOutbox.DeliverAsync(Bus, Id, Message, Token), default)) { }
+            var Results = await Task.WhenAll(FirstReceived.Task, SecondReceived.Task).WaitAsync(TimeSpan.FromSeconds(15));
+            Results.Should().OnlyContain(Change => Change.UploadId == State.Id && Change.ProfileId == "owner" && Change.Status == "Processing");
+        }
+        finally
+        {
+            await Second.StopAsync();
+            await First.StopAsync();
+        }
+    }
+
+    public sealed class StatusReceiver(TaskCompletionSource<CoachCallStatusChangedEvent> Received) : IConsumer<CoachCallStatusChangedEvent>
+    {
+        public Task Consume(ConsumeContext<CoachCallStatusChangedEvent> Context)
+        {
+            if (Context.Message.Status == "Processing") Received.TrySetResult(Context.Message);
+            return Task.CompletedTask;
+        }
+    }
+
     [Fact]
     public async Task RestartedTransport_DeliversPersistedCommandToProcessingQueue()
     {
@@ -97,7 +198,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         await Assert.ThrowsAsync<OperationCanceledException>(() => new TranscribeCoachCallConsumer(State.Sql, State.Worker, Transcription.Object, NullLogger<TranscribeCoachCallConsumer>.Instance)
             .Consume(Context(new TranscribeCoachCallCommand(State.Id, "owner", State.Id))));
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Transcribing");
-        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox")).Should().Be(0L);
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'CoachCallStatusChangedEvent' AND payload->>'Status' = 'Transcribing'")).Should().Be(1L);
         State.Provider.Complete = true;
         await Transcribe(State);
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Processing");
@@ -112,6 +213,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
             .ThrowsAsync(new TranscriptionFailedException("Transcription timed out."));
         Task Fail() => new TranscribeCoachCallConsumer(State.Sql, State.Worker, Transcription.Object, NullLogger<TranscribeCoachCallConsumer>.Instance)
             .Consume(Context(new TranscribeCoachCallCommand(State.Id, "owner", State.Id)));
+        await Execute(State, $"UPDATE {State.Schema}.coach_call_uploads SET status = 'Transcribing'");
         await FailOutboxAsync(State, true);
         await Assert.ThrowsAsync<PostgresException>(Fail);
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Transcribing");
@@ -129,6 +231,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         // Submission survives replacement of both API job service and Worker consumer.
         (await State.Gateway().GetAsync(State.Id, "owner", default)).Status.Should().Be(TranscriptionStatus.Pending);
         State.Provider.Complete = true;
+        await Execute(State, $"UPDATE {State.Schema}.coach_call_uploads SET status = 'Transcribing'");
         await FailOutboxAsync(State, true);
         await Assert.ThrowsAsync<PostgresException>(() => Transcribe(State));
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Transcribing");
@@ -237,12 +340,34 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         State.Provider.Complete = true;
         await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => Transcribe(State)));
         (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_utterances")).Should().Be(1L);
-        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox")).Should().Be(2L);
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type <> 'CoachCallStatusChangedEvent'")).Should().Be(2L);
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'CoachCallStatusChangedEvent'")).Should().Be(2L);
         State.Provider.Submissions.Should().Be(1);
         await Process(State, State.Command with { ProfileId = "other" });
         await Process(State, State.Command with { SessionId = Guid.NewGuid() });
         State.EmbeddingCalls.Should().Be(0);
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Processing");
+    }
+
+    [Fact]
+    public async Task SpeakerReview_FirstApply_ImmediatelyUpdatesAdminAndTranscriptBeforeProcessing()
+    {
+        var State = await SetupAsync();
+        State.Provider.Complete = true;
+        State.Provider.MultipleSpeakers = true;
+        await Transcribe(State);
+        await Execute(State, $"UPDATE {State.Schema}.coach_call_utterances SET speaker_role = 'unknown'");
+        var Review = new CoachCheckinService(Mock.Of<IBus>(), State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
+
+        await Review.ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach"), new(1, "athlete")]);
+
+        var Transcript = await Review.GetTranscriptAsync(State.Id);
+        Transcript.Should().NotBeNull();
+        Transcript!.Utterances.Select(Utterance => Utterance.SpeakerRole).Should().Equal("coach", "athlete");
+        var Upload = (await Review.GetRecentUploadsAsync()).Single(Item => Item.UploadId == State.Id);
+        Upload.SpeakerLabels.Select(Label => Label.SpeakerRole).Should().Equal("coach", "athlete");
+        (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Processing");
+        State.EmbeddingCalls.Should().Be(0);
     }
 
     [Fact]
@@ -253,12 +378,14 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         State.Provider.MultipleSpeakers = true;
         await Transcribe(State);
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("AwaitingSpeakerOverride");
+        await Execute(State, $"UPDATE {State.Schema}.coach_call_utterances SET speaker_role = 'unknown'");
         (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'ProcessCoachTranscriptCommand'")).Should().Be(0L);
         CoachCheckinService Review() => new(Mock.Of<IBus>(), State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
         await FailOutboxAsync(State, true);
         await Assert.ThrowsAsync<PostgresException>(() => Review().ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach")]));
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("AwaitingSpeakerOverride");
         (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_speaker_overrides")).Should().Be(0L);
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_utterances WHERE speaker_role <> 'unknown'")).Should().Be(0L);
         await FailOutboxAsync(State, false);
         await Review().ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach")]);
         await Review().ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "athlete")]);

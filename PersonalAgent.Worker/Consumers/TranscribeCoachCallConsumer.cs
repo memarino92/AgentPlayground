@@ -33,12 +33,17 @@ internal class TranscribeCoachCallConsumer(
                 logger.LogWarning("Upload {UploadId} not found for profile {ProfileId}", message.UploadId, message.ProfileId);
                 return;
             }
-            await using (var claim = connection.CreateCommand())
+            await using (var claimTransaction = await connection.BeginTransactionAsync(context.CancellationToken))
             {
-                claim.CommandText = $"UPDATE {CoachCallUploadsTable} SET status = 'Transcribing', updated_at = now() WHERE upload_id = @id AND profile_id = @profile AND status IN ('Uploaded', 'Queued', 'Transcribing')";
+                staged = await GetUploadAsync(connection, message.UploadId, message.ProfileId, context.CancellationToken, true);
+                if (staged is null) return;
+                await using var claim = connection.CreateCommand();
+                claim.CommandText = $"UPDATE {CoachCallUploadsTable} SET status = 'Transcribing', updated_at = now() WHERE upload_id = @id AND profile_id = @profile AND status IN ('Uploaded', 'Queued')";
                 claim.Parameters.AddWithValue("id", staged.UploadId);
                 claim.Parameters.AddWithValue("profile", staged.ProfileId);
-                if (await claim.ExecuteNonQueryAsync(context.CancellationToken) == 0) return;
+                if (await claim.ExecuteNonQueryAsync(context.CancellationToken) > 0)
+                    await CoachCallOutbox.EnqueueAsync(claimTransaction, _options.Schema, new CoachCallStatusChangedEvent(staged.UploadId, staged.ProfileId, "Transcribing"), context.CancellationToken);
+                await claimTransaction.CommitAsync(context.CancellationToken);
             }
             var utterances = await transcriptionService.TranscribeAsync(staged.UploadId, staged.ProfileId, context.CancellationToken);
             if (utterances.Count is 0)
@@ -53,6 +58,7 @@ internal class TranscribeCoachCallConsumer(
 
             var requiresOverride = utterances.Select(utterance => utterance.SpeakerLabel).Distinct().Count() > 1;
             await UpdateUploadStatusAsync(connection, staged.UploadId, requiresOverride ? "AwaitingSpeakerOverride" : "Processing", null, context.CancellationToken);
+            await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new CoachCallStatusChangedEvent(staged.UploadId, staged.ProfileId, requiresOverride ? "AwaitingSpeakerOverride" : "Processing"), context.CancellationToken);
             if (requiresOverride)
                 logger.LogInformation("Upload {UploadId} awaiting speaker override before processing", staged.UploadId);
             else
@@ -76,6 +82,7 @@ internal class TranscribeCoachCallConsumer(
             var staged = await GetUploadAsync(connection, message.UploadId, message.ProfileId, context.CancellationToken, true);
             if (staged is null) return;
             await UpdateUploadStatusAsync(connection, staged.UploadId, "Failed", ex.Message, context.CancellationToken);
+            await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new CoachCallStatusChangedEvent(staged.UploadId, staged.ProfileId, "Failed"), context.CancellationToken);
             await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema,
                 new CoachCallProcessingFailedEvent(staged.UploadId, staged.SessionId, staged.ProfileId, staged.CorrelationId, "transcription", ex.Message, DateTimeOffset.UtcNow), context.CancellationToken);
             await transaction.CommitAsync(context.CancellationToken);

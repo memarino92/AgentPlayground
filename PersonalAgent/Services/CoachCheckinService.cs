@@ -1,4 +1,5 @@
 using AgentPlayground.Contracts.Commands;
+using AgentPlayground.Contracts.Events;
 using AgentPlayground.Contracts.Messaging;
 using MassTransit;
 using Microsoft.Extensions.Options;
@@ -161,6 +162,7 @@ internal class CoachCheckinService(
             await sessionCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        await CoachCallOutbox.EnqueueAsync(transaction, _schema, new CoachCallStatusChangedEvent(uploadId, profileId, "Uploaded"), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         await bus.Publish(new TranscribeCoachCallCommand(uploadId, profileId, correlationId), cancellationToken);
@@ -381,8 +383,14 @@ internal class CoachCheckinService(
                 VALUES (@uploadId, @speakerLabel, @speakerRole, @createdAt)
                 ON CONFLICT (upload_id, speaker_label)
                 DO UPDATE SET speaker_role = EXCLUDED.speaker_role, created_at = EXCLUDED.created_at;
+
+                UPDATE {CoachCallUtterancesTable}
+                SET speaker_role = @speakerRole
+                WHERE session_id = @sessionId
+                  AND speaker_label = @speakerLabel;
                 """;
             overrideCommand.Parameters.AddWithValue("uploadId", uploadId);
+            overrideCommand.Parameters.AddWithValue("sessionId", sessionId);
             overrideCommand.Parameters.AddWithValue("speakerLabel", item.SpeakerLabel);
             overrideCommand.Parameters.AddWithValue("speakerRole", item.Role);
             overrideCommand.Parameters.AddWithValue("createdAt", DateTimeOffset.UtcNow);
@@ -406,6 +414,7 @@ internal class CoachCheckinService(
         }
 
         await CoachCallOutbox.EnqueueAsync(transaction, _schema, new ProcessCoachTranscriptCommand(uploadId, sessionId, profileId, correlationId), cancellationToken);
+        await CoachCallOutbox.EnqueueAsync(transaction, _schema, new CoachCallStatusChangedEvent(uploadId, profileId, "Processing"), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
