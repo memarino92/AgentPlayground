@@ -17,6 +17,7 @@ builder.Configuration.AddPostgresConfiguration("Api");
 builder.Services.AddPersonalAgentServices(builder.Configuration);
 builder.Services.AddRuntimeIntegrations(builder.Configuration, "Api");
 builder.Services.AddSingleton<IIntegrationSettingsService, IntegrationSettingsService>();
+builder.Services.AddSingleton<DatabaseSettingsStore>();
 if (syntheticDemo) builder.Services.AddSyntheticServices();
 
 var app = builder.Build();

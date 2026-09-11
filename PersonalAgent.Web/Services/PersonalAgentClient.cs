@@ -237,6 +237,20 @@ internal class PersonalAgentClient(
     public Task<IntegrationTestResponse> TestIntegrationSettingsAsync(long Revision, CancellationToken CancellationToken = default) =>
         IntegrationRequestAsync<IntegrationTestResponse>(HttpMethod.Post, "/test", new ApplyIntegrationRequest(Revision), CancellationToken);
 
+    public async Task<List<DatabaseSetting>> GetDatabaseSettingsAsync(CancellationToken CancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get, "/api/admin/settings", cancellationToken: CancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<List<DatabaseSetting>>(JsonOptions, CancellationToken)
+            ?? throw new InvalidOperationException("No settings response was returned.");
+    }
+
+    public async Task SaveDatabaseSettingsAsync(SaveDatabaseSettingsRequest Request, CancellationToken CancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Put, "/api/admin/settings", JsonContent.Create(Request, options: JsonOptions), CancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     private async Task<T> IntegrationRequestAsync<T>(HttpMethod Method, string Suffix, object? Body, CancellationToken CancellationToken)
     {
         using var response = await SendAsync(Method, "/api/admin/integrations/sentry" + Suffix,
