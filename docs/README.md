@@ -31,6 +31,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0008: Synthetic local environment](decisions/0008-synthetic-local-environment.md) | Accepted | Exercise real storage and delivery with deterministic providers and guarded sample sign-in |
 | [0009: Transcription outbox](decisions/0009-transcription-outbox.md) | Accepted; implemented | Commit transcription and processing completion with durable outgoing messages |
 | [0010: Runtime integration settings](decisions/0010-runtime-integration-settings.md) | Accepted; Sentry first slice implemented | Enter, validate, and apply integration settings in the app |
+| [0013: Retained call audio](decisions/0013-retained-call-audio.md) | Proposed; retention foundation implemented | Preserve original recordings; define storage, deletion and recovery follow-ups |
 
 ## Working agreement
 

@@ -139,9 +139,9 @@ When an item is selected, add its ID to the selection table and define the exact
 | PRODUCT-07 | **Unified search:** search journals, transcripts, and conversations with date/source filters. | Results enforce subject access and open the right source; empty states and pagination work. | MEMORY-02 can improve ranking later. |
 | PRODUCT-08 | **Export a useful artifact:** turn a selected coaching recap into Markdown with source references. | Preview and export contain only selected, authorized content and preserve useful citations. | Start with Markdown; other formats are separate slices. |
 
-### Future plan: evidence drawer and retained call audio — proposed, not implemented
+### Evidence drawer and retained call audio — retention foundation implemented
 
-Recorded 2026-09-11 at the maintainer's request; expands `PRODUCT-01`. Retain original call recordings after successful transcription and downstream processing so evidence can be read and heard in context. This is roadmap work only; the current processing flow still cleans up audio as described in the [transcription runbook](../runbooks/transcription-gateway.md).
+Recorded 2026-09-11 at the maintainer's request; expands `PRODUCT-01`. Original call recordings now remain in the existing PostgreSQL upload row after successful processing, with the subject/session link intact. The storage/lifecycle proposal is recorded in [0013](../decisions/0013-retained-call-audio.md); see operational limits in the [transcription runbook](../runbooks/transcription-gateway.md). Evidence endpoints, authorized deletion, citations, and the drawer/player remain unimplemented.
 
 **Deliver in slices:**
 
@@ -151,6 +151,8 @@ Recorded 2026-09-11 at the maintainer's request; expands `PRODUCT-01`. Retain or
 4. Explore optional follow-along: highlight the active timestamped utterance and scroll the transcript as audio plays, with a toggle to pause automatic scrolling while reading elsewhere. Clicking a timestamped utterance seeks the audio; seeking or changing speed keeps highlighting aligned. Use utterance-level timing initially; finer highlighting depends on available alignment data.
 
 **Done when:** a synthetic cited answer opens the correct excerpt and retained original audio at its source timestamp after processing and a service restart. Playback, seeking, speed changes, and ±15-second skips work across recording boundaries; follow-along, if delivered, stays synchronized and can be disabled. Transcript and audio requests enforce the same server-side subject/access policy, including playback range requests. Older calls whose audio was already deleted remain readable with an explicit audio-unavailable state; missing timing never produces a fabricated seek target. Authorized deletion removes active audio access and leaves clear unavailable evidence states, with backup retention limits documented. Recovery validation includes retained recordings and their citation links.
+
+**Retention foundation validation (2026-09-11):** all 25 Worker tests passed, with no skipped tests. PostgreSQL recovery coverage verifies exact retained bytes after completion, concurrent replay, lost acknowledgement and transport-host replacement. Six added cases cover cleanup status/age boundaries and legacy missing audio. A recording-inclusive backup/restore rehearsal, authorized playback/deletion and the evidence drawer remain outstanding; PRODUCT-01 is not complete.
 
 ### Memory and answer quality
 

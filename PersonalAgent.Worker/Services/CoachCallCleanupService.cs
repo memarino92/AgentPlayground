@@ -32,7 +32,7 @@ internal class CoachCallCleanupService(
         }
     }
 
-    private async Task CleanupAsync(CancellationToken cancellationToken)
+    internal async Task CleanupAsync(CancellationToken cancellationToken)
     {
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
