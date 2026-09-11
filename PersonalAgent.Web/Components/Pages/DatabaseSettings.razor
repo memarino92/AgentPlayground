@@ -1,12 +1,8 @@
-@page "/admin/settings"
-@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
-
-<PageTitle>Application settings</PageTitle>
 <div class="settings-page">
-    <h1>Application settings</h1>
-    <p>Edit all existing database settings, including inactive entries. <a href="/admin/integration-settings">Sentry settings and live reload</a> · <a href="/admin/integrations">Tool access</a></p>
+    <h2>Database settings</h2>
+    <p>Edit all existing database settings, including inactive entries.</p>
     <section class="explanation">
-        <h2>Restart required after saving</h2>
+        <h3>Restart required after saving</h3>
         <p>These values load when each service starts. Saving does not reload running services. Restart the affected services through your deployment platform. Shared settings are defaults for API, Web and Worker; service-specific settings override them.</p>
         <p>This editor shows stored values, not confirmed running values. Deployment environment overrides may take precedence. Database connection and encryption bootstrap variables remain in your deployment configuration.</p>
         <p>Values are saved as text; provider credentials and application-specific formats are not verified here. Coordinate matching API keys and signing keys across services before restarting.</p>
@@ -33,7 +29,7 @@
                 @foreach (var group in VisibleRows.GroupBy(Row => (Row.Original.Scope, Integration: Row.Original.Key.Split(':')[0])))
                 {
                     <section class="setting-group">
-                        <h2>@ScopeName(group.Key.Scope) / @group.Key.Integration</h2>
+                        <h3>@ScopeName(group.Key.Scope) / @group.Key.Integration</h3>
                         @foreach (var row in group)
                         {
                             <div class="setting-row" @key="row.Original">

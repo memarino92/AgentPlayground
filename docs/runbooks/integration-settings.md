@@ -6,11 +6,11 @@ The first supported integration is Sentry error reporting. Its settings can be e
 
 1. Use the normal database configuration bootstrap: `DATABASE_URL` and the matching `CONFIG_ENCRYPTION_KEY` on each service. With local user secrets, `Messaging:ConnectionString` is also supported if the encryption key is supplied externally. Do not enter bootstrap credentials in the UI.
 2. On API, set `INTEGRATION_SETTINGS_ADMINISTRATORS` to a comma-separated list of allowed GitHub logins. The equivalent startup setting is `IntegrationSettings:AdministratorIds`; the environment variable takes precedence. The default is no administrators. Only signed Owner actors on this allowlist can access these endpoints. Profile ownership alone grants no deployment administration rights.
-3. Sign in normally, open **Sentry settings** in the menu, and configure Sentry. Use **Application settings** for existing database rows. The synthetic Compose environment already permits `demo-owner`; `demo-other` is deliberately denied.
+3. Sign in normally and open **Settings** in the menu (`/admin/settings`). Sentry and existing database settings are sections on this one page. The old `/admin/integration-settings` URL opens the same page. The synthetic Compose environment already permits `demo-owner`; `demo-other` is deliberately denied.
 
 ## Existing database settings
 
-Open **Application settings** (`/admin/settings`). Every existing row from `app.configuration_settings` is shown, including inactive rows and keys not listed in the seed script. Search by key or select a service scope. Shared rows provide defaults; service-specific rows override them. Unknown scopes are shown verbatim and only take effect if a consumer loads that scope.
+Open the **Database settings** section of **Settings** (`/admin/settings`). Every existing row from `app.configuration_settings` is shown, including inactive rows and keys not listed in the seed script. Search by key or select a service scope. Shared rows provide defaults; service-specific rows override them. Unknown scopes are shown verbatim and only take effect if a consumer loads that scope.
 
 Edit text values, or choose **Keep**, **Replace**, or **Clear** for encrypted secrets. Clear stores an encrypted empty string; unchecking **Use this setting at startup** instead makes the provider ignore that row and may reveal a fallback value. The editor preserves the stored secret classification and never returns encrypted values or decrypted secrets to the browser.
 
