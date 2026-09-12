@@ -36,6 +36,8 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0014: Live coach processing](decisions/0014-live-coach-processing.md) | Accepted; implemented | Refresh open coach pages from transactional MassTransit status events |
 | [0015: Coach retrieval hints](decisions/0015-coach-retrieval-hints.md) | Accepted, retrospective; implemented | Recover untagged exercise cues and scope follow-ups by recording filename |
 | [0016: Database chat model policy](decisions/0016-database-chat-model-policy.md) | Accepted; implemented | Database-owned model policy with live catalog updates and insert-only migration |
+| [0017: Coach recording recency](decisions/0017-coach-recording-recency.md) | Accepted; implemented and evaluated locally | Scope latest calls and return dated utterance evidence |
+| [0018: Coaching model evaluations](decisions/0018-coach-model-evaluations.md) | Accepted; first comparison completed | Repeatable local model checks with private evidence and JUnit |
 
 ## Working agreement
 
