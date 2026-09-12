@@ -42,6 +42,10 @@ docker compose -f compose.synthetic.yml restart personalagent-worker | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Synthetic Worker restart failed' }
 $Detail = Wait-Job $Id
 Check ($Detail.job.status -eq 'Completed' -and $Detail.job.actorId -eq 'demo-owner' -and $Detail.attempts.Count -eq 1) 'Worker restart preserves identity and completes one attempt'
+$History = Call "/api/sessions/$($Detail.job.sessionId)/messages?profileId=demo-owner"
+Check ($History.StatusCode -eq 200 -and ($History.Content | ConvertFrom-Json).isReadOnly) 'Result conversation is readable and marked read-only'
+$Edit = Call "/api/sessions/$($Detail.job.sessionId)/messages" POST @{profileId='demo-owner';message='Alter the job history'}
+Check ($Edit.StatusCode -eq 403) 'Ordinary chat cannot alter a scheduled execution record'
 $Replay = Call "/api/jobs/$Id/execute" POST @{taskId=$Id;tenantId='forged';userId='other';instruction='Replace stored work';executeAtUtc=[DateTimeOffset]::UtcNow;correlationId=[guid]::NewGuid()}
 Check ($Replay.StatusCode -eq 200 -and ($Replay.Content | ConvertFrom-Json).status -eq 'Completed') 'Duplicate delivery returns the saved outcome'
 Check (((Call "/api/jobs/$Id").Content | ConvertFrom-Json).attempts.Count -eq 1) 'Replay does not create another attempt'

@@ -1,6 +1,7 @@
 using AgentPlayground.Contracts.Messaging.Events;
 using MassTransit;
 using PersonalAgent.Models;
+using PersonalAgent.Configuration;
 
 namespace PersonalAgent.Services;
 
@@ -40,11 +41,15 @@ internal class SchedulingService(IBus bus, ILogger<SchedulingService> logger, Sc
     public async Task<ScheduleResult> ScheduleAgentTaskAsync(ScheduleAgentTaskRequest request, AgentAccessContext access, CancellationToken cancellationToken = default)
     {
         if (jobs is null || authorization is null) throw new InvalidOperationException("Scheduled job storage is unavailable.");
+        if (string.IsNullOrWhiteSpace(request.Instruction) || request.Instruction.Length > PersonalAgentConstants.MaxMessageLength)
+            throw new ArgumentException("The scheduled instruction is empty or too long.");
         var subject = ScheduledJobStore.Subject(request.TenantId, request.UserId);
         var current = await authorization.ResolveAsync(access.ActorId, access.Email, subject, cancellationToken);
         if (current is null || current.Role != access.Role || !string.Equals(subject, access.SubjectProfileId, StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("Current scheduling access is required.");
-        var executeAtUtc = SchedulingTimeParser.ResolveExecuteAtUtc(request.Delay, request.ExecuteAt, request.When, request.TimeZoneId, DateTimeOffset.UtcNow);
+        DateTimeOffset executeAtUtc;
+        try { executeAtUtc = SchedulingTimeParser.ResolveExecuteAtUtc(request.Delay, request.ExecuteAt, request.When, request.TimeZoneId, DateTimeOffset.UtcNow); }
+        catch (InvalidOperationException Exception) { throw new ArgumentException("Invalid scheduling time.", Exception); }
         var correlationId = request.CorrelationId ?? Guid.NewGuid();
         var taskId = Guid.NewGuid();
 

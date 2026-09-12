@@ -26,6 +26,7 @@ public partial class ScheduledJobs
     private DateTimeOffset? Before;
     private bool Busy;
     private bool Initialized;
+    private bool ProfilesLoaded;
     private bool QueryChanged;
     private Guid? LoadedJobId;
     private Task? PollTask;
@@ -62,8 +63,9 @@ public partial class ScheduledJobs
             var User = (await Authentication.GetAuthenticationStateAsync()).User;
             Profiles = User.IsInRole("Owner")
                 ? User.FindFirst("urn:github:login")?.Value is { } Owner ? [Owner] : []
-                : await Api.GetAssignedProfilesAsync($"google:{User.FindFirst(ClaimTypes.NameIdentifier)?.Value}", User.FindFirst(ClaimTypes.Email)?.Value ?? "");
+                : await Api.GetAssignedProfilesAsync($"google:{User.FindFirst(ClaimTypes.NameIdentifier)?.Value}", User.FindFirst(ClaimTypes.Email)?.Value ?? "", Lifetime.Token);
             ProfileId = Profiles.FirstOrDefault() ?? "";
+            ProfilesLoaded = true;
             if (JobId is { } Id)
             {
                 Selected = await Api.GetJobAsync(Id, Lifetime.Token);
@@ -83,7 +85,7 @@ public partial class ScheduledJobs
         if (Selected is not null) Selected = await Api.GetJobAsync(Selected.Job.TaskId, Lifetime.Token);
     }
 
-    private Task RefreshAsync() => Initialized ? LoadAsync(ReadAsync) : LoadInitialAsync();
+    private Task RefreshAsync() => ProfilesLoaded ? LoadAsync(ReadAsync) : LoadInitialAsync();
     private Task SelectAsync(Guid Id) => LoadAsync(async () =>
     {
         Selected = await Api.GetJobAsync(Id, Lifetime.Token);

@@ -1,6 +1,8 @@
 using AgentPlayground.Contracts.Messaging;
 using AgentPlayground.Contracts.Messaging.Commands;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.AI;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -119,18 +121,132 @@ public class ScheduledJobTests(PostgresVectorFixture Database) : IClassFixture<P
         public string? Saved;
         public string? Instruction;
         public AgentAccessContext? Access;
+        public Task? Gate;
+        public TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task PrepareAsync(Guid SessionId, AgentAccessContext Access, CancellationToken Token) =>
             FailPrepare ? Task.FromException(new HttpRequestException("Synthetic transient failure")) : Task.CompletedTask;
-        public Task<string?> RunAsync(Guid SessionId, AgentAccessContext Context, string Text, CancellationToken Token)
+        public async Task<string?> RunAsync(Guid SessionId, AgentAccessContext Context, string Text, CancellationToken Token)
         {
             Runs++;
+            Started.TrySetResult();
+            if (Gate is not null) await Gate.WaitAsync(Token);
             Instruction = Text;
             Access = Context;
             if (FailRun) throw new HttpRequestException("Failure after effect");
             Saved = "Synthetic result";
-            return Task.FromResult<string?>(Saved);
+            return Saved;
         }
         public Task<string?> RecoverAsync(Guid SessionId, CancellationToken Token) => Task.FromResult(Saved);
+    }
+
+    [Fact]
+    public async Task ScheduledToolRechecksActorPolicyAfterBindingBeforeEffect()
+    {
+        var (Store, _) = await SetupAsync();
+        var Original = Job() with { Status = "Running" };
+        await Store.CreateAsync(Original, default);
+        var Policy = new Mock<IScheduledActorPolicy>();
+        Policy.Setup(P => P.ResolveRoleAsync("owner", null, It.IsAny<CancellationToken>())).ReturnsAsync("Owner");
+        var Calls = 0;
+        var Function = AIFunctionFactory.Create(() => ++Calls, "test_effect");
+        var Registry = new Mock<IAgentToolRegistry>();
+        Registry.Setup(R => R.GetRegistrations()).Returns([new AgentToolRegistration(
+            new(AgentToolKeys.ScheduleAgentTask, "test_effect", "Test effect", "Test", "Synthetic effect", true, true, false, true),
+            "Test", (_, _) => Function)]);
+        var Permissions = new Mock<IToolAccessStore>();
+        Permissions.Setup(P => P.GetRolePermissionsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, bool>());
+        var Tools = new ToolAccessService(Permissions.Object, Registry.Object);
+        var Authorization = new ScheduledJobAuthorization(Policy.Object, Mock.Of<ICoachAssignmentStore>(), Tools);
+        using var Services = new ServiceCollection().AddSingleton(Store).AddSingleton(Authorization).BuildServiceProvider();
+        var Run = new ScheduledRunContext();
+        var Access = new AgentAccessContext("owner", "Owner", "owner") { ScheduledTaskId = Original.TaskId, ScheduledRun = Run };
+        var Bound = await new AgentToolBinder(Registry.Object, Tools, Services, NullLogger<AgentToolBinder>.Instance).BindAsync(Access);
+        Policy.Setup(P => P.ResolveRoleAsync("owner", null, It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        await FluentActions.Awaiting(async () => await Bound.Single().Function.InvokeAsync(new AIFunctionArguments())).Should().ThrowAsync<UnauthorizedAccessException>();
+        Calls.Should().Be(0);
+        Run.AuthorizationDenied.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ConcurrentDeliveryAndCancellationCannotEnterActiveRun()
+    {
+        var (Store, _) = await SetupAsync();
+        var Original = Job();
+        await Store.CreateAsync(Original, default);
+        var Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var Runner = new FakeRunner { Gate = Release.Task };
+        var First = Execution(Store, Runner).ExecuteAsync(Delivery(Original), default);
+        await Runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            (await Execution(Store, Runner).ExecuteAsync(Delivery(Original), default)).Status.Should().Be("Running");
+            (await Execution(Store, Runner).CancelAsync(Original.TaskId, default)).Should().BeFalse();
+        }
+        finally { Release.TrySetResult(); }
+        (await First).Status.Should().Be("Completed");
+        Runner.Runs.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CancelledRequestLeavesRunningMarkerAndDoesNotReplayEffects()
+    {
+        var (Store, _) = await SetupAsync();
+        var Original = Job();
+        await Store.CreateAsync(Original, default);
+        var Runner = new FakeRunner { Gate = new TaskCompletionSource().Task };
+        using var Cancellation = new CancellationTokenSource();
+        var First = Execution(Store, Runner).ExecuteAsync(Delivery(Original), Cancellation.Token);
+        await Runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Cancellation.CancelAsync();
+        await FluentActions.Awaiting(async () => await First).Should().ThrowAsync<OperationCanceledException>();
+        (await Store.GetAsync(Original.TaskId, default))!.Status.Should().Be("Running");
+        (await Execution(Store, Runner).ExecuteAsync(Delivery(Original), default)).Status.Should().Be("NeedsReview");
+        Runner.Runs.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RevocationBeforeExecutionPersistsBlockedOutcome()
+    {
+        var (Store, _) = await SetupAsync();
+        var Original = Job();
+        await Store.CreateAsync(Original, default);
+        var Policy = new Mock<IScheduledActorPolicy>();
+        var Runner = new FakeRunner();
+        var Service = Execution(Store, Runner, Policy);
+        Policy.Setup(P => P.ResolveRoleAsync("owner", null, It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        (await Service.ExecuteAsync(Delivery(Original), default)).Status.Should().Be("Blocked");
+        Runner.Runs.Should().Be(0);
+        (await Store.GetAttemptsAsync(Original.TaskId, default)).Should().ContainSingle().Which.Status.Should().Be("Blocked");
+    }
+
+    [Fact]
+    public async Task CompletionRollsBackWithOutboxFailureAndCannotNotifyTwice()
+    {
+        var (Store, Options) = await SetupAsync();
+        var Original = Job();
+        await Store.CreateAsync(Original, default);
+        await using var Connection = await Store.OpenAsync(default);
+        (await Store.TryLockAsync(Connection, Original.TaskId, default)).Should().BeTrue();
+        try
+        {
+            var Running = Original with { Status = "Running", AttemptCount = 1 };
+            await Store.SaveAsync(Connection, Running, true, false, false, default);
+            await using var Command = new NpgsqlCommand($"""
+                ALTER TABLE {Options.Schema}.coach_call_outbox ADD CONSTRAINT reject_notification CHECK(message_type <> 'NotificationRequested')
+                """, Connection);
+            await Command.ExecuteNonQueryAsync();
+            var Completed = Running with { Status = "Completed", Outcome = "Saved result" };
+            await FluentActions.Awaiting(() => Store.SaveAsync(Connection, Completed, false, true, true, default)).Should().ThrowAsync<PostgresException>();
+            (await Store.GetAsync(Connection, Original.TaskId, default))!.Status.Should().Be("Running");
+            (await Store.GetAttemptsAsync(Original.TaskId, default)).Single().FinishedAt.Should().BeNull();
+            Command.CommandText = $"ALTER TABLE {Options.Schema}.coach_call_outbox DROP CONSTRAINT reject_notification";
+            await Command.ExecuteNonQueryAsync();
+            await Store.SaveAsync(Connection, Completed, false, true, true, default);
+            await Store.SaveAsync(Connection, Completed, false, true, true, default);
+            Command.CommandText = $"SELECT count(*) FROM {Options.Schema}.coach_call_outbox WHERE message_type = 'NotificationRequested'";
+            (await Command.ExecuteScalarAsync()).Should().Be(1L);
+        }
+        finally { await Store.UnlockAsync(Connection, Original.TaskId); }
     }
 
     [Fact]
