@@ -61,6 +61,9 @@ jobs:
       - name: Verify integration settings and restarted Worker reconciliation
         shell: pwsh
         run: ./scripts/tests/Test-IntegrationSettings.ps1 -RestartWorker
+      - name: Verify scheduled notification jobs
+        shell: pwsh
+        run: ./scripts/tests/Test-ScheduledNotifications.ps1
       - name: Capture demo logs
         if: failure()
         run: docker compose -f compose.synthetic.yml logs --tail 100
