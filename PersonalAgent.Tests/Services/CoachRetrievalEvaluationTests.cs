@@ -60,11 +60,12 @@ public sealed class CoachRetrievalEvaluationTests(PostgresVectorFixture Database
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("practice-a.m4a")]
-    public async Task FreshChats_AfterServiceRecreation_RetrieveExistingUntaggedTranscript(string? FileName)
+    [InlineData(null, null)]
+    [InlineData("practice-a.m4a", null)]
+    [InlineData(null, "latest")]
+    public async Task FreshChats_AfterServiceRecreation_RetrieveExistingUntaggedTranscript(string? FileName, string? Recency)
     {
-        var State = await SeedAsync(SemanticMatch: true);
+        var State = Recency == "latest" ? await SeedDatedAsync() : await SeedAsync(SemanticMatch: true);
         // Seed once; neither the worker nor a re-indexing step runs when each application service is recreated.
         for (var Restart = 0; Restart < 2; Restart++)
         {
@@ -93,8 +94,9 @@ public sealed class CoachRetrievalEvaluationTests(PostgresVectorFixture Database
                                 ["query"] = "How can I breathe better and stop hesitating during loaded carries?",
                                 ["exerciseTag"] = null,
                                 ["fileName"] = FileName,
+                                ["recency"] = Recency,
                                 ["profileId"] = "athlete-b"
-                            })])));
+                            }.Where(Pair => Pair.Value is not null).ToDictionary())])));
                     }
                     var Evidence = Messages.SelectMany(Value => Value.Contents).OfType<FunctionResultContent>().Single().Result!.ToString()!;
                     Evidence.Should().Contain(Cue).And.Contain($"/evidence/{State.Id}?profileId=athlete-a&startMs=1000").And.NotContain("PRIVATE");
@@ -137,6 +139,104 @@ public sealed class CoachRetrievalEvaluationTests(PostgresVectorFixture Database
         await using var Command = new NpgsqlCommand($"SELECT exercise_tags::text FROM {State.Memory.Schema}.coach_call_chunks WHERE session_id = @id", Connection);
         Command.Parameters.AddWithValue("id", State.Id);
         (await Command.ExecuteScalarAsync()).Should().Be("[]");
+    }
+
+    [Theory]
+    [InlineData("latest")]
+    [InlineData("recent")]
+    public async Task RecordingDate_BeatsBatchUploadOrderAndOlderSimilarAdvice(string Mode)
+    {
+        var State = await SeedDatedAsync();
+        var Result = await State.Service.SearchCoachCheckinsAsync("yoke advice", "athlete-a", "yoke", recency: Mode);
+        Result.Should().Contain(Cue).And.Contain("2026-08-30 17.12.36.m4a").And.NotContain("PRIVATE");
+        if (Mode == "latest") Result.Should().NotContain("OLD cue");
+        else Result.IndexOf(Cue, StringComparison.Ordinal).Should().BeLessThan(Result.IndexOf("OLD cue", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task LatestWithoutChunks_DoesNotFallBackToOlderRecording()
+    {
+        var State = await SeedDatedAsync();
+        await ExecuteAsync($"DELETE FROM {State.Memory.Schema}.coach_call_chunks WHERE session_id = '{State.Id}'");
+        var Result = await State.Service.SearchCoachCheckinsAsync("yoke", "athlete-a", "yoke", recency: "latest");
+        Result.Should().Contain("No indexed").And.NotContain("OLD cue");
+    }
+
+    [Fact]
+    public async Task LatestWithoutRelevantAdvice_ReturnsOnlyLatestContext()
+    {
+        var State = await SeedDatedAsync();
+        await ExecuteAsync($"UPDATE {State.Memory.Schema}.coach_call_chunks SET content = 'coach: bench setup' WHERE session_id = '{State.Id}'");
+        var Result = await State.Service.SearchCoachCheckinsAsync("yoke", "athlete-a", "yoke", recency: "latest");
+        Result.Should().Contain("bench setup").And.NotContain("OLD cue").And.Contain("not guaranteed matches");
+    }
+
+    [Fact]
+    public async Task UnknownDate_RequiresClarificationButExactFilenameStillWorks()
+    {
+        var State = await SeedAsync();
+        (await State.Service.SearchCoachCheckinsAsync("yoke", "athlete-a", "yoke", recency: "latest"))
+            .Should().Contain("Cannot establish").And.NotContain(Cue);
+        (await State.Service.SearchCoachCheckinsAsync("yoke", "athlete-a", "yoke", fileName: "practice-a.m4a", recency: "latest"))
+            .Should().Contain(Cue).And.Contain("unknown");
+    }
+
+    [Fact]
+    public async Task HistoricalMode_PreservesSimilarityAndExactOlderScope()
+    {
+        var State = await SeedDatedAsync();
+        var Result = await State.Service.SearchCoachCheckinsAsync("yoke", "athlete-a", "yoke", recency: "relevance");
+        Result.Should().Contain("OLD cue").And.NotContain(Cue);
+        Result = await State.Service.SearchCoachCheckinsAsync("yoke", "athlete-a", "yoke", fileName: "2026-06-01 10.00.00.m4a", recency: "latest");
+        Result.Should().Contain("OLD cue").And.NotContain(Cue);
+    }
+
+    [Theory]
+    [InlineData("2026-02-30 17.12.36.m4a", false)]
+    [InlineData("2026-08-30 25.12.36.m4a", false)]
+    [InlineData("2026-08-30 17.12.36.m4a", true)]
+    [InlineData("2026-08-30 17.12.36oops.m4a", false)]
+    [InlineData("notes.m4a", false)]
+    public void RecordingDates_AreValidated(string FileName, bool Valid)
+        => CoachRecordingDate.Parse(FileName).HasValue.Should().Be(Valid);
+
+    private async Task<(CoachCheckinService Service, Guid Id, AgentMemoryOptions Memory)> SeedDatedAsync()
+    {
+        var State = await SeedAsync();
+        await ExecuteAsync($"""
+            UPDATE {State.Memory.Schema}.coach_call_uploads SET original_file_name = CASE
+                WHEN profile_id = 'athlete-b' THEN '2027-01-01 00.00.00.m4a'
+                WHEN upload_id = '{State.Id}' THEN '2026-08-30 17.12.36.m4a'
+                ELSE '2026-06-01 10.00.00.m4a' END,
+                created_at = CASE WHEN upload_id = '{State.Id}' THEN now() - interval '1 day' ELSE now() END;
+            UPDATE {State.Memory.Schema}.coach_call_chunks SET content = 'coach: yoke OLD cue', embedding = '[1,0,0]'::vector
+                WHERE session_id <> '{State.Id}' AND session_id IN (SELECT session_id FROM {State.Memory.Schema}.coach_call_uploads WHERE profile_id = 'athlete-a');
+            UPDATE {State.Memory.Schema}.coach_call_chunks SET embedding = '[1,0.1,0]'::vector WHERE session_id = '{State.Id}';
+            """);
+        return State;
+    }
+
+    [Fact]
+    public async Task ExerciseTransition_PreservesSeparateUtteranceCitations()
+    {
+        var State = await SeedDatedAsync();
+        await ExecuteAsync($"""
+            INSERT INTO {State.Memory.Schema}.coach_call_utterances (session_id, speaker_label, speaker_role, start_ms, end_ms, confidence, content)
+            VALUES ('{State.Id}', 0, 'coach', 0, 500, 1, 'We are reviewing the axle press.'),
+                   ('{State.Id}', 0, 'coach', 1000, 9000, 1, 'Aim higher on the dip and drive.'),
+                   ('{State.Id}', 0, 'coach', 10000, 30000, 1, 'Now yoke: breathe during the pickup.');
+            """);
+        var Result = await State.Service.SearchCoachCheckinsAsync("yoke", "athlete-a", "yoke", recency: "latest");
+        Result.Should().Contain($"&startMs=1000)").And.Contain($"&startMs=10000)")
+            .And.Contain("We are reviewing the axle press").And.Contain("Now yoke").And.Contain("may cross exercise transitions");
+    }
+
+    private async Task ExecuteAsync(string Sql)
+    {
+        await using var Connection = new NpgsqlConnection(Database.ConnectionString);
+        await Connection.OpenAsync();
+        await using var Command = new NpgsqlCommand(Sql, Connection);
+        await Command.ExecuteNonQueryAsync();
     }
 
     private async Task<(CoachCheckinService Service, Guid Id, AgentMemoryOptions Memory)> SeedAsync(bool SemanticMatch = false)

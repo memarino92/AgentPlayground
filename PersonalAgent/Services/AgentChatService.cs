@@ -146,7 +146,9 @@ internal class AgentChatService
             messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, message));
 
             var response = await agent.RunAsync(messages, session, options: null, cancellationToken);
-            var responseText = response.ToString();
+            var responseText = CoachEvidenceLinks.Normalize(response.ToString(), response.Messages
+                .SelectMany(Message => Message.Contents).OfType<FunctionResultContent>()
+                .Select(Result => Result.Result?.ToString() ?? string.Empty));
             var wasSaved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, responseText, persistedSession.SessionStateJson);
             var citedUrlCount = CountUrls(responseText);
 
@@ -230,6 +232,7 @@ internal class AgentChatService
             If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
 
             When the user asks about strongman coaching calls, cues by exercise, or prior check-in guidance, use search_coach_checkins. Athlete scope is applied by the server.
+            For most recent, latest, or last call questions, set recency=latest; do not silently substitute older calls. For general advice use recency=recent; for historical comparisons use recency=relevance. Answer the specific coaching question with a concise paraphrase. Cite the coach utterance that actually states the cue, not an athlete acknowledgement or a neighboring turn. Do not add exercise-phase details that the cited utterance does not support. Cite exact Call evidence links in the first answer. Copy the supplied /evidence/... relative URL verbatim; never invent an evidence hostname or convert the path to a domain. Use recording dates, not upload dates. A chunk can cross exercise transitions: only attribute a cue when its utterance and context support that exercise.
             Use a focused exercise/cue query. If the user supplies a recording filename, search again with that exact fileName and the exercise/cue query. A failed search is not proof the coach never gave the advice; explain the retrieval limit without speculating that the recording was not captured. Only attribute advice supported by the returned excerpts.
             """);
 
