@@ -129,7 +129,11 @@ Log levels: `LogTrace` < `LogDebug` < `LogInformation` < `LogWarning` < `LogErro
 
 ## Configuration Pattern
 
-Use `IOptions<T>` with environment variable precedence:
+- Make new application configuration database-first, using the existing encrypted settings and administration flow where possible.
+- Do not introduce new environment variables unless there is a concrete reason the setting cannot be database-first (for example, database/encryption bootstrap). Document that reason.
+- Prefer validated live reload for settings that can safely change at runtime; show explicit restart requirements for the rest.
+
+Use `IOptions<T>` where appropriate. Existing environment-backed integrations use the legacy precedence below; new settings must follow the database-first rule above:
 
 ```csharp
 services.AddOptions<ApiKeyOptions>()
