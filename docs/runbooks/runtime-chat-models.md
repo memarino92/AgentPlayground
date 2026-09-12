@@ -37,3 +37,7 @@ If choices stop at an older model, inspect the active database policy and discov
 dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj
 dotnet test PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj
 ```
+
+## Luna tool compatibility
+
+A local live evaluation observed HTTP 400 from Luna when function tools were used on Chat Completions with its default reasoning. The provider requires reasoning_effort=none for that combination, or use of Responses. OpenAiAgentChatClientFactory now applies none to Luna requests containing tools, without changing other models or mutating caller options. This is endpoint compatibility, not a general recommendation to disable reasoning across models. See the [coaching evaluation results](coach-retrieval-evaluation.md#formal-low-cost-model-comparison-2026-09-12).
