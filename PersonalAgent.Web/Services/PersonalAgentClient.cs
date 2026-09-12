@@ -219,11 +219,11 @@ internal class PersonalAgentClient(
         if (!response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("save tool access", response);
     }
 
-    public async Task<IReadOnlyList<string>> GetAssignedProfilesAsync(string actorId, string email)
+    public async Task<IReadOnlyList<string>> GetAssignedProfilesAsync(string actorId, string email, CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(HttpMethod.Get, "/api/coach-assignments");
+        using var response = await SendAsync(HttpMethod.Get, "/api/coach-assignments", cancellationToken: cancellationToken);
         if (!response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("load coach assignments", response);
-        return (await response.Content.ReadFromJsonAsync<AssignedProfilesResponse>(JsonOptions))?.Profiles ?? [];
+        return (await response.Content.ReadFromJsonAsync<AssignedProfilesResponse>(JsonOptions, cancellationToken))?.Profiles ?? [];
     }
 
     public async Task<List<CoachProfileAssignmentResponse>> GetCoachAssignmentsAsync(string profileId)

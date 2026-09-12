@@ -90,11 +90,15 @@ Each execution records its prompt version, model/settings, and relevant code ver
 
 **Done when:** a reviewer can inspect a correction, prompt diff, reproducible baseline/candidate comparison, and approval history; rejected candidates never become active; authorized promotion and rollback affect new executions while in-flight work retains its pinned version. The demo must show a rejected regression as well as an accepted improvement. The portfolio claim is: "The system detects failures, proposes changes, and demonstrates whether they improve performance."
 
-## Future plan: scheduled-task authorization — proposed, not implemented
+## Scheduled-task authorization — scheduled agent jobs implemented
 
 Recorded 2026-09-10. Expand the scheduling authorization follow-up into a bounded delivery item, recommended before Learning Lab implementation.
 
-**Observed:** `PersonalAgent.Worker/Services/AgentTaskExecutionService.cs` sends scheduled execution requests through `SendAsOwnerAsync`, with the role fixed to `Owner`.
+2026-09-12: TRUST-01 and the conservative scheduled-job slice of DEBT-01 are implemented with a FLOW-02 dashboard and pending cancellation. API persists trusted actor/subject/source conversation, checks current database sign-in policy, assignments and tool permissions, owns execution by TaskId, and commits completion/notification intent through the domain outbox. Interrupted runs recover saved responses or become NeedsReview without blind replay. Legacy deliveries are blocked. See [decision 0021](../decisions/0021-scheduled-jobs.md) and [operations](../runbooks/scheduled-jobs.md). General workflow resume, external-tool operation journals, other job types and recurrence remain open.
+
+Validation: 204 API, 44 Web, 30 Worker and 23 Contracts tests passed locally (301 total); the synthetic scheduled-job smoke suite passed 15 checks, including Worker restart and permission revocation. Edge verified dashboard cancellation, read-only result navigation and a narrow viewport without horizontal overflow. No production deployment is claimed.
+
+**Observed before implementation:** `PersonalAgent.Worker/Services/AgentTaskExecutionService.cs` sent scheduled execution requests through `SendAsOwnerAsync`, with the role fixed to `Owner`. That path is now removed.
 
 **Deliver:** persist the trusted originating actor, subject, and authorization context when scheduling work; propagate that context through durable messages and execution. Resolve current permissions server-side when the task runs, including retries, so stored roles cannot preserve revoked access. Remove unconditional Owner execution. Define a migration path for existing schedules with missing actor context; do not silently grant them Owner authority. Record the authorization decision before implementation, extending [0002](../decisions/0002-actor-and-tool-authorization.md).
 
@@ -224,9 +228,9 @@ Recorded 2026-09-11 at the maintainer's request; expands `PRODUCT-01`. Original 
 
 ### Technical debt
 
-Recorded 2026-09-10 from the MassTransit / Microsoft Agent Framework boundary review. These are **proposed, not implemented**. Keep MassTransit for delivery and scheduling, Agent Framework for agent execution, and application code responsible for business state, authorization, and completion semantics. Existing related backlog items remain authoritative for their feature scope; the entries below add boundary and recovery acceptance criteria rather than separate competing implementations.
+Recorded 2026-09-10 from the MassTransit / Microsoft Agent Framework boundary review. Except for the selected scheduled-job slice recorded below, these remain **proposed, not implemented**. Keep MassTransit for delivery and scheduling, Agent Framework for agent execution, and application code responsible for business state, authorization, and completion semantics. Existing related backlog items remain authoritative for their feature scope; the entries below add boundary and recovery acceptance criteria rather than separate competing implementations.
 
-Recommended starting point: `DEBT-01` with `TRUST-01`, followed by the workflow ownership decision in `DEBT-02`. This recommendation does not select implementation work.
+Selected on 2026-09-12: `DEBT-01` with `TRUST-01` and a scheduled-agent-task `FLOW-02` dashboard. This slice is implemented using conservative recovery; see decision 0021. The remaining boundary items, including the workflow ownership decision in `DEBT-02`, remain proposals.
 
 | ID | Idea and first slice | Done when | Dependencies / scope notes |
 | --- | --- | --- | --- |

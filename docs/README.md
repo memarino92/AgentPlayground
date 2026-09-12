@@ -11,6 +11,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Snapshot commands](runbooks/snapshot-commands.md): implemented export and guarded local restore.
 - [Adding agent tools](runbooks/adding-agent-tools.md): register a capability with shared metadata, binding, and authorization.
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
+- [Scheduled jobs](runbooks/scheduled-jobs.md): authorization, dashboard, cancellation and conservative recovery.
 - [Coaching retrieval evaluation](runbooks/coach-retrieval-evaluation.md): synthetic regression baseline and live-model evaluation limits.
 - [Observability](runbooks/observability.md): service tracing, OpenInference, Sentry correlation and OTLP setup.
 - [Integration settings](runbooks/integration-settings.md): in-app Sentry configuration, encrypted revisions, and runtime reload.
@@ -41,6 +42,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0018: Coaching model evaluations](decisions/0018-coach-model-evaluations.md) | Accepted; first comparison completed | Repeatable local model checks with private evidence and JUnit |
 | [0019: Service observability](decisions/0019-observability.md) | Accepted; service-side implementation complete | Shared OpenTelemetry, OpenInference and correlated Sentry errors |
 | [0020: Live database telemetry settings](decisions/0020-live-database-telemetry-settings.md) | Accepted; implemented | Database-first OpenTelemetry export, sampling and per-service live reload |
+| [0021: Scheduled jobs](decisions/0021-scheduled-jobs.md) | Accepted; implemented | Durable task identity, current authorization, recovery and job dashboard |
 
 ## Working agreement
 

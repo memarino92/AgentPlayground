@@ -1,6 +1,6 @@
 # 0021: Authorized, durable scheduled jobs
 
-- Status: Accepted direction; implementation in progress
+- Status: Accepted; scheduled agent-job slice implemented
 - Recorded: 2026-09-12
 
 ## Context and decision
@@ -21,6 +21,10 @@ Existing queued messages without an application record are recorded as Blocked l
 
 ## Delivery and verification
 
-Planned milestones: persistence and policy; execution/recovery and cancellation; dashboard and integrated tests. Verify real PostgreSQL concurrency, rollback/outbox, restart, duplicate delivery, revocation, cross-subject access, forged messages, legacy delivery and UI states. Update this section with actual results before completion.
+Implemented milestones: durable persistence/current authorization and Worker execution by ID; Web dashboard/pending cancellation; recovery and authorization regression tests. Scheduled result conversations are read-only so ordinary chat cannot replace the execution evidence. Terminal state writes are guarded against duplicate notification intent.
+
+Local validation: 204 API, 44 Web, 30 Worker and 23 Contracts tests passed (301 total). New PostgreSQL tests cover concurrent delivery/cancellation, request cancellation after the Running marker, saved-response recovery, ambiguous effects, role/assignment revocation, invocation-time actor revalidation, legacy delivery, outbox rollback and duplicate completion. Component tests cover attribution, browser timezone, cancellation, deep links and clearing stale data after access failures. API tests cover scoped list/detail/cancel and live encrypted Web policy precedence. Release API/Web/Worker images build successfully.
+
+The synthetic smoke test passed 15 checks including a real Worker restart, delivery replay, cancellation, revocation and read-only history. Edge/Playwright verified the rendered dashboard, result-conversation navigation, read-only composer behavior and cancellation. The 390px viewport had no horizontal overflow; no browser page errors were recorded. This does not claim production deployment, an OS-kill test during a live external tool effect, per-tool effect journals or general framework session resume.
 
 Evidence: SchedulingService, AgentTaskExecutionService, AgentTaskSchedulerConsumer, SignedActorFilter, ServiceCollectionAuthenticationExtensions, CoachCallOutbox and roadmap TRUST-01/DEBT-01/FLOW-02.
