@@ -26,6 +26,7 @@ internal static class PersonalAgentEndpoints
         apiGroup.AddEndpointFilter(new InternalApiKeyFilter(apiKeyOptions));
         apiGroup.MapIntegrationSettings(securityOptions, app.Configuration);
         apiGroup.MapCoachEvidence(securityOptions);
+        apiGroup.MapScheduledJobs(securityOptions);
 
         apiGroup.MapGet("/models", async (IChatModelCatalog chatModelCatalog, CancellationToken cancellationToken) =>
         {
@@ -149,7 +150,7 @@ internal static class PersonalAgentEndpoints
             return Results.Ok(new { id = result.Id, executeAtUtc = result.ExecuteAtUtc, correlationId = result.CorrelationId, status = result.Status });
         });
 
-        apiGroup.MapPost("/schedule/agent-tasks", async (ScheduleAgentTaskRequest request, AgentService agentService) =>
+        apiGroup.MapPost("/schedule/agent-tasks", async (HttpContext context, ScheduleAgentTaskRequest request, AgentService agentService, ICoachAssignmentStore assignments) =>
         {
             if (string.IsNullOrWhiteSpace(request.TenantId))
                 return Results.BadRequest(new { error = "TenantId is required" });
@@ -160,9 +161,15 @@ internal static class PersonalAgentEndpoints
             if (!HasExactlyOneTimingInput(request.Delay, request.ExecuteAt, request.When))
                 return Results.BadRequest(new { error = "Provide exactly one of Delay, ExecuteAt, or When" });
 
-            var result = await agentService.ScheduleAgentTaskAsync(request);
+            var access = await ResolveAccessAsync(context, ScheduledJobStore.Subject(request.TenantId, request.UserId), assignments);
+            if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            ScheduleResult result;
+            try { result = await agentService.ScheduleAgentTaskAsync(request, access, context.RequestAborted); }
+            catch (UnauthorizedAccessException) { return Results.StatusCode(StatusCodes.Status403Forbidden); }
+            catch (ArgumentException) { return Results.BadRequest(new { error = "Invalid scheduling time." }); }
+            catch (FormatException) { return Results.BadRequest(new { error = "Invalid scheduling time." }); }
             return Results.Ok(new { id = result.Id, executeAtUtc = result.ExecuteAtUtc, correlationId = result.CorrelationId, status = result.Status });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
         apiGroup.MapPost("/approvals", async (RequestAgentApprovalRequest request, AgentService agentService) =>
         {

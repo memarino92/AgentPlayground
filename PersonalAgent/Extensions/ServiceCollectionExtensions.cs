@@ -118,6 +118,12 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<CoachCheckinService>();
         services.AddSingleton<ICoachEvidenceService, CoachEvidenceService>();
         services.AddSingleton<SchedulingService>();
+        services.AddSingleton<ScheduledJobStore>();
+        services.AddSingleton<IScheduledActorPolicy, DatabaseScheduledActorPolicy>();
+        services.AddSingleton<ScheduledJobAuthorization>();
+        services.AddSingleton<IScheduledJobRunner, ScheduledJobRunner>();
+        services.AddSingleton<ScheduledJobExecutionService>();
+        services.AddHostedService<ScheduledJobReconciler>();
         services.AddSingleton<TavilyMcpToolProvider>();
         services.AddSingleton<ITavilyMcpToolProvider>(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
         services.AddHostedService(sp => sp.GetRequiredService<TavilyMcpToolProvider>());

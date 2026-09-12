@@ -265,7 +265,7 @@ public class PersonalAgentEndpointsTests
         var eventService = app.Services.GetRequiredService<AgentEventService>();
 
         var result = await eventService.ScheduleAgentTaskToolAsync(
-            profileId: "test-user",
+            access: new("test-user", "Owner", "test-user"),
             instruction: "do the thing");
 
         result.Should().Contain("provide exactly one of");
@@ -278,7 +278,7 @@ public class PersonalAgentEndpointsTests
         var eventService = app.Services.GetRequiredService<AgentEventService>();
 
         var result = await eventService.ScheduleAgentTaskToolAsync(
-            profileId: "test-user",
+            access: new("test-user", "Owner", "test-user"),
             instruction: "do the thing",
             delay: "PT5M",
             when: "tonight");
@@ -293,7 +293,7 @@ public class PersonalAgentEndpointsTests
         var eventService = app.Services.GetRequiredService<AgentEventService>();
 
         var result = await eventService.ScheduleAgentTaskToolAsync(
-            profileId: "",
+            access: new("test-user", "Owner", ""),
             instruction: "do the thing",
             delay: "PT5M");
 
@@ -307,7 +307,7 @@ public class PersonalAgentEndpointsTests
         var eventService = app.Services.GetRequiredService<AgentEventService>();
 
         var result = await eventService.ScheduleAgentTaskToolAsync(
-            profileId: "test-user",
+            access: new("test-user", "Owner", "test-user"),
             instruction: "",
             delay: "PT5M");
 
@@ -363,7 +363,7 @@ public class PersonalAgentEndpointsTests
     }
 
     [Fact]
-    public async Task ScheduleAgentTask_ReturnsOk_WhenExactlyOneTimingInputProvided()
+    public async Task ScheduleAgentTask_RejectsCrossSubjectEvenWithValidTiming()
     {
         await using var app = await BuildAppAsync();
         var client = app.GetTestClient();
@@ -376,9 +376,8 @@ public class PersonalAgentEndpointsTests
             delay = "PT1M"
         });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var payload = await ReadJsonAsync(response);
-        payload.GetProperty("id").GetGuid().Should().NotBeEmpty();
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
     }
 
     [Fact]

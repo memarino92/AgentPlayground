@@ -59,6 +59,7 @@ internal class AgentMemorySchemaInitializer(IOptions<AgentMemoryOptions> options
             CREATE SCHEMA IF NOT EXISTS {schema};
 
             {AgentPlayground.Contracts.Messaging.CoachCallOutbox.SchemaSql(_options.Schema)}
+            {ScheduledJobStore.SchemaSql(_options.Schema)}
 
             CREATE TABLE IF NOT EXISTS {sessionsTable}
             (

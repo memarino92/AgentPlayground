@@ -36,7 +36,7 @@ internal sealed class AgentToolRegistry(ITavilyMcpToolProvider TavilyProvider) :
             "Schedule a future agent task. Required: instruction and exactly one timing field (delay, executeAt, or when).",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,
             (Services, Access) => (string instruction, string? delay, string? executeAt, string? when, string? timeZoneId, bool notifyOnCompletion, CancellationToken token) =>
-                Services.GetRequiredService<AgentEventService>().ScheduleAgentTaskToolAsync(Access.SubjectProfileId, instruction, delay, executeAt, when, timeZoneId, notifyOnCompletion, token)),
+                Services.GetRequiredService<AgentEventService>().ScheduleAgentTaskToolAsync(Access, instruction, delay, executeAt, when, timeZoneId, notifyOnCompletion, token)),
         Local(AgentToolKeys.GetCurrentDateTime, "Current date and time", "Core",
             "Get the current date and time, optionally in a specific IANA or Windows timezone (e.g. 'America/Chicago' or 'Central Standard Time'). Call this before scheduling relative times like 'at noon today' or 'next Monday'.",
             OwnerDefault: true, CoachDefault: true, HasSideEffects: false,

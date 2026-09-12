@@ -75,8 +75,9 @@ internal class AgentEventService
         return $"Scheduled notification {result.Id} at {result.ExecuteAtUtc:O}";
     }
 
-    public async Task<string> ScheduleAgentTaskToolAsync(string profileId, string instruction, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, bool notifyOnCompletion = true, CancellationToken cancellationToken = default)
+    public async Task<string> ScheduleAgentTaskToolAsync(AgentAccessContext access, string instruction, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, bool notifyOnCompletion = true, CancellationToken cancellationToken = default)
     {
+        var profileId = access.SubjectProfileId;
         if (string.IsNullOrWhiteSpace(profileId)) return "Unable to schedule agent task: profileId is required.";
         if (string.IsNullOrWhiteSpace(instruction)) return "Unable to schedule agent task: instruction is required.";
         if (!HasExactlyOneTimingInput(delay, executeAt, when)) return "Unable to schedule agent task: provide exactly one of delay (e.g. PT5M), executeAt (ISO-8601 datetime), or when (natural time like 'tonight').";
@@ -93,7 +94,7 @@ internal class AgentEventService
             When = when,
             TimeZoneId = timeZoneId,
             NotifyOnCompletion = notifyOnCompletion
-        }, cancellationToken);
+        }, access, cancellationToken);
 
         return $"Scheduled agent task {result.Id} at {result.ExecuteAtUtc:O}";
     }

@@ -50,8 +50,8 @@ internal class AgentService(
     public Task<ScheduleResult> ScheduleNotificationAsync(ScheduleNotificationRequest request, CancellationToken cancellationToken = default) =>
         schedulingService.ScheduleNotificationAsync(request, cancellationToken);
 
-    public Task<ScheduleResult> ScheduleAgentTaskAsync(ScheduleAgentTaskRequest request, CancellationToken cancellationToken = default) =>
-        schedulingService.ScheduleAgentTaskAsync(request, cancellationToken);
+    public Task<ScheduleResult> ScheduleAgentTaskAsync(ScheduleAgentTaskRequest request, AgentAccessContext access, CancellationToken cancellationToken = default) =>
+        schedulingService.ScheduleAgentTaskAsync(request, access, cancellationToken);
 
     public Task<CoachCallUploadResult> CreateCoachCheckinUploadAsync(string profileId, string originalFileName, string mimeType, byte[] bytes, CancellationToken cancellationToken = default) =>
         coachCheckinService.CreateUploadAsync(profileId, originalFileName, mimeType, bytes, cancellationToken);

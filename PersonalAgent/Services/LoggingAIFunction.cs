@@ -12,7 +12,8 @@ internal sealed class LoggingAIFunction(
     string source,
     string toolKey,
     AgentAccessContext access,
-    ToolAccessService toolAccessService) : AIFunction
+    ToolAccessService toolAccessService,
+    Func<CancellationToken, Task<bool>>? currentAuthorization = null) : AIFunction
 {
     public override string Name => innerFunction.Name;
     public override string Description => innerFunction.Description;
@@ -30,8 +31,10 @@ internal sealed class LoggingAIFunction(
     private async Task<object?> InvokeToolAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-        if (!await toolAccessService.IsAllowedAsync(access.Role, toolKey, cancellationToken))
+        if ((currentAuthorization is not null && !await currentAuthorization(cancellationToken))
+            || !await toolAccessService.IsAllowedAsync(access.Role, toolKey, cancellationToken))
         {
+            if (access.ScheduledRun is not null) access.ScheduledRun.AuthorizationDenied = true;
             logger.LogWarning(
                 "Denied tool {ToolName} for actor {ActorId}, role {Role}, subject {SubjectProfileId}",
                 Name,
