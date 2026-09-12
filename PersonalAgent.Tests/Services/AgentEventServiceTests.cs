@@ -12,7 +12,7 @@ public class AgentEventServiceTests
     private static AgentEventService CreateService()
     {
         var bus = new Mock<IBus>().Object;
-        var schedulingService = new SchedulingService(bus, NullLogger<SchedulingService>.Instance);
+        var schedulingService = new SchedulingService(NullLogger<SchedulingService>.Instance);
         return new AgentEventService(bus, schedulingService, NullLogger<AgentEventService>.Instance);
     }
 
@@ -52,3 +52,4 @@ public class AgentEventServiceTests
         result.Should().Contain("was not recognized");
     }
 }
+

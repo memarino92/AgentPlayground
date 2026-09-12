@@ -53,7 +53,13 @@ internal sealed class ScheduledJobAuthorization(IScheduledActorPolicy Policy, IC
     public async Task<AgentAccessContext?> ForExecutionAsync(ScheduledJob Job, CancellationToken CancellationToken)
     {
         var Access = await ResolveAsync(Job.ActorId, Job.ActorEmail, Job.SubjectProfileId, CancellationToken);
-        return Access is not null && await Tools.IsAllowedAsync(Access.Role, AgentToolKeys.ScheduleAgentTask, CancellationToken)
+        var Tool = Job.JobType switch
+        {
+            "AgentTask" => AgentToolKeys.ScheduleAgentTask,
+            "Notification" => AgentToolKeys.ScheduleNotification,
+            _ => null
+        };
+        return Access is not null && Tool is not null && await Tools.IsAllowedAsync(Access.Role, Tool, CancellationToken)
             ? Access with { ScheduledTaskId = Job.TaskId, SessionId = Job.SessionId } : null;
     }
 }

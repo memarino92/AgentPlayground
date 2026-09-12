@@ -47,8 +47,8 @@ internal class AgentService(
     public Task<PersistedAgentApproval?> GetApprovalAsync(Guid approvalId, CancellationToken cancellationToken = default) =>
         approvalService.GetApprovalAsync(approvalId, cancellationToken);
 
-    public Task<ScheduleResult> ScheduleNotificationAsync(ScheduleNotificationRequest request, CancellationToken cancellationToken = default) =>
-        schedulingService.ScheduleNotificationAsync(request, cancellationToken);
+    public Task<ScheduleResult> ScheduleNotificationAsync(ScheduleNotificationRequest request, AgentAccessContext access, CancellationToken cancellationToken = default) =>
+        schedulingService.ScheduleNotificationAsync(request, access, cancellationToken);
 
     public Task<ScheduleResult> ScheduleAgentTaskAsync(ScheduleAgentTaskRequest request, AgentAccessContext access, CancellationToken cancellationToken = default) =>
         schedulingService.ScheduleAgentTaskAsync(request, access, cancellationToken);

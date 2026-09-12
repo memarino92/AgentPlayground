@@ -35,6 +35,7 @@
                 {
                     <button type="button" @key="Job.TaskId" class="job-card @(Selected?.Job.TaskId == Job.TaskId ? "selected" : "")" @onclick="() => SelectAsync(Job.TaskId)" disabled="@Busy">
                         <span class="job-status" data-status="@Job.Status">@Label(Job.Status)</span>
+                        <span class="job-type">@(Job.JobType == "Notification" ? "Notification" : "Agent task")</span>
                         <strong>@Job.Instruction</strong>
                         <span>Scheduled by @(Job.ActorId ?? "Unknown (legacy)") · For @Job.SubjectProfileId</span>
                         <time datetime="@Job.ExecuteAt.ToString("O")">Due @Format(Job.ExecuteAt)</time>
@@ -50,7 +51,9 @@
                     var Job = Selected.Job;
                     <div class="job-detail-heading"><h2>@Label(Job.Status)</h2><span>@Job.AttemptCount attempt(s)</span></div>
                     <p class="job-instruction">@Job.Instruction</p>
+                    @if (Job.Notification is { } Notification) { <p class="job-notification-body">@Notification.Body</p> }
                     <dl>
+                        <dt>Type</dt><dd>@(Job.JobType == "Notification" ? "Notification" : "Agent task")</dd>
                         <dt>Scheduled by</dt><dd>@(Job.ActorId ?? "Unknown (legacy)")</dd>
                         <dt>For</dt><dd>@Job.SubjectProfileId</dd>
                         <dt>Created</dt><dd>@Format(Job.CreatedAt)</dd>
