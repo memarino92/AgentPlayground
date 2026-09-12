@@ -44,6 +44,8 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0020: Live database telemetry settings](decisions/0020-live-database-telemetry-settings.md) | Accepted; implemented | Database-first OpenTelemetry export, sampling and per-service live reload |
 | [0021: Scheduled jobs](decisions/0021-scheduled-jobs.md) | Accepted; implemented | Durable task identity, current authorization, recovery and job dashboard |
 
+| [0022: Scheduled notifications](decisions/0022-scheduled-notifications.md) | Accepted; implemented | Notification job identity, attribution, cancellation and push outcomes |
+
 ## Working agreement
 
 Use [the template](decisions/template.md) for choices affecting service boundaries, persistence, identity, operations, or tool behavior. Small implementation details belong in code and PR descriptions.

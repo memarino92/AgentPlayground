@@ -1,6 +1,6 @@
 # 0022: Notifications in scheduled jobs
 
-- Status: Accepted; implementation in progress
+- Status: Accepted; implemented
 - Recorded: 2026-09-12
 - Extends: [0021](0021-scheduled-jobs.md)
 
@@ -20,4 +20,4 @@ Previously queued notifications have no application record or trusted actor. Kee
 
 ## Evidence and verification
 
-Sources: SchedulingService, AgentEventService, NotificationSchedulerConsumer, PushNotificationConsumer, ScheduledJobExecutionService and decision 0021. Regression evidence will be recorded after implementation.
+Sources: SchedulingService, AgentEventService, NotificationSchedulerConsumer, PushNotificationConsumer, ScheduledJobExecutionService and decision 0021. Validation: 217 API tests and 45 Web tests passed. New regressions cover creation through the notification tool, actor/source retention, notification-specific permissions, spoofed subjects, cancellation, concurrent duplicate delivery, interrupted sends, disabled push, missing devices and scoped list/detail endpoints. The synthetic smoke test passed 14 checks with a real Worker restart and revoked notification permission; it is included in PR CI. Edge/Playwright verified type/body/attribution, deep-link detail, cancellation, no result conversation, no page errors and no overflow at 390px. Firebase device delivery was not exercised; the synthetic configuration intentionally disables push.
