@@ -134,6 +134,8 @@ internal class AgentChatService
             }
 
             var sessionState = await DeserializeSessionStateAsync(persistedSession.SessionStateJson, cancellationToken);
+            if (sessionState.ScheduledTaskId is { } JobId && access.ScheduledTaskId != JobId)
+                throw new UnauthorizedAccessException("Scheduled job conversations are read-only.");
             var agent = await CreateSessionAgentAsync(sessionState.ModelId, access with { SessionId = sessionId }, cancellationToken);
             var session = await agent.CreateSessionAsync(cancellationToken);
             var transcript = await _sessionStore.GetSessionMessagesAsync(parsedSessionId) ?? [];
@@ -205,7 +207,7 @@ internal class AgentChatService
 
         var sessionState = await DeserializeSessionStateAsync(persistedSession.SessionStateJson, cancellationToken);
         _logger.LogInformation("Loaded transcript containing {MessageCount} messages using model {ModelId}", messages.Count, sessionState.ModelId);
-        return new SessionConversation(sessionId, sessionState.ModelId, messages);
+        return new SessionConversation(sessionId, sessionState.ModelId, messages, sessionState.ScheduledTaskId is not null);
     }
 
     private static Microsoft.Extensions.AI.ChatMessage ToChatMessage(ConversationMessage message) => new(message.Role switch

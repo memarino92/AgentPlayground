@@ -103,11 +103,12 @@ internal sealed class ScheduledJobStore(IOptions<AgentMemoryOptions> Options)
         await using var Transaction = await Connection.BeginTransactionAsync(Token);
         await using var Command = new NpgsqlCommand($"""
             UPDATE {Table} SET status = @status, data = @data::jsonb, next_dispatch_at = now() + interval '1 minute' WHERE task_id = @id
+                AND status NOT IN ('Completed', 'Blocked', 'Cancelled', 'Failed', 'NeedsReview')
             """, Connection, Transaction);
         Command.Parameters.AddWithValue("id", Job.TaskId);
         Command.Parameters.AddWithValue("status", Job.Status);
         Command.Parameters.AddWithValue("data", JsonSerializer.Serialize(Job));
-        await Command.ExecuteNonQueryAsync(Token);
+        if (await Command.ExecuteNonQueryAsync(Token) == 0) return;
         if (StartAttempt || FinishAttempt)
         {
             Command.Parameters.Clear();
@@ -118,6 +119,14 @@ internal sealed class ScheduledJobStore(IOptions<AgentMemoryOptions> Options)
             Command.Parameters.AddWithValue("number", Job.AttemptCount);
             Command.Parameters.AddWithValue("status", Job.Status);
             if (FinishAttempt) Command.Parameters.AddWithValue("outcome", NpgsqlTypes.NpgsqlDbType.Text, (object?)Job.Outcome ?? DBNull.Value);
+            await Command.ExecuteNonQueryAsync(Token);
+        }
+        else if (Job.Status == "Running")
+        {
+            Command.Parameters.Clear();
+            Command.CommandText = $"UPDATE {Attempts} SET status = 'Running' WHERE task_id = @id AND number = @number";
+            Command.Parameters.AddWithValue("id", Job.TaskId);
+            Command.Parameters.AddWithValue("number", Job.AttemptCount);
             await Command.ExecuteNonQueryAsync(Token);
         }
         if (Notify && Job.NotifyOnCompletion && Job.ActorId is not null)

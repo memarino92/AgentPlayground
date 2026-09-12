@@ -43,7 +43,9 @@ internal static class SyntheticConfiguration
             ["PushNotifications:Enabled"] = "false",
             ["AgentMemory:EnableSemanticMemory"] = "true",
             ["AgentMemory:EmbeddingModel"] = "synthetic-token-hash-v1",
-            ["ChatModels:DiscoverFromProvider"] = "false"
+            ["ChatModels:DiscoverFromProvider"] = "false",
+            ["Authentication:Schemes:GitHub:AllowedUsers"] = "demo-owner,demo-other",
+            ["Authentication:Schemes:Google:AllowedEmails"] = "coach@example.test"
         };
         foreach (var (Name, Value) in Settings)
         {

@@ -16,6 +16,7 @@
                     <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy">
                         <Authorized>
                             <a href="/chat?drawer=1" class="navbar-menu__link">Sessions</a>
+                            <a href="/jobs" class="navbar-menu__link">Scheduled jobs</a>
                         </Authorized>
                     </AuthorizeView>
                     <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.OwnerPolicy">

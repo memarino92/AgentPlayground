@@ -23,7 +23,7 @@ internal sealed class ScheduledJobRunner(IAgentSessionStore Sessions, IChatModel
         }
         var Model = (await Models.GetModelsAsync(Token)).FirstOrDefault(M => M.IsDefault)
             ?? throw new HttpRequestException("No chat model is available.");
-        await Sessions.CreateSessionAsync(SessionId, Access, JsonSerializer.Serialize(new AgentSessionState(Model.Id)), Token);
+        await Sessions.CreateSessionAsync(SessionId, Access, JsonSerializer.Serialize(new AgentSessionState(Model.Id, SessionId)), Token);
     }
 
     public Task<string?> RunAsync(Guid SessionId, AgentAccessContext Access, string Instruction, CancellationToken Token) =>

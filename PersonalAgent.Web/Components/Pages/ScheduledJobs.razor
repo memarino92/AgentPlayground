@@ -1,0 +1,81 @@
+@page "/jobs"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy)]
+@implements IAsyncDisposable
+
+<PageTitle>Scheduled Jobs - PersonalAgent</PageTitle>
+<section class="jobs-page">
+    <header class="jobs-header">
+        <div><h1>Scheduled jobs</h1><p>Upcoming work and its outcomes. Times shown in @Zone.Id.</p></div>
+        <button type="button" @onclick="RefreshAsync" disabled="@Busy">@(Busy ? "Refreshing…" : "Refresh")</button>
+    </header>
+    <div class="jobs-filters">
+        <label>For
+            <select value="@ProfileId" @onchange="ChangeProfileAsync" disabled="@Busy">
+                @foreach (var Profile in Profiles) { <option @key="Profile" value="@Profile">@Profile</option> }
+            </select>
+        </label>
+        <label>Status
+            <select value="@Status" @onchange="ChangeStatusAsync" disabled="@Busy">
+                <option value="">All statuses</option>
+                @foreach (var State in States) { <option @key="State" value="@State">@Label(State)</option> }
+            </select>
+        </label>
+        <span class="jobs-refresh">Refreshes every 15 seconds</span>
+    </div>
+    @if (Error is not null) { <p role="alert" class="jobs-error">@Error</p> }
+    @if (Notice is not null) { <p role="status">@Notice</p> }
+    @if (!Initialized) { <p role="status">Loading scheduled jobs…</p> }
+    else if (Profiles.Count == 0) { <p>No accessible profile is available.</p> }
+    else
+    {
+        <div class="jobs-columns">
+            <div class="jobs-list">
+                @if (Jobs.Count == 0 && Error is null) { <p>No jobs match this view. Ask the assistant in Chat to schedule work for later.</p> }
+                @foreach (var Job in Jobs)
+                {
+                    <button type="button" @key="Job.TaskId" class="job-card @(Selected?.Job.TaskId == Job.TaskId ? "selected" : "")" @onclick="() => SelectAsync(Job.TaskId)" disabled="@Busy">
+                        <span class="job-status" data-status="@Job.Status">@Label(Job.Status)</span>
+                        <strong>@Job.Instruction</strong>
+                        <span>Scheduled by @(Job.ActorId ?? "Unknown (legacy)") · For @Job.SubjectProfileId</span>
+                        <time datetime="@Job.ExecuteAt.ToString("O")">Due @Format(Job.ExecuteAt)</time>
+                    </button>
+                }
+                @if (Jobs.Count == 50) { <button type="button" disabled="@Busy" @onclick="OlderAsync">Older jobs</button> }
+                @if (Before is not null) { <button type="button" disabled="@Busy" @onclick="NewestAsync">Back to newest</button> }
+            </div>
+            <article class="job-detail">
+                @if (Selected is null) { <h2>Job details</h2><p>Select a job to see its result and execution history.</p> }
+                else
+                {
+                    var Job = Selected.Job;
+                    <div class="job-detail-heading"><h2>@Label(Job.Status)</h2><span>@Job.AttemptCount attempt(s)</span></div>
+                    <p class="job-instruction">@Job.Instruction</p>
+                    <dl>
+                        <dt>Scheduled by</dt><dd>@(Job.ActorId ?? "Unknown (legacy)")</dd>
+                        <dt>For</dt><dd>@Job.SubjectProfileId</dd>
+                        <dt>Created</dt><dd>@Format(Job.CreatedAt)</dd>
+                        <dt>Due</dt><dd>@Format(Job.ExecuteAt)</dd>
+                        <dt>Updated</dt><dd>@Format(Job.UpdatedAt)</dd>
+                        <dt>Job ID</dt><dd class="job-id">@Job.TaskId</dd>
+                    </dl>
+                    @if (Job.Outcome is not null) { <h3>Outcome</h3><p class="job-outcome">@Job.Outcome</p> }
+                    <div class="job-actions">
+                        @if (Job.SourceSessionId is not null) { <a href="@ChatLink(Job.SourceSessionId, Job.SubjectProfileId)">Originating conversation</a> }
+                        @if (Job.SessionId is not null) { <a href="@ChatLink(Job.SessionId, Job.SubjectProfileId)">Result conversation</a> }
+                        @if (Job.Status is "Scheduled" or "Retrying") { <button type="button" class="job-cancel" disabled="@Busy" @onclick="CancelAsync">Cancel job</button> }
+                    </div>
+                    <h3>Execution history</h3>
+                    @if (Selected.Attempts.Count == 0) { <p>This job has not started.</p> }
+                    @foreach (var Attempt in Selected.Attempts)
+                    {
+                        <div @key="Attempt.Number" class="job-attempt">
+                            <strong>Attempt @Attempt.Number · @Label(Attempt.Status)</strong>
+                            <div>@Format(Attempt.StartedAt) @(Attempt.FinishedAt is { } Finished ? $"— {Format(Finished)}" : "— awaiting outcome")</div>
+                            @if (Attempt.Outcome is not null && Attempt.Status != "Completed") { <p>@Attempt.Outcome</p> }
+                        </div>
+                    }
+                }
+            </article>
+        </div>
+    }
+</section>

@@ -19,6 +19,32 @@ internal class PersonalAgentClient(
 {
     private const int DefaultPageSize = 20;
 
+    public async Task<IReadOnlyList<ScheduledJobResponse>> GetJobsAsync(string ProfileId, string? Status, DateTimeOffset? Before, CancellationToken Token)
+    {
+        var Uri = $"/api/jobs/?profileId={System.Uri.EscapeDataString(ProfileId)}";
+        if (!string.IsNullOrWhiteSpace(Status)) Uri += $"&status={System.Uri.EscapeDataString(Status)}";
+        if (Before is not null) Uri += $"&before={System.Uri.EscapeDataString(Before.Value.ToString("O"))}";
+        using var Response = await SendAsync(HttpMethod.Get, Uri, cancellationToken: Token);
+        Response.EnsureSuccessStatusCode();
+        return await Response.Content.ReadFromJsonAsync<List<ScheduledJobResponse>>(Token) ?? [];
+    }
+
+    public async Task<ScheduledJobDetailResponse?> GetJobAsync(Guid Id, CancellationToken Token)
+    {
+        using var Response = await SendAsync(HttpMethod.Get, $"/api/jobs/{Id}", cancellationToken: Token);
+        if (Response.StatusCode == HttpStatusCode.NotFound) return null;
+        Response.EnsureSuccessStatusCode();
+        return await Response.Content.ReadFromJsonAsync<ScheduledJobDetailResponse>(Token);
+    }
+
+    public async Task<bool> CancelJobAsync(Guid Id, CancellationToken Token)
+    {
+        using var Response = await SendAsync(HttpMethod.Post, $"/api/jobs/{Id}/cancel", cancellationToken: Token);
+        if (Response.StatusCode == HttpStatusCode.Conflict) return false;
+        Response.EnsureSuccessStatusCode();
+        return true;
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -348,7 +374,7 @@ internal class PersonalAgentApiException(string operation, HttpStatusCode status
 public record SessionResponse(string SessionId, string ModelId, string Message);
 public record ModelCatalogResponse(List<AvailableChatModelResponse> Models);
 public record MessageResponse(string SessionId, string Response);
-public record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages);
+public record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages, bool IsReadOnly = false);
 public record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
 public record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
 public record ConversationMessage(string Role, string Content);

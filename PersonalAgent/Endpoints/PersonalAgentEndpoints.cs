@@ -93,7 +93,9 @@ internal static class PersonalAgentEndpoints
                 request.Message.Length);
             var access = await ResolveAccessAsync(httpContext, request.ProfileId, assignmentStore);
             if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var response = await agentService.SendMessageAsync(sessionId, access, request.Message, httpContext.RequestAborted);
+            string? response;
+            try { response = await agentService.SendMessageAsync(sessionId, access, request.Message, httpContext.RequestAborted); }
+            catch (UnauthorizedAccessException) { return Results.StatusCode(StatusCodes.Status403Forbidden); }
             return response is not null
                 ? Results.Ok(new { sessionId, response })
                 : Results.NotFound(new { error = "Session not found" });
@@ -109,7 +111,7 @@ internal static class PersonalAgentEndpoints
             if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
             var conversation = await agentService.GetSessionMessagesAsync(sessionId, access);
             return conversation is not null
-                ? Results.Ok(new { sessionId = conversation.SessionId, modelId = conversation.ModelId, messages = conversation.Messages })
+                ? Results.Ok(new { sessionId = conversation.SessionId, modelId = conversation.ModelId, messages = conversation.Messages, isReadOnly = conversation.IsReadOnly })
                 : Results.NotFound(new { error = "Session not found" });
         }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
