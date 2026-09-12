@@ -134,7 +134,7 @@ internal class AgentChatService
             }
 
             var sessionState = await DeserializeSessionStateAsync(persistedSession.SessionStateJson, cancellationToken);
-            var agent = await CreateSessionAgentAsync(sessionState.ModelId, access, cancellationToken);
+            var agent = await CreateSessionAgentAsync(sessionState.ModelId, access with { SessionId = sessionId }, cancellationToken);
             var session = await agent.CreateSessionAsync(cancellationToken);
             var transcript = await _sessionStore.GetSessionMessagesAsync(parsedSessionId) ?? [];
             var recalledMemories = await _semanticMemoryService.RecallMemoriesAsync(persistedSession.EffectiveMemoryProfileId, message, cancellationToken);

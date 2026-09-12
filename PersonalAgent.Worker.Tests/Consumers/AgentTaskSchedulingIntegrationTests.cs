@@ -14,7 +14,7 @@ namespace PersonalAgent.Worker.Tests.Consumers;
 public class AgentTaskSchedulingIntegrationTests
 {
     [Fact]
-    public async Task AgentTaskScheduled_Immediate_ExecutesAndPublishesCompletionNotification()
+    public async Task AgentTaskScheduled_Immediate_RequestsExecutionWithoutPublishingDuplicateNotification()
     {
         await using var provider = new ServiceCollection()
             .AddLogging()
@@ -51,7 +51,7 @@ public class AgentTaskSchedulingIntegrationTests
 
             (await harness.Consumed.Any<AgentTaskScheduled>()).Should().BeTrue();
             (await harness.Consumed.Any<ExecuteAgentTask>()).Should().BeTrue();
-            (await harness.Published.Any<NotificationRequested>()).Should().BeTrue();
+            harness.Published.Select<NotificationRequested>().Should().BeEmpty();
         }
         finally
         {
@@ -96,7 +96,7 @@ public class AgentTaskSchedulingIntegrationTests
             });
 
             (await harness.Consumed.Any<ExecuteAgentTask>()).Should().BeTrue();
-            (await harness.Published.Any<NotificationRequested>()).Should().BeTrue();
+            harness.Published.Select<NotificationRequested>().Should().BeEmpty();
         }
         finally
         {

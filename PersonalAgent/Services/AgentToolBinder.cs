@@ -22,7 +22,14 @@ internal sealed class AgentToolBinder(
             if (!string.Equals(function.Name, registration.Descriptor.Name, StringComparison.Ordinal))
                 throw new InvalidOperationException("A tool function name does not match its registration.");
             tools.Add(new BoundAgentTool(registration.Descriptor, registration.Source,
-                new LoggingAIFunction(function, Logger, registration.Source, registration.Descriptor.Key, Access, AccessService)));
+                new LoggingAIFunction(function, Logger, registration.Source, registration.Descriptor.Key, Access, AccessService,
+                    Access.ScheduledTaskId is { } Id ? async Token =>
+                    {
+                        var Job = await Services.GetRequiredService<ScheduledJobStore>().GetAsync(Id, Token);
+                        var Current = Job?.Status == "Running"
+                            ? await Services.GetRequiredService<ScheduledJobAuthorization>().ForExecutionAsync(Job, Token) : null;
+                        return Current is not null && Current.Role == Access.Role;
+                    } : null)));
         }
         return tools.AsReadOnly();
     }

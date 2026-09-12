@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using AgentPlayground.Contracts.Commands;
 using AgentPlayground.Contracts.Events;
+using AgentPlayground.Contracts.Messaging.Commands;
+using AgentPlayground.Contracts.Messaging.Events;
 using MassTransit;
 using Npgsql;
 
@@ -26,7 +28,7 @@ public static class CoachCallOutbox
 
     public static async Task EnqueueAsync<T>(NpgsqlTransaction Transaction, string Schema, T Message, CancellationToken CancellationToken) where T : class
     {
-        if (Message is not (ProcessCoachTranscriptCommand or CoachCallStatusChangedEvent or CoachCallTranscriptionCompletedEvent or CoachCallProcessingCompletedEvent or CoachCallProcessingFailedEvent))
+        if (Message is not (ExecuteAgentTask or AgentTaskScheduled or NotificationRequested or ProcessCoachTranscriptCommand or CoachCallStatusChangedEvent or CoachCallTranscriptionCompletedEvent or CoachCallProcessingCompletedEvent or CoachCallProcessingFailedEvent))
             throw new ArgumentException("Unsupported coach call outbox message.", nameof(Message));
         await using var Command = new NpgsqlCommand($"INSERT INTO {Table(Schema)} (message_id, message_type, payload, trace_parent) VALUES (@id, @type, @payload::jsonb, @trace)", Transaction.Connection, Transaction);
         Command.Parameters.AddWithValue("id", Guid.NewGuid());
@@ -54,6 +56,9 @@ public static class CoachCallOutbox
             var Payload = Reader.GetString(2);
             Message = Reader.GetString(1) switch
             {
+                nameof(ExecuteAgentTask) => JsonSerializer.Deserialize<ExecuteAgentTask>(Payload)!,
+                nameof(AgentTaskScheduled) => JsonSerializer.Deserialize<AgentTaskScheduled>(Payload)!,
+                nameof(NotificationRequested) => JsonSerializer.Deserialize<NotificationRequested>(Payload)!,
                 nameof(ProcessCoachTranscriptCommand) => JsonSerializer.Deserialize<ProcessCoachTranscriptCommand>(Payload)!,
                 nameof(CoachCallStatusChangedEvent) => JsonSerializer.Deserialize<CoachCallStatusChangedEvent>(Payload)!,
                 nameof(CoachCallTranscriptionCompletedEvent) => JsonSerializer.Deserialize<CoachCallTranscriptionCompletedEvent>(Payload)!,
@@ -81,6 +86,12 @@ public static class CoachCallOutbox
 
     public static async Task DeliverAsync(IBus Bus, Guid Id, object Message, CancellationToken CancellationToken)
     {
+        if (Message is ExecuteAgentTask Task)
+        {
+            var Endpoint = await Bus.GetSendEndpoint(new Uri($"queue:{MessagingEndpointNames.AgentTaskExecutor}"));
+            await Endpoint.Send(Task, Context => Context.MessageId = Id, CancellationToken);
+            return;
+        }
         if (Message is ProcessCoachTranscriptCommand Command)
         {
             var Endpoint = await Bus.GetSendEndpoint(new Uri($"queue:{MessagingEndpointNames.CoachCallProcessing}"));

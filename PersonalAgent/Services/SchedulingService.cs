@@ -4,7 +4,7 @@ using PersonalAgent.Models;
 
 namespace PersonalAgent.Services;
 
-internal class SchedulingService(IBus bus, ILogger<SchedulingService> logger)
+internal class SchedulingService(IBus bus, ILogger<SchedulingService> logger, ScheduledJobStore? jobs = null, ScheduledJobAuthorization? authorization = null)
 {
     public async Task<ScheduleResult> ScheduleNotificationAsync(ScheduleNotificationRequest request, CancellationToken cancellationToken = default)
     {
@@ -37,30 +37,28 @@ internal class SchedulingService(IBus bus, ILogger<SchedulingService> logger)
         return new ScheduleResult(notificationId, executeAtUtc, correlationId, executeAtUtc <= DateTimeOffset.UtcNow ? "ScheduledImmediate" : "ScheduledDelayed");
     }
 
-    public async Task<ScheduleResult> ScheduleAgentTaskAsync(ScheduleAgentTaskRequest request, CancellationToken cancellationToken = default)
+    public async Task<ScheduleResult> ScheduleAgentTaskAsync(ScheduleAgentTaskRequest request, AgentAccessContext access, CancellationToken cancellationToken = default)
     {
+        if (jobs is null || authorization is null) throw new InvalidOperationException("Scheduled job storage is unavailable.");
+        var subject = ScheduledJobStore.Subject(request.TenantId, request.UserId);
+        var current = await authorization.ResolveAsync(access.ActorId, access.Email, subject, cancellationToken);
+        if (current is null || current.Role != access.Role || !string.Equals(subject, access.SubjectProfileId, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("Current scheduling access is required.");
         var executeAtUtc = SchedulingTimeParser.ResolveExecuteAtUtc(request.Delay, request.ExecuteAt, request.When, request.TimeZoneId, DateTimeOffset.UtcNow);
         var correlationId = request.CorrelationId ?? Guid.NewGuid();
         var taskId = Guid.NewGuid();
 
-        var payload = new AgentTaskScheduled
-        {
-            TaskId = taskId,
-            TenantId = request.TenantId.Trim(),
-            UserId = request.UserId.Trim(),
-            CorrelationId = correlationId,
-            RequestedAtUtc = DateTimeOffset.UtcNow,
-            ExecuteAtUtc = executeAtUtc,
-            Instruction = request.Instruction.Trim(),
-            NotifyOnCompletion = request.NotifyOnCompletion
-        };
-
-        await bus.Publish(payload, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var job = new ScheduledJob(taskId, access.ActorId, access.Email, subject, request.Instruction.Trim(), now,
+            executeAtUtc, "Scheduled", null, access.SessionId, null, request.NotifyOnCompletion, correlationId, 0, now);
+        if (await authorization.ForExecutionAsync(job, cancellationToken) is null)
+            throw new UnauthorizedAccessException("Current scheduling permission is required.");
+        await jobs.CreateAsync(job, cancellationToken);
         logger.LogInformation(
             "Published AgentTaskScheduled {TaskId} for tenant {TenantId}, user {UserId}, executeAtUtc {ExecuteAtUtc}",
             taskId,
-            payload.TenantId,
-            payload.UserId,
+            request.TenantId,
+            request.UserId,
             executeAtUtc);
 
         return new ScheduleResult(taskId, executeAtUtc, correlationId, executeAtUtc <= DateTimeOffset.UtcNow ? "ScheduledImmediate" : "ScheduledDelayed");
