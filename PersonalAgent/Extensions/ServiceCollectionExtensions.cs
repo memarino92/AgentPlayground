@@ -122,6 +122,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IScheduledActorPolicy, DatabaseScheduledActorPolicy>();
         services.AddSingleton<ScheduledJobAuthorization>();
         services.AddSingleton<IScheduledJobRunner, ScheduledJobRunner>();
+        services.AddSingleton<IScheduledNotificationSender, ScheduledNotificationSender>();
         services.AddSingleton<ScheduledJobExecutionService>();
         services.AddHostedService<ScheduledJobReconciler>();
         services.AddSingleton<TavilyMcpToolProvider>();

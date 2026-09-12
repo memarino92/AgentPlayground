@@ -35,7 +35,7 @@ internal sealed class ScheduledJobRunner(IAgentSessionStore Sessions, IChatModel
 
 internal sealed class ScheduledJobExecutionService(
     ScheduledJobStore Store, ScheduledJobAuthorization Authorization, IScheduledJobRunner Runner,
-    ILogger<ScheduledJobExecutionService> Logger)
+    ILogger<ScheduledJobExecutionService> Logger, IScheduledNotificationSender? Notifications = null)
 {
     public async Task<ScheduledJobExecutionResponse> ExecuteAsync(ExecuteAgentTask Delivery, CancellationToken Token)
     {
@@ -70,10 +70,21 @@ internal sealed class ScheduledJobExecutionService(
                 if (Access is null) return await FinishAsync("Blocked", "The scheduler no longer has permission to run this job.");
                 if (WasRunning)
                 {
+                    if (Job.JobType == "Notification") return await FinishAsync("NeedsReview", "Notification delivery was interrupted. A push may have been sent; automatic replay is disabled.");
                     var Recovered = Job.SessionId is not null ? await Runner.RecoverAsync(Guid.Parse(Job.SessionId), Token) : null;
                     return Recovered is not null
                         ? await FinishAsync("Completed", Recovered)
                         : await FinishAsync("NeedsReview", "Execution was interrupted. Tool effects may have occurred; this job will not be repeated automatically.");
+                }
+                if (Job.JobType == "Notification")
+                {
+                    if (Notifications is null) throw new InvalidOperationException("Notification delivery is unavailable.");
+                    if (Job.Notification is null) return await FinishAsync("Failed", "The stored notification payload is missing.");
+                    Job = Job with { Status = "Running", UpdatedAt = DateTimeOffset.UtcNow };
+                    await Store.SaveAsync(Connection, Job, false, false, false, Token);
+                    WasRunning = true;
+                    var DeliveryResult = await Notifications.SendAsync(Job, Token);
+                    return await FinishAsync(DeliveryResult.Status, DeliveryResult.Summary ?? "Notification delivery finished.");
                 }
                 // A deterministic conversation identity survives a failure between session creation and job update.
                 var SessionId = Job.TaskId;
@@ -97,6 +108,7 @@ internal sealed class ScheduledJobExecutionService(
                 Logger.LogWarning(Exception, "Scheduled job {TaskId} interrupted; running={Running}", Job.TaskId, WasRunning);
                 if (WasRunning)
                 {
+                    if (Job.JobType == "Notification") return await FinishAsync("NeedsReview", "Notification delivery was interrupted. A push may have been sent; automatic replay is disabled.");
                     var Recovered = Job.SessionId is not null ? await Runner.RecoverAsync(Guid.Parse(Job.SessionId), Token) : null;
                     return Recovered is not null ? await FinishAsync("Completed", Recovered)
                         : await FinishAsync("NeedsReview", "Execution was interrupted. Tool effects may have occurred; automatic replay is disabled.");

@@ -223,6 +223,19 @@ public class PersonalAgentEndpointsTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Theory]
+    [InlineData(false, HttpStatusCode.Unauthorized)]
+    [InlineData(true, HttpStatusCode.Forbidden)]
+    public async Task ScheduleNotificationRequiresSignedActorAndOwnSubject(bool Signed, HttpStatusCode Expected)
+    {
+        await using var app = await BuildAppAsync(addSignedActor: Signed);
+        var response = await app.GetTestClient().PostAsJsonAsync("/api/schedule/notifications", new
+        {
+            tenantId = "default", userId = "someone-else", title = "Reminder", body = "Body", delay = "PT5M"
+        });
+        response.StatusCode.Should().Be(Expected);
+    }
+
     [Fact]
     public async Task ScheduleNotification_ReturnsBadRequest_WhenMultipleTimingInputsProvided()
     {
@@ -387,7 +400,7 @@ public class PersonalAgentEndpointsTests
         var eventService = app.Services.GetRequiredService<AgentEventService>();
 
         var result = await eventService.ScheduleNotificationToolAsync(
-            profileId: "test-user",
+            access: new AgentAccessContext("test-user", "Owner", "test-user"),
             title: "Test",
             body: "Hello");
 
@@ -401,7 +414,7 @@ public class PersonalAgentEndpointsTests
         var eventService = app.Services.GetRequiredService<AgentEventService>();
 
         var result = await eventService.ScheduleNotificationToolAsync(
-            profileId: "test-user",
+            access: new AgentAccessContext("test-user", "Owner", "test-user"),
             title: "Test",
             body: "Hello",
             delay: "PT5M",
@@ -417,7 +430,7 @@ public class PersonalAgentEndpointsTests
         var eventService = app.Services.GetRequiredService<AgentEventService>();
 
         var result = await eventService.ScheduleNotificationToolAsync(
-            profileId: "",
+            access: new AgentAccessContext("test-user", "Owner", ""),
             title: "Test",
             body: "Hello",
             delay: "PT5M");
@@ -432,7 +445,7 @@ public class PersonalAgentEndpointsTests
         var eventService = app.Services.GetRequiredService<AgentEventService>();
 
         var result = await eventService.ScheduleNotificationToolAsync(
-            profileId: "test-user",
+            access: new AgentAccessContext("test-user", "Owner", "test-user"),
             title: "",
             body: "Hello",
             delay: "PT5M");
@@ -447,7 +460,7 @@ public class PersonalAgentEndpointsTests
         var eventService = app.Services.GetRequiredService<AgentEventService>();
 
         var result = await eventService.ScheduleNotificationToolAsync(
-            profileId: "test-user",
+            access: new AgentAccessContext("test-user", "Owner", "test-user"),
             title: "Test",
             body: "",
             delay: "PT5M");

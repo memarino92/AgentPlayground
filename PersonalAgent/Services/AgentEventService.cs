@@ -51,8 +51,9 @@ internal class AgentEventService
         return $"Published mobile notification for profile {payload.ProfileId}";
     }
 
-    public async Task<string> ScheduleNotificationToolAsync(string profileId, string title, string body, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, CancellationToken cancellationToken = default)
+    public async Task<string> ScheduleNotificationToolAsync(AgentAccessContext access, string title, string body, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, CancellationToken cancellationToken = default)
     {
+        var profileId = access.SubjectProfileId;
         if (string.IsNullOrWhiteSpace(profileId)) return "Unable to schedule notification: profileId is required.";
         if (string.IsNullOrWhiteSpace(title)) return "Unable to schedule notification: title is required.";
         if (string.IsNullOrWhiteSpace(body)) return "Unable to schedule notification: body is required.";
@@ -70,7 +71,7 @@ internal class AgentEventService
             ExecuteAt = parsedExecuteAt,
             When = when,
             TimeZoneId = timeZoneId
-        }, cancellationToken);
+        }, access, cancellationToken);
 
         return $"Scheduled notification {result.Id} at {result.ExecuteAtUtc:O}";
     }

@@ -135,7 +135,7 @@ internal static class PersonalAgentEndpoints
             return Results.Ok(new { message = "Device token registered" });
         });
 
-        apiGroup.MapPost("/schedule/notifications", async (ScheduleNotificationRequest request, AgentService agentService) =>
+        apiGroup.MapPost("/schedule/notifications", async (HttpContext context, ScheduleNotificationRequest request, AgentService agentService, ICoachAssignmentStore assignments) =>
         {
             if (string.IsNullOrWhiteSpace(request.TenantId))
                 return Results.BadRequest(new { error = "TenantId is required" });
@@ -148,9 +148,15 @@ internal static class PersonalAgentEndpoints
             if (!HasExactlyOneTimingInput(request.Delay, request.ExecuteAt, request.When))
                 return Results.BadRequest(new { error = "Provide exactly one of Delay, ExecuteAt, or When" });
 
-            var result = await agentService.ScheduleNotificationAsync(request);
+            var access = await ResolveAccessAsync(context, ScheduledJobStore.Subject(request.TenantId, request.UserId), assignments);
+            if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            ScheduleResult result;
+            try { result = await agentService.ScheduleNotificationAsync(request, access, context.RequestAborted); }
+            catch (UnauthorizedAccessException) { return Results.StatusCode(StatusCodes.Status403Forbidden); }
+            catch (ArgumentException) { return Results.BadRequest(new { error = "Invalid notification or scheduling time." }); }
+            catch (FormatException) { return Results.BadRequest(new { error = "Invalid scheduling time." }); }
             return Results.Ok(new { id = result.Id, executeAtUtc = result.ExecuteAtUtc, correlationId = result.CorrelationId, status = result.Status });
-        });
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
         apiGroup.MapPost("/schedule/agent-tasks", async (HttpContext context, ScheduleAgentTaskRequest request, AgentService agentService, ICoachAssignmentStore assignments) =>
         {

@@ -21,11 +21,13 @@ namespace PersonalAgent.Tests.Endpoints;
 
 public class ScheduledJobEndpointsTests(PostgresVectorFixture Database) : IClassFixture<PostgresVectorFixture>
 {
-    [Fact]
-    public async Task ListDetailAndCancelEnforceCurrentSubjectAndActor()
+    [Theory]
+    [InlineData("AgentTask")]
+    [InlineData("Notification")]
+    public async Task ListDetailAndCancelEnforceCurrentSubjectAndActor(string JobType)
     {
         var (Store, _) = await new ScheduledJobTests(Database).SetupAsync();
-        var Own = ScheduledJobTests.Job();
+        var Own = ScheduledJobTests.Job() with { JobType = JobType, Notification = JobType == "Notification" ? new("Title", "Body", null) : null };
         var Coach = Own with { TaskId = Guid.NewGuid(), ActorId = "coach", ActorEmail = "coach@example.test", SourceSessionId = Guid.NewGuid().ToString() };
         await Store.CreateAsync(Own, default);
         await Store.CreateAsync(Coach, default);

@@ -16,6 +16,21 @@ namespace PersonalAgent.Web.Tests.Components;
 public sealed class ScheduledJobsTests : TestContext
 {
     [Fact]
+    public void NotificationShowsTypeBodyAndCancellationWithoutResultConversation()
+    {
+        using var Handler = new JobHandler { Notification = true };
+        Configure(Handler);
+        var Cut = RenderComponent<ScheduledJobs>();
+        Cut.WaitForAssertion(() => Cut.Find(".job-type").TextContent.Should().Be("Notification"));
+        Cut.Find(".job-card").Click();
+        Cut.WaitForAssertion(() => Cut.Find(".job-notification-body").TextContent.Should().Be("Remember the appointment"));
+        Cut.FindAll(".job-actions a").Should().BeEmpty();
+        Cut.Find(".job-cancel").Click();
+        Cut.WaitForAssertion(() => Cut.Find("[role=status]").TextContent.Should().Be("Job cancelled."));
+        Handler.Cancelled.Should().BeTrue();
+    }
+
+    [Fact]
     public void ShowsAttributionLocalTimeAndCancelOutcome()
     {
         using var Handler = new JobHandler();
@@ -81,6 +96,7 @@ public sealed class ScheduledJobsTests : TestContext
         public bool Cancelled;
         public bool Completed;
         public bool Fail;
+        public bool Notification;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Token)
         {
             Request.Headers.Contains("X-Agent-Signature").Should().BeTrue();
@@ -89,7 +105,11 @@ public sealed class ScheduledJobsTests : TestContext
             var Date = DateTimeOffset.Parse("2026-09-12T12:00:00Z");
             var Job = new ScheduledJobResponse(Id, "owner", null, "owner", "Synthetic job instruction", Date, Date,
                 Completed ? "Completed" : Cancelled ? "Cancelled" : "Scheduled", Completed ? "Synthetic result" : null,
-                null, Completed ? Id.ToString() : null, true, Id, 0, Date);
+                null, Completed ? Id.ToString() : null, true, Id, 0, Date)
+            {
+                JobType = Notification ? "Notification" : "AgentTask",
+                Notification = Notification ? new("Appointment", "Remember the appointment", null) : null
+            };
             object Body = Request.RequestUri!.AbsolutePath == "/api/jobs/" ? new[] { Job } : new ScheduledJobDetailResponse(Job, []);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(Body, Body.GetType()) });
         }

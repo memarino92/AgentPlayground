@@ -1,41 +1,35 @@
-using AgentPlayground.Contracts.Messaging.Events;
-using MassTransit;
 using PersonalAgent.Models;
 using PersonalAgent.Configuration;
 
 namespace PersonalAgent.Services;
 
-internal class SchedulingService(IBus bus, ILogger<SchedulingService> logger, ScheduledJobStore? jobs = null, ScheduledJobAuthorization? authorization = null)
+internal class SchedulingService(ILogger<SchedulingService> logger, ScheduledJobStore? jobs = null, ScheduledJobAuthorization? authorization = null)
 {
-    public async Task<ScheduleResult> ScheduleNotificationAsync(ScheduleNotificationRequest request, CancellationToken cancellationToken = default)
+    public async Task<ScheduleResult> ScheduleNotificationAsync(ScheduleNotificationRequest request, AgentAccessContext access, CancellationToken cancellationToken = default)
     {
-        var executeAtUtc = SchedulingTimeParser.ResolveExecuteAtUtc(request.Delay, request.ExecuteAt, request.When, request.TimeZoneId, DateTimeOffset.UtcNow);
-        var correlationId = request.CorrelationId ?? Guid.NewGuid();
-        var notificationId = Guid.NewGuid();
-
-        var payload = new NotificationRequested
+        if (jobs is null || authorization is null) throw new InvalidOperationException("Scheduled job storage is unavailable.");
+        if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Body)
+            || request.Title.Length > PersonalAgentConstants.MaxMessageLength || request.Body.Length > PersonalAgentConstants.MaxMessageLength)
+            throw new ArgumentException("The notification title or body is empty or too long.");
+        var subject = ScheduledJobStore.Subject(request.TenantId, request.UserId);
+        var current = await authorization.ResolveAsync(access.ActorId, access.Email, subject, cancellationToken);
+        if (current is null || current.Role != access.Role || !string.Equals(subject, access.SubjectProfileId, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("Current scheduling access is required.");
+        DateTimeOffset executeAtUtc;
+        try { executeAtUtc = SchedulingTimeParser.ResolveExecuteAtUtc(request.Delay, request.ExecuteAt, request.When, request.TimeZoneId, DateTimeOffset.UtcNow); }
+        catch (InvalidOperationException Exception) { throw new ArgumentException("Invalid scheduling time.", Exception); }
+        var now = DateTimeOffset.UtcNow;
+        var job = new ScheduledJob(Guid.NewGuid(), access.ActorId, access.Email, subject, request.Title.Trim(), now,
+            executeAtUtc, "Scheduled", null, access.SessionId, null, false, request.CorrelationId ?? Guid.NewGuid(), 0, now)
         {
-            NotificationId = notificationId,
-            TenantId = request.TenantId.Trim(),
-            UserId = request.UserId.Trim(),
-            CorrelationId = correlationId,
-            RequestedAtUtc = DateTimeOffset.UtcNow,
-            ExecuteAtUtc = executeAtUtc,
-            Title = request.Title.Trim(),
-            Body = request.Body.Trim(),
-            DeepLink = request.DeepLink,
-            Source = "Api"
+            JobType = "Notification",
+            Notification = new(request.Title.Trim(), request.Body.Trim(), request.DeepLink)
         };
-
-        await bus.Publish(payload, cancellationToken);
-        logger.LogInformation(
-            "Published NotificationRequested {NotificationId} for tenant {TenantId}, user {UserId}, executeAtUtc {ExecuteAtUtc}",
-            notificationId,
-            payload.TenantId,
-            payload.UserId,
-            executeAtUtc);
-
-        return new ScheduleResult(notificationId, executeAtUtc, correlationId, executeAtUtc <= DateTimeOffset.UtcNow ? "ScheduledImmediate" : "ScheduledDelayed");
+        if (await authorization.ForExecutionAsync(job, cancellationToken) is null)
+            throw new UnauthorizedAccessException("Current scheduling permission is required.");
+        await jobs.CreateAsync(job, cancellationToken);
+        logger.LogInformation("Persisted notification job {JobId} for subject {Subject} due {ExecuteAt}", job.TaskId, subject, executeAtUtc);
+        return new ScheduleResult(job.TaskId, executeAtUtc, job.CorrelationId, executeAtUtc <= now ? "ScheduledImmediate" : "ScheduledDelayed");
     }
 
     public async Task<ScheduleResult> ScheduleAgentTaskAsync(ScheduleAgentTaskRequest request, AgentAccessContext access, CancellationToken cancellationToken = default)

@@ -31,7 +31,7 @@ internal sealed class AgentToolRegistry(ITavilyMcpToolProvider TavilyProvider) :
             "Schedule a mobile notification for the current user using delay, absolute executeAt datetime, or natural when text like 'tonight'.",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,
             (Services, Access) => (string title, string body, string? delay, string? executeAt, string? when, string? timeZoneId, CancellationToken token) =>
-                Services.GetRequiredService<AgentEventService>().ScheduleNotificationToolAsync(Access.SubjectProfileId, title, body, delay, executeAt, when, timeZoneId, token)),
+                Services.GetRequiredService<AgentEventService>().ScheduleNotificationToolAsync(Access, title, body, delay, executeAt, when, timeZoneId, token)),
         Local(AgentToolKeys.ScheduleAgentTask, "Schedule agent task", "Scheduling",
             "Schedule a future agent task. Required: instruction and exactly one timing field (delay, executeAt, or when).",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,
