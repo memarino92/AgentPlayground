@@ -55,6 +55,12 @@
             {
                 <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" ContainerId="@MessageListContainerId" ProfileId="@profileId" />
 
+                @if (isReadOnly)
+                {
+                    <MudText Typo="Typo.body2">This conversation is the saved record of a scheduled job. Start a new chat for follow-up work.</MudText>
+                }
+                else
+                {
                 <ChatComposer CurrentMessage="@currentMessage"
                               CurrentMessageChanged="HandleCurrentMessageChanged"
                               SelectedModelId="@(selectedModelId ?? string.Empty)"
@@ -63,6 +69,7 @@
                               IsBusy="isBusy"
                               OnKeyDown="HandleKeyDown"
                               OnSendMessage="SendMessage" />
+                }
 
                 <div class="chat-panel__footer">
                     <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small">Session: @sessionId</MudChip>
@@ -103,6 +110,7 @@
     private Guid? nextBeforeSessionId;
     private bool hasMoreSessions;
     private bool shouldScrollToBottom;
+    private bool isReadOnly;
 
     private bool isBusy => isLoadingHistory || isSendingMessage || isCreatingSession;
     private string? activeModelDisplayName => availableModels.FirstOrDefault(model => model.Id == activeModelId)?.DisplayName ?? activeModelId;
@@ -139,7 +147,10 @@
             profileId = resolvedProfileId;
             await LoadModelsAsync();
             await LoadSessionsAsync();
-            await RestoreSessionAsync();
+            var query = QueryHelpers.ParseQuery(NavigationManager.ToAbsoluteUri(NavigationManager.Uri).Query);
+            if (query.TryGetValue("sessionId", out var requested) && Guid.TryParse(requested, out var requestedId))
+                await SelectSessionAsync(requestedId.ToString());
+            else await RestoreSessionAsync();
         }
         catch (Exception ex)
         {
@@ -243,6 +254,7 @@
         if (profileId is null) return;
 
         sessionId = selectedSessionId;
+        isReadOnly = false;
         isSessionDrawerOpen = false;
         currentMessage = string.Empty;
         errorMessage = null;
@@ -288,6 +300,7 @@
             }
 
             sessionId = history.SessionId;
+            isReadOnly = history.IsReadOnly;
             activeModelId = history.ModelId;
             selectedModelId = history.ModelId;
             messages = [.. history.Messages];
@@ -485,7 +498,10 @@
         if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email)) return null;
         actorId = $"google:{subject}";
         var assignments = await ApiClient.GetAssignedProfilesAsync(actorId, email);
-        profileId = assignments.FirstOrDefault();
+        var query = QueryHelpers.ParseQuery(NavigationManager.ToAbsoluteUri(NavigationManager.Uri).Query);
+        var requestedProfile = query.TryGetValue("profileId", out var value) ? value.ToString() : null;
+        profileId = requestedProfile is not null && assignments.Contains(requestedProfile, StringComparer.OrdinalIgnoreCase)
+            ? requestedProfile : assignments.FirstOrDefault();
         return profileId;
     }
 }
