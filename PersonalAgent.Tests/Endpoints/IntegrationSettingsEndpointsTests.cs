@@ -40,6 +40,15 @@ public sealed class IntegrationSettingsEndpointsTests
             ((int)response.StatusCode).Should().Be(Expected);
         }
         service.VerifyNoOtherCalls();
+        foreach (var (method, suffix) in new[] { (HttpMethod.Get, ""), (HttpMethod.Put, ""), (HttpMethod.Post, "/apply"), (HttpMethod.Post, "/reload") })
+        {
+            using var client = app.GetTestClient();
+            Sign(client, Actor, Role, InternalKey, ForgeSignature);
+            using var request = new HttpRequestMessage(method, "/api/admin/integrations/otel" + suffix);
+            if (method != HttpMethod.Get) request.Content = JsonContent.Create(new { expectedRevision = 0, values = new { }, revision = 1 });
+            using var response = await client.SendAsync(request);
+            ((int)response.StatusCode).Should().Be(Expected);
+        }
         foreach (var method in new[] { HttpMethod.Get, HttpMethod.Put, HttpMethod.Post })
         {
             using var client = app.GetTestClient();
@@ -75,6 +84,11 @@ public sealed class IntegrationSettingsEndpointsTests
         builder.WebHost.UseTestServer();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["IntegrationSettings:AdministratorIds"] = "admin" });
         builder.Services.AddSingleton(Service);
+        builder.Services.AddSingleton<IOtelSettingsStore>(new Mock<IOtelSettingsStore>(MockBehavior.Strict).Object);
+        builder.Services.AddSingleton<IOtelExporterFactory>(new Mock<IOtelExporterFactory>(MockBehavior.Strict).Object);
+        builder.Services.AddSingleton(new IntegrationHost("Test"));
+        builder.Services.AddSingleton<OtelRuntime>();
+        builder.Services.AddSingleton<OtelSettingsService>();
         builder.Services.AddSingleton(new DatabaseSettingsStore(new IntegrationDatabase("", "")));
         builder.Services.AddSingleton<DatabaseCredentialRuntime>();
         var app = builder.Build();

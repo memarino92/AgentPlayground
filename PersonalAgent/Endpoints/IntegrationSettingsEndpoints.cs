@@ -27,6 +27,18 @@ internal static class IntegrationSettingsEndpoints
             }))
             .WithName("SaveDatabaseSettings").WithSummary("Save existing settings atomically; affected services require restart");
 
+        var otel = Api.MapGroup("/admin/integrations/otel")
+            .AddEndpointFilter(new SignedActorFilter(Security, ownerOnly: true))
+            .AddEndpointFilter(new IntegrationAdministratorFilter(Configuration));
+        otel.MapGet("", ([Microsoft.AspNetCore.Mvc.FromServices] OtelSettingsService Service, CancellationToken CancellationToken) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Service.GetAsync(CancellationToken))));
+        otel.MapPut("", (SaveIntegrationRequest Request, HttpContext Context, [Microsoft.AspNetCore.Mvc.FromServices] OtelSettingsService Service, CancellationToken CancellationToken) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Service.SaveAsync(Request, SignedActorFilter.Get(Context).ActorId, CancellationToken))));
+        otel.MapPost("/apply", (ApplyIntegrationRequest Request, HttpContext Context, [Microsoft.AspNetCore.Mvc.FromServices] OtelSettingsService Service, CancellationToken CancellationToken) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Service.ApplyAsync(Request.Revision, SignedActorFilter.Get(Context).ActorId, CancellationToken))));
+        otel.MapPost("/reload", ([Microsoft.AspNetCore.Mvc.FromServices] OtelSettingsService Service, CancellationToken CancellationToken) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Service.ReloadAsync(CancellationToken))));
+
         var group = Api.MapGroup("/admin/integrations/sentry")
             .AddEndpointFilter(new SignedActorFilter(Security, ownerOnly: true))
             .AddEndpointFilter(new IntegrationAdministratorFilter(Configuration));

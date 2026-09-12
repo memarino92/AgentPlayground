@@ -24,7 +24,11 @@ internal class WorkJournalService(
         return "Work journal sync command has been published and is running in the background.";
     }
 
-    public async Task<string> SearchWorkJournalAsync(string query, CancellationToken cancellationToken = default)
+    public Task<string> SearchWorkJournalAsync(string query, CancellationToken cancellationToken = default)
+        => AgentPlayground.Integrations.AiTelemetry.RunAsync("journal.retrieve", "RETRIEVER",
+            () => SearchWorkJournalCoreAsync(query, cancellationToken));
+
+    private async Task<string> SearchWorkJournalCoreAsync(string query, CancellationToken cancellationToken)
     {
         logger.LogInformation("Searching work journal for: {Query}", query);
         

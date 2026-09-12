@@ -21,6 +21,13 @@ internal sealed class LoggingAIFunction(
     public override JsonSerializerOptions JsonSerializerOptions => innerFunction.JsonSerializerOptions;
 
     protected override async ValueTask<object?> InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+        => await AgentPlayground.Integrations.AiTelemetry.RunAsync("tool.invoke", "TOOL", async () =>
+        {
+            Activity.Current?.SetTag("tool.name", Name);
+            return await InvokeToolAsync(arguments, cancellationToken);
+        });
+
+    private async Task<object?> InvokeToolAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         if (!await toolAccessService.IsAllowedAsync(access.Role, toolKey, cancellationToken))

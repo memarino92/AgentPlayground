@@ -18,7 +18,8 @@ public sealed class IntegrationLoggingProvider(IntegrationRuntime Runtime) : ILo
             && !Category.StartsWith("Sentry", StringComparison.Ordinal) && !Category.StartsWith("AgentPlayground.Integrations", StringComparison.Ordinal);
         public void Log<TState>(LogLevel LogLevel, EventId EventId, TState State, Exception? Exception, Func<TState, Exception?, string> Formatter)
         {
-            if (IsEnabled(LogLevel)) Runtime.Capture(new(Category, EventId.Id, Exception?.GetType().FullName, Activity.Current?.TraceId.ToString()));
+            if (IsEnabled(LogLevel)) Runtime.Capture(new(Category, EventId.Id, Exception?.GetType().FullName,
+                Activity.Current?.TraceId.ToString(), SpanId: Activity.Current?.SpanId.ToString()));
         }
     }
 }

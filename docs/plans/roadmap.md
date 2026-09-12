@@ -100,7 +100,7 @@ Recorded 2026-09-10. Expand the scheduling authorization follow-up into a bounde
 
 **Done when:** tests demonstrate authorized execution, Coach restrictions, cross-user rejection, permission revocation between scheduling and execution, forged context rejection, and safe handling of legacy schedules. Denied runs have an inspectable outcome and perform no unauthorized tool action; redelivery cannot bypass the checks.
 
-## Future plan: Sentry and OpenTelemetry/OpenInference observability — proposed, not implemented
+## Sentry and OpenTelemetry/OpenInference observability — service instrumentation implemented
 
 Recorded 2026-09-10 at the maintainer's request. Make application failures and agent execution inspectable across Web, API, Worker, and durable messaging, with useful evidence for the Learning Lab.
 
@@ -338,3 +338,12 @@ These are possible selections, not assigned priorities. Parallel proposals with 
 - Local validation on 2026-09-10: 90 API, 16 Web, and 19 Worker tests passed; the final API suite includes 19 integration-specific tests after migration and exporter-failure refinements. The synthetic application suite passed 22 checks, and the integration suite passed 13 checks including a real Worker process restart and three-service revision reconciliation. Browser testing verified form save/apply behavior. CI now runs the integration smoke suite; its remote result is not recorded.
 - Follow-up on 2026-09-11: `/admin/settings` edits all existing database rows, including custom keys and inactive settings. Secrets remain masked, changed rows save atomically, external-write conflicts reject the batch, and every legacy setting is explicitly startup-bound. Eight focused API tests and all 20 Web tests passed; the rebuilt synthetic preview lists the existing settings. See [decision 0011](../decisions/0011-existing-settings-editor.md).
 - This delivers the first `CONFIG-01`/`OPS-01` slice and the existing-settings editor. History/revert UI, typed validation and reload for legacy consumers, new-row management, broader schema migration ownership, OpenTelemetry/OpenInference, and alerts remain separate work. See [decision 0010](../decisions/0010-runtime-integration-settings.md) and [operations](../runbooks/integration-settings.md).
+
+### Observability implementation — 2026-09-12
+
+OPS-02/03 now have shared API/Web/Worker OpenTelemetry HTTP, Npgsql and MassTransit tracing, runtime/messaging metrics, metadata-only correlated logs, explicit OpenInference AI spans and available chat usage. OPS-01 retains its working live Sentry settings and now includes native trace/span correlation. The custom coaching outbox persists W3C traceparent for resumed delivery and retry. Sensitive trace/log data is removed before export; an OTLP endpoint explicitly enables export. See [decision 0019](../decisions/0019-observability.md) and [setup and coverage](../runbooks/observability.md).
+
+Local validation passed 179 API, 40 Web, 30 Worker and 23 Contracts tests (272 total), including redaction, missing usage, exporter outage, Sentry correlation and durable outbox retry. Deployed collector ingestion, a complete synthetic trace across all running services, alert thresholds/dashboard delivery, and native/mobile/browser instrumentation remain open. This does not mark the full observability acceptance criteria complete.
+### Database-first live telemetry settings — 2026-09-12
+
+OpenTelemetry now uses isolated encrypted database revisions and the same administrator save/apply/reload flow as Sentry. Export enablement, per-signal switches, collector URL/protocol, secret headers, sample rate and timeout reconcile live across API/Web/Worker. This supersedes the initial environment-configured export approach above. No new environment variables were introduced; AGENTS.md records the maintainer's database-first preference. Export remains off until configured. Railway logs can remain the normal log viewer; external trace ingestion is optional and no backend has been deployed. See [decision 0020](../decisions/0020-live-database-telemetry-settings.md).

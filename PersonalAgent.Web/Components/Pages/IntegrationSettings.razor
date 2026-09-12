@@ -1,7 +1,7 @@
 @using PersonalAgent.Web.Components.Integrations
 
 <div class="integration-settings">
-    <p>Sentry changes can be applied live to API, Web and Worker.</p>
+    <p>@(OpenTelemetry ? "OpenTelemetry" : "Sentry") changes can be applied live to API, Web and Worker.</p>
     @if (Error is not null) { <p role="alert" class="error">@Error</p> }
     @if (Notice is not null) { <p role="status">@Notice</p> }
     @if (Settings is null)
@@ -11,12 +11,19 @@
     }
     else
     {
-        <SentrySettingsForm @key="FormGeneration" Settings="Settings" Busy="Busy" OnSave="SaveAsync" />
+        @if (OpenTelemetry)
+        {
+            <OtelSettingsForm @key="FormGeneration" Settings="Settings" Busy="Busy" OnSave="SaveAsync" />
+        }
+        else
+        {
+            <SentrySettingsForm @key="FormGeneration" Settings="Settings" Busy="Busy" OnSave="SaveAsync" />
+        }
         <div class="actions">
             <button disabled="@(Busy || Settings.SavedRevision == 0 || Settings.SavedRevision == Settings.ActiveRevision)" @onclick="ApplyAsync">Apply saved revision</button>
             <button disabled="@Busy" @onclick="RefreshAsync">Refresh / discard unsaved edits</button>
             <button disabled="@Busy" @onclick="ReloadAsync">Reload active settings</button>
-            <button disabled="@(Busy || Settings.ActiveRevision == 0)" @onclick="TestAsync">Send test event from API</button>
+            @if (!OpenTelemetry) { <button disabled="@(Busy || Settings.ActiveRevision == 0)" @onclick="TestAsync">Send test event from API</button> }
         </div>
         <IntegrationServiceStatus Settings="Settings" />
         @if (TestResult is not null)

@@ -9,7 +9,7 @@ namespace PersonalAgent.Services;
 internal sealed class OpenAiAgentChatClientFactory(IOptions<ApiKeyOptions> Options) : IAgentChatClientFactory
 {
     private readonly OpenAiClientProvider Clients = new(Options);
-    public IChatClient Create(string ModelId) => ApplyCompatibility(Clients.Current.GetChatClient(ModelId).AsIChatClient(), ModelId);
+    public IChatClient Create(string ModelId) => new ObservableChatClient(ApplyCompatibility(Clients.Current.GetChatClient(ModelId).AsIChatClient(), ModelId), ModelId);
 
     internal static IChatClient ApplyCompatibility(IChatClient Client, string ModelId)
         => ModelId == "gpt-5.6-luna" ? new ConfigureOptionsChatClient(Client, Options =>

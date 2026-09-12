@@ -7,6 +7,7 @@ namespace PersonalAgent.Web.Components.Pages;
 
 public partial class IntegrationSettings : IAsyncDisposable
 {
+    [Parameter] public bool OpenTelemetry { get; set; }
     [Inject] private PersonalAgentClient ApiClient { get; set; } = default!;
     private readonly CancellationTokenSource Lifetime = new();
     private IntegrationSettingsResponse? Settings;
@@ -20,27 +21,27 @@ public partial class IntegrationSettings : IAsyncDisposable
 
     private Task RefreshAsync() => RunAsync(async () =>
     {
-        Settings = await ApiClient.GetIntegrationSettingsAsync(Lifetime.Token);
+        Settings = await (OpenTelemetry ? ApiClient.GetOtelSettingsAsync(Lifetime.Token) : ApiClient.GetIntegrationSettingsAsync(Lifetime.Token));
         FormGeneration++;
     });
 
     private Task SaveAsync(SaveIntegrationRequest Request) => RunAsync(async () =>
     {
-        Settings = await ApiClient.SaveIntegrationSettingsAsync(Request, Lifetime.Token);
+        Settings = await (OpenTelemetry ? ApiClient.SaveOtelSettingsAsync(Request, Lifetime.Token) : ApiClient.SaveIntegrationSettingsAsync(Request, Lifetime.Token));
         Notice = "Validated and saved. Apply this revision when ready.";
         TestResult = null;
     });
 
     private Task ApplyAsync() => RunAsync(async () =>
     {
-        Settings = await ApiClient.ApplyIntegrationSettingsAsync(Settings!.SavedRevision, Lifetime.Token);
+        Settings = await (OpenTelemetry ? ApiClient.ApplyOtelSettingsAsync(Settings!.SavedRevision, Lifetime.Token) : ApiClient.ApplyIntegrationSettingsAsync(Settings!.SavedRevision, Lifetime.Token));
         Notice = "Revision selected for application. Check each service below; refresh after 15 seconds.";
         TestResult = null;
     });
 
     private Task ReloadAsync() => RunAsync(async () =>
     {
-        Settings = await ApiClient.ReloadIntegrationSettingsAsync(Lifetime.Token);
+        Settings = await (OpenTelemetry ? ApiClient.ReloadOtelSettingsAsync(Lifetime.Token) : ApiClient.ReloadIntegrationSettingsAsync(Lifetime.Token));
         Notice = "API reload attempted. Other services reconcile automatically.";
     });
 

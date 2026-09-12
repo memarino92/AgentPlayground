@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AgentPlayground.Contracts.Commands;
 using AgentPlayground.Contracts.Events;
 using AgentPlayground.Contracts.Messaging;
@@ -23,6 +24,37 @@ namespace PersonalAgent.Worker.Tests.Consumers;
 
 public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : IClassFixture<WorkerPostgresVectorFixture>
 {
+    [Fact]
+    public async Task Outbox_RetryAfterOriginEnds_RetainsTraceParent()
+    {
+        var State = await SetupAsync();
+        State.Provider.Complete = true;
+        using var Listener = new ActivityListener
+        {
+            ShouldListenTo = Source => Source.Name == CoachCallOutbox.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> Options) => ActivitySamplingResult.AllDataAndRecorded
+        };
+        ActivitySource.AddActivityListener(Listener);
+        var Origin = new Activity("synthetic-origin").Start();
+        await Transcribe(State);
+        Origin.Stop();
+        ActivityContext First = default;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CoachCallOutbox.DispatchOneAsync(Database.ConnectionString,
+            State.Schema, (_, _, _) =>
+            {
+                First = Activity.Current!.Context;
+                Activity.Current.ParentSpanId.Should().Be(Origin.SpanId);
+                throw new InvalidOperationException("synthetic delivery outage");
+            }, default));
+        await CoachCallOutbox.DispatchOneAsync(Database.ConnectionString, State.Schema, (_, _, _) =>
+        {
+            Activity.Current!.TraceId.Should().Be(Origin.TraceId);
+            Activity.Current.ParentSpanId.Should().Be(Origin.SpanId);
+            Activity.Current.SpanId.Should().NotBe(First.SpanId);
+            return Task.CompletedTask;
+        }, default);
+    }
+
     [Fact]
     public async Task StatusTransitions_RollBackWithState_AndPublishOncePerTransition()
     {

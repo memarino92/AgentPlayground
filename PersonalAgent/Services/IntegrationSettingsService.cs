@@ -50,3 +50,35 @@ internal sealed class IntegrationSettingsService(IIntegrationSettingsStore Store
         return new(id ?? "", id is null ? "Not queued: reporting is disabled, sampled out, or unavailable." : "Queued by API. Confirm receipt in Sentry; queueing does not verify ingestion.");
     }
 }
+
+internal sealed class OtelSettingsService(IOtelSettingsStore Store, OtelRuntime Runtime)
+{
+    public async Task<IntegrationSettingsResponse> GetAsync(CancellationToken CancellationToken)
+    {
+        var revision = await Store.ReadAsync(false, CancellationToken);
+        return new("otel", revision.SavedRevision, revision.ActiveRevision, OtelSettings.Fields,
+            revision.Values.Where(Pair => Pair.Key != "Headers").ToDictionary(),
+            string.IsNullOrEmpty(revision.Values.GetValueOrDefault("Headers")) ? [] : ["Headers"],
+            await Store.InstancesAsync(CancellationToken));
+    }
+
+    public async Task<IntegrationSettingsResponse> SaveAsync(SaveIntegrationRequest Request, string Actor, CancellationToken CancellationToken)
+    {
+        if (Request.Values is null || Request.Values.Count > 20 || Request.Values.Any(Pair => Pair.Value?.Length > 2048))
+            throw new IntegrationValidationException(new() { ["Values"] = ["Provide supported settings with values no longer than 2048 characters."] });
+        await Store.SaveAsync(Request, Actor, CancellationToken);
+        return await GetAsync(CancellationToken);
+    }
+
+    public async Task<IntegrationSettingsResponse> ApplyAsync(long Revision, string Actor, CancellationToken CancellationToken)
+    {
+        await Store.ApplyAsync(Revision, Actor, CancellationToken);
+        return await ReloadAsync(CancellationToken);
+    }
+
+    public async Task<IntegrationSettingsResponse> ReloadAsync(CancellationToken CancellationToken)
+    {
+        await Runtime.ReloadAsync(CancellationToken);
+        return await GetAsync(CancellationToken);
+    }
+}

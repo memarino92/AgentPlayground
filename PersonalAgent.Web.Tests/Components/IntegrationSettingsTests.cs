@@ -9,6 +9,31 @@ namespace PersonalAgent.Web.Tests.Components;
 public sealed class IntegrationSettingsTests : TestContext
 {
     [Fact]
+    public void Otel_KeepHeadersAndSelectiveSignals_SaveWithoutExposingSecrets()
+    {
+        var values = OtelSettings.Defaults();
+        values["Enabled"] = "true";
+        values["Endpoint"] = "https://collector.example";
+        values.Remove("Headers");
+        SaveIntegrationRequest? saved = null;
+        var cut = RenderComponent<OtelSettingsForm>(Parameters => Parameters
+            .Add(Component => Component.Settings, new("otel", 3, 2, OtelSettings.Fields, values, ["Headers"], []))
+            .Add(Component => Component.OnSave, Request => saved = Request));
+        cut.Find("#otel-rate").Change("0.1");
+        cut.Find("form").Submit();
+        saved.Should().NotBeNull();
+        saved!.ExpectedRevision.Should().Be(3);
+        saved.Values.Should().NotContainKey("Headers");
+        saved.Values["LogsEnabled"].Should().Be("false");
+        saved.Values["TracesEnabled"].Should().Be("true");
+        cut.Find("#otel-endpoint").Change("http://collector.example");
+        saved = null;
+        cut.Find("form").Submit();
+        saved.Should().BeNull();
+        cut.Markup.Should().Contain("Use HTTPS");
+    }
+
+    [Fact]
     public void KeepSecret_DoesNotSendOrRevealIt()
     {
         SaveIntegrationRequest? saved = null;

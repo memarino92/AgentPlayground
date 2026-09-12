@@ -1,7 +1,7 @@
 @using AgentPlayground.Integrations
 
 <section class="status-card">
-    <h2>Sentry reporting status</h2>
+    <h2>@(Settings.Id == "otel" ? "OpenTelemetry export status" : "Sentry reporting status")</h2>
     <p>Saved revision: @Settings.SavedRevision · Active revision: @Settings.ActiveRevision</p>
     <p>Services pick up applied settings within 15 seconds. Refresh to check their progress.</p>
     <div class="status-table">
@@ -49,7 +49,7 @@
     private string Status(IntegrationInstanceResponse Instance) => !IsRecent(Instance) ? "Offline or not reporting"
         : Instance.Status.StartsWith("Apply failed", StringComparison.Ordinal) ? "Update failed — previous settings retained"
         : Instance.Revision != Settings.ActiveRevision ? "Update pending"
-        : Instance.Status == "Disabled" ? "Reporting disabled" : "Up to date";
+        : Instance.Status.StartsWith("Disabled", StringComparison.Ordinal) ? "Reporting disabled" : "Up to date";
     private string Summary(IntegrationInstanceResponse[] All, IntegrationInstanceResponse[] Running)
     {
         if (All.Length == 0) return "Not yet seen";

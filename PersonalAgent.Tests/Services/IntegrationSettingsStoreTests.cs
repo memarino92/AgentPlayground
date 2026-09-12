@@ -9,6 +9,41 @@ namespace PersonalAgent.Tests.Services;
 public sealed class IntegrationSettingsStoreTests(PostgresVectorFixture Fixture) : IClassFixture<PostgresVectorFixture>
 {
     [Fact]
+    public async Task Otel_RevisionsAreIsolatedEncryptedMaskedAndLiveAcrossServices()
+    {
+        var database = new IntegrationDatabase(Fixture.ConnectionString, Convert.ToBase64String(new byte[32]));
+        await database.MigrateAsync(default);
+        var store = new OtelSettingsStore(database);
+        var initial = await store.ReadAsync(false, default);
+        var values = OtelRuntimeTests.Values();
+        values["Headers"] = "authorization=private-collector-secret";
+        var revision = await store.SaveAsync(new(initial.SavedRevision, values), "admin", default);
+        var factory = new OtelRuntimeTests.FakeFactory();
+        using var api = new OtelRuntime(store, factory, new("Api"));
+        var service = new OtelSettingsService(store, api);
+        var response = await service.GetAsync(default);
+        response.Values.Should().NotContainKey("Headers");
+        response.ConfiguredSecrets.Should().Contain("Headers");
+        await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var query = new NpgsqlCommand("SELECT encrypted_values FROM app.integration_revisions WHERE revision=@revision", connection);
+        query.Parameters.AddWithValue("revision", revision);
+        ((string)(await query.ExecuteScalarAsync())!).Should().NotContain("private-collector-secret");
+        await service.ApplyAsync(revision, "admin", default);
+        using var web = new OtelRuntime(new OtelSettingsStore(database), factory, new("Web"));
+        using var worker = new OtelRuntime(new OtelSettingsStore(database), factory, new("Worker"));
+        await web.ReloadAsync(default);
+        await worker.ReloadAsync(default);
+        (await store.InstancesAsync(default)).Should().HaveCount(3).And.OnlyContain(Instance => Instance.Revision == revision);
+        var next = await store.SaveAsync(new(revision, new() { ["SampleRate"] = "0.5" }), "admin", default);
+        (await store.ReadAsync(false, default)).Values["Headers"].Should().Be(values["Headers"]);
+        await Assert.ThrowsAsync<IntegrationConflictException>(() => store.ApplyAsync(revision, "admin", default));
+        await store.ApplyAsync(next, "admin", default);
+        await api.ReloadAsync(default);
+        factory.Bundles.Should().HaveCount(4);
+    }
+
+    [Fact]
     public async Task Revisions_EncryptSecrets_RejectStaleEdits_AndApplyOnlyReviewedRevision()
     {
         var database = new IntegrationDatabase(Fixture.ConnectionString, Convert.ToBase64String(new byte[32]));

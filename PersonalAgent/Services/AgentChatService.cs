@@ -100,7 +100,11 @@ internal class AgentChatService
     public async Task<string?> SendMessageAsync(string sessionId, string profileId, string message)
         => await SendMessageAsync(sessionId, new AgentAccessContext(profileId, AgentRoles.Owner, profileId), message);
 
-    public async Task<string?> SendMessageAsync(string sessionId, AgentAccessContext access, string message, CancellationToken cancellationToken = default)
+    public Task<string?> SendMessageAsync(string sessionId, AgentAccessContext access, string message, CancellationToken cancellationToken = default)
+        => AgentPlayground.Integrations.AiTelemetry.RunAsync("agent.run", "AGENT",
+            () => SendMessageCoreAsync(sessionId, access, message, cancellationToken));
+
+    private async Task<string?> SendMessageCoreAsync(string sessionId, AgentAccessContext access, string message, CancellationToken cancellationToken)
     {
         ValidateAccess(access);
         if (!Guid.TryParse(sessionId, out var parsedSessionId))

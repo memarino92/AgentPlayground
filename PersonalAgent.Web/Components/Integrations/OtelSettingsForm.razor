@@ -1,0 +1,61 @@
+@using AgentPlayground.Integrations
+
+<section class="settings-card">
+    <h2>OpenTelemetry settings</h2>
+    <p>Export traces, metrics and redacted logs from API, Web and Worker. These database settings apply live; deployment environment variables do not override them.</p>
+    <EditForm Model="Model" OnValidSubmit="SaveAsync" FormName="otel-settings">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <fieldset disabled="@Busy">
+            <label><InputCheckbox @bind-Value="Model.Enabled" /> Enable telemetry export</label>
+            <label><InputCheckbox @bind-Value="Model.TracesEnabled" /> Export traces</label>
+            <label><InputCheckbox @bind-Value="Model.MetricsEnabled" /> Export metrics</label>
+            <label><InputCheckbox @bind-Value="Model.LogsEnabled" /> Export logs</label>
+            <label for="otel-endpoint">Collector base URL</label>
+            <InputText id="otel-endpoint" @bind-Value="Model.Endpoint" />
+            <label for="otel-protocol">Protocol</label>
+            <InputSelect id="otel-protocol" @bind-Value="Model.Protocol">
+                <option value="grpc">gRPC</option><option value="http/protobuf">HTTP/protobuf</option>
+            </InputSelect>
+            <p>For HTTP/protobuf, signal paths are appended to this base URL. Use HTTPS for authenticated collectors.</p>
+            <label for="otel-rate">Trace sample rate (0–1)</label>
+            <InputNumber id="otel-rate" @bind-Value="Model.SampleRate" min="0" max="1" step="0.1" />
+            <label for="otel-timeout">Export timeout (milliseconds)</label>
+            <InputNumber id="otel-timeout" @bind-Value="Model.TimeoutMilliseconds" min="100" max="10000" />
+            <label for="otel-secret-action">Authentication headers — @(Model.HeadersConfigured ? "configured" : "missing")</label>
+            <InputSelect id="otel-secret-action" @bind-Value="Model.HeadersAction" @bind-Value:after="ClearUnusedSecret">
+                <option value="keep">Keep saved value</option><option value="replace">Enter a new value</option><option value="clear">Clear saved value</option>
+            </InputSelect>
+            @if (Model.HeadersAction == "replace")
+            {
+                <label for="otel-headers">New headers (comma-separated name=value pairs)</label>
+                <InputText id="otel-headers" type="password" autocomplete="new-password" @bind-Value="Model.Headers" />
+            }
+            <button type="submit">@(Busy ? "Working…" : "Validate and save")</button>
+        </fieldset>
+    </EditForm>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public IntegrationSettingsResponse Settings { get; set; } = default!;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback<SaveIntegrationRequest> OnSave { get; set; }
+    private OtelSettingsFormModel Model = new();
+    private long LoadedRevision = -1;
+    protected override void OnParametersSet()
+    {
+        if (LoadedRevision == Settings.SavedRevision) return;
+        LoadedRevision = Settings.SavedRevision;
+        Model = new()
+        {
+            Enabled = bool.Parse(Settings.Values["Enabled"]), Endpoint = Settings.Values["Endpoint"], Protocol = Settings.Values["Protocol"],
+            TracesEnabled = bool.Parse(Settings.Values["TracesEnabled"]), MetricsEnabled = bool.Parse(Settings.Values["MetricsEnabled"]),
+            LogsEnabled = bool.Parse(Settings.Values["LogsEnabled"]),
+            SampleRate = double.Parse(Settings.Values["SampleRate"], System.Globalization.CultureInfo.InvariantCulture),
+            TimeoutMilliseconds = int.Parse(Settings.Values["TimeoutMilliseconds"], System.Globalization.CultureInfo.InvariantCulture),
+            HeadersConfigured = Settings.ConfiguredSecrets.Contains("Headers")
+        };
+    }
+    private Task SaveAsync() => OnSave.InvokeAsync(Model.ToRequest(LoadedRevision));
+    private void ClearUnusedSecret() { if (Model.HeadersAction != "replace") Model.Headers = ""; }
+}

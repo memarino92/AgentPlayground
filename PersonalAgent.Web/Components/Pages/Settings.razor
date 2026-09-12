@@ -7,10 +7,13 @@
 <div class="settings-hub">
     <h1>Settings</h1>
     <nav aria-label="Settings sections">
-        <a href="@(Navigation.Uri.Split('#')[0] + "#sentry-settings")">Sentry</a> · <a href="@(Navigation.Uri.Split('#')[0] + "#database-settings")">Database settings</a> · <a href="/admin/integrations">Tool access</a>
+        <a href="@(Navigation.Uri.Split('#')[0] + "#sentry-settings")">Sentry</a> · <a href="@(Navigation.Uri.Split('#')[0] + "#otel-settings")">OpenTelemetry</a> · <a href="@(Navigation.Uri.Split('#')[0] + "#database-settings")">Database settings</a> · <a href="/admin/integrations">Tool access</a>
     </nav>
     <section id="sentry-settings" aria-label="Sentry settings">
         <IntegrationSettings />
+    </section>
+    <section id="otel-settings" aria-label="OpenTelemetry settings">
+        <IntegrationSettings OpenTelemetry="true" />
     </section>
     <section id="database-settings" aria-label="Database settings">
         <DatabaseSettings />

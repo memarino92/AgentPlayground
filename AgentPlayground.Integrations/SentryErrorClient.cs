@@ -3,7 +3,7 @@ using Sentry;
 
 namespace AgentPlayground.Integrations;
 
-public sealed record IntegrationError(string Category, int EventId, string? ExceptionType, string? TraceId, bool Synthetic = false);
+public sealed record IntegrationError(string Category, int EventId, string? ExceptionType, string? TraceId, bool Synthetic = false, string? SpanId = null);
 
 public interface IIntegrationErrorClient : IDisposable
 {
@@ -56,6 +56,12 @@ public sealed class SentryErrorClient(ISentryClient Client, string Service) : II
         sentryEvent.SetTag("event_id", Error.EventId.ToString(CultureInfo.InvariantCulture));
         if (Error.ExceptionType is not null) sentryEvent.SetTag("exception_type", Error.ExceptionType);
         if (Error.TraceId is not null) sentryEvent.SetTag("trace_id", Error.TraceId);
+        if (Error.SpanId is not null) sentryEvent.SetTag("span_id", Error.SpanId);
+        if (Guid.TryParseExact(Error.TraceId, "N", out var traceId) && Error.SpanId is { Length: 16 })
+        {
+            sentryEvent.Contexts.Trace.TraceId = new SentryId(traceId);
+            sentryEvent.Contexts.Trace.SpanId = new SpanId(Error.SpanId);
+        }
         sentryEvent.SetFingerprint([Service, Error.Category, Error.EventId.ToString(CultureInfo.InvariantCulture), Error.ExceptionType ?? "log"]);
         return sentryEvent;
     }

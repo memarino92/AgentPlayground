@@ -2,6 +2,8 @@
 
 The first supported integration is Sentry error reporting. Its settings can be entered, validated, saved, and applied in Web at `/admin/integration-settings`. API, Web, and Worker each own a replaceable Sentry client; these four settings do not require a process restart. This does not reload existing OpenAI, transcription, messaging, or authentication settings.
 
+OpenTelemetry also has a database-owned, live-reloaded section in **Settings**. It uses separate revisions and service status, with independent trace/metric/log export switches. See [OpenTelemetry setup](observability.md). No new environment variables are needed.
+
 ## Bootstrap and access
 
 1. Use the normal database configuration bootstrap: `DATABASE_URL` and the matching `CONFIG_ENCRYPTION_KEY` on each service. With local user secrets, `Messaging:ConnectionString` is also supported if the encryption key is supplied externally. Do not enter bootstrap credentials in the UI.

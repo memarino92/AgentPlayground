@@ -53,10 +53,16 @@ internal class WorkJournalParsingService : IWorkJournalParsingService
 
         var model = await _chatModelCatalog.GetDefaultModelAsync(cancellationToken);
         _logger.LogInformation("Parsing work journal with model {ModelId}", model.Id);
-        var response = await _clients.Current.GetChatClient(model.Id).CompleteChatAsync(
-            [new UserChatMessage(prompt)],
-            new ChatCompletionOptions { ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() },
-            cancellationToken);
+        var response = await AgentPlayground.Integrations.AiTelemetry.RunAsync("journal.parse", "LLM", async () =>
+        {
+            var completion = await _clients.Current.GetChatClient(model.Id).CompleteChatAsync(
+                [new UserChatMessage(prompt)],
+                new ChatCompletionOptions { ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() },
+                cancellationToken);
+            AgentPlayground.Integrations.AiTelemetry.SetUsage(System.Diagnostics.Activity.Current,
+                completion.Value.Usage?.InputTokenCount, completion.Value.Usage?.OutputTokenCount, completion.Value.Usage?.TotalTokenCount);
+            return completion;
+        }, model.Id);
 
         var json = response.Value.Content[0].Text;
         using var document = JsonDocument.Parse(json);
