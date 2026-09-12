@@ -17,13 +17,21 @@ internal class OpenAiAgentEmbeddingService : IAgentEmbeddingService
         _model = agentMemoryOptions.Value.EmbeddingModel;
     }
 
-    public async Task<ReadOnlyMemory<float>> GenerateEmbeddingAsync(string content, CancellationToken cancellationToken = default)
+    public Task<ReadOnlyMemory<float>> GenerateEmbeddingAsync(string content, CancellationToken cancellationToken = default)
+        => AgentPlayground.Integrations.AiTelemetry.RunAsync("embedding", "EMBEDDING",
+            () => GenerateEmbeddingCoreAsync(content, cancellationToken), _model);
+
+    private async Task<ReadOnlyMemory<float>> GenerateEmbeddingCoreAsync(string content, CancellationToken cancellationToken)
     {
         var response = await EmbeddingClient.GenerateEmbeddingAsync(content, cancellationToken: cancellationToken);
         return response.Value.ToFloats().ToArray();
     }
 
-    public async Task<List<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IReadOnlyList<string> contents, CancellationToken cancellationToken = default)
+    public Task<List<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IReadOnlyList<string> contents, CancellationToken cancellationToken = default)
+        => AgentPlayground.Integrations.AiTelemetry.RunAsync("embedding.batch", "EMBEDDING",
+            () => GenerateEmbeddingsCoreAsync(contents, cancellationToken), _model);
+
+    private async Task<List<ReadOnlyMemory<float>>> GenerateEmbeddingsCoreAsync(IReadOnlyList<string> contents, CancellationToken cancellationToken)
     {
         if (contents.Count == 0) return [];
 

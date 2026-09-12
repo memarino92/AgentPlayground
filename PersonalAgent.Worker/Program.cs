@@ -16,6 +16,7 @@ var builder = Host.CreateApplicationBuilder(args);
 var syntheticDemo = SyntheticEnvironment.IsEnabled(builder.Configuration, builder.Environment);
 builder.Configuration.AddPostgresConfiguration("Worker");
 builder.Services.AddRuntimeIntegrations(builder.Configuration, "Worker");
+builder.AddApplicationObservability("Worker");
 
 builder.Services.AddHttpClient("GitHubWorkJournal", client =>
 {

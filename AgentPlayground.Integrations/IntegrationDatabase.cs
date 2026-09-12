@@ -34,6 +34,7 @@ public sealed class IntegrationDatabase(string ConnectionString, string Encrypti
         await using var check = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM app.integration_schema_versions WHERE version = 1)", connection, transaction);
         if ((bool)(await check.ExecuteScalarAsync(CancellationToken))!)
         {
+            await MigrateOtelAsync(connection, transaction, CancellationToken);
             await transaction.CommitAsync(CancellationToken);
             return;
         }
@@ -54,6 +55,16 @@ public sealed class IntegrationDatabase(string ConnectionString, string Encrypti
             INSERT INTO app.integration_schema_versions(version) VALUES (1) ON CONFLICT DO NOTHING;
             """, connection, transaction);
         await command.ExecuteNonQueryAsync(CancellationToken);
+        await MigrateOtelAsync(connection, transaction, CancellationToken);
         await transaction.CommitAsync(CancellationToken);
+    }
+
+    private static async Task MigrateOtelAsync(NpgsqlConnection Connection, NpgsqlTransaction Transaction, CancellationToken CancellationToken)
+    {
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO app.integration_heads(id) VALUES ('otel') ON CONFLICT DO NOTHING;
+            INSERT INTO app.integration_schema_versions(version) VALUES (2) ON CONFLICT DO NOTHING;
+            """, Connection, Transaction);
+        await command.ExecuteNonQueryAsync(CancellationToken);
     }
 }

@@ -14,7 +14,11 @@ internal class SemanticMemoryService(
 
     public bool Enabled => _options.EnableSemanticMemory;
 
-    public async Task<List<string>> RecallMemoriesAsync(string profileId, string userMessage, CancellationToken cancellationToken = default)
+    public Task<List<string>> RecallMemoriesAsync(string profileId, string userMessage, CancellationToken cancellationToken = default)
+        => AgentPlayground.Integrations.AiTelemetry.RunAsync("memory.retrieve", "RETRIEVER",
+            () => RecallMemoriesCoreAsync(profileId, userMessage, cancellationToken));
+
+    private async Task<List<string>> RecallMemoriesCoreAsync(string profileId, string userMessage, CancellationToken cancellationToken)
     {
         if (!Enabled) return [];
         if (string.IsNullOrWhiteSpace(profileId)) return [];

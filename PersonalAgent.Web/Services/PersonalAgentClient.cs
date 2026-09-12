@@ -259,9 +259,18 @@ internal class PersonalAgentClient(
             ?? throw new InvalidOperationException("No credential status was returned.");
     }
 
-    private async Task<T> IntegrationRequestAsync<T>(HttpMethod Method, string Suffix, object? Body, CancellationToken CancellationToken)
+    public Task<IntegrationSettingsResponse> GetOtelSettingsAsync(CancellationToken CancellationToken = default) =>
+        IntegrationRequestAsync<IntegrationSettingsResponse>(HttpMethod.Get, "", null, CancellationToken, "otel");
+    public Task<IntegrationSettingsResponse> SaveOtelSettingsAsync(SaveIntegrationRequest Request, CancellationToken CancellationToken = default) =>
+        IntegrationRequestAsync<IntegrationSettingsResponse>(HttpMethod.Put, "", Request, CancellationToken, "otel");
+    public Task<IntegrationSettingsResponse> ApplyOtelSettingsAsync(long Revision, CancellationToken CancellationToken = default) =>
+        IntegrationRequestAsync<IntegrationSettingsResponse>(HttpMethod.Post, "/apply", new ApplyIntegrationRequest(Revision), CancellationToken, "otel");
+    public Task<IntegrationSettingsResponse> ReloadOtelSettingsAsync(CancellationToken CancellationToken = default) =>
+        IntegrationRequestAsync<IntegrationSettingsResponse>(HttpMethod.Post, "/reload", null, CancellationToken, "otel");
+
+    private async Task<T> IntegrationRequestAsync<T>(HttpMethod Method, string Suffix, object? Body, CancellationToken CancellationToken, string Integration = "sentry")
     {
-        using var response = await SendAsync(Method, "/api/admin/integrations/sentry" + Suffix,
+        using var response = await SendAsync(Method, "/api/admin/integrations/" + Integration + Suffix,
             Body is null ? null : JsonContent.Create(Body, options: JsonOptions), CancellationToken);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, CancellationToken)

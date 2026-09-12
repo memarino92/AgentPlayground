@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using AgentPlayground.Contracts.Commands;
 using AgentPlayground.Contracts.Events;
@@ -8,6 +9,8 @@ namespace AgentPlayground.Contracts.Messaging;
 
 public static class CoachCallOutbox
 {
+    public const string ActivitySourceName = "AgentPlayground.Outbox";
+    private static readonly ActivitySource Activities = new(ActivitySourceName);
     public static string Table(string Schema) => $"{new NpgsqlCommandBuilder().QuoteIdentifier(Schema)}.coach_call_outbox";
 
     public static string SchemaSql(string Schema) => $"""
@@ -17,6 +20,7 @@ public static class CoachCallOutbox
             payload jsonb NOT NULL,
             created_at timestamptz NOT NULL DEFAULT now()
         );
+        ALTER TABLE {Table(Schema)} ADD COLUMN IF NOT EXISTS trace_parent text;
         CREATE INDEX IF NOT EXISTS ix_coach_call_outbox_pending ON {Table(Schema)} (created_at, message_id);
         """;
 
@@ -24,10 +28,11 @@ public static class CoachCallOutbox
     {
         if (Message is not (ProcessCoachTranscriptCommand or CoachCallStatusChangedEvent or CoachCallTranscriptionCompletedEvent or CoachCallProcessingCompletedEvent or CoachCallProcessingFailedEvent))
             throw new ArgumentException("Unsupported coach call outbox message.", nameof(Message));
-        await using var Command = new NpgsqlCommand($"INSERT INTO {Table(Schema)} (message_id, message_type, payload) VALUES (@id, @type, @payload::jsonb)", Transaction.Connection, Transaction);
+        await using var Command = new NpgsqlCommand($"INSERT INTO {Table(Schema)} (message_id, message_type, payload, trace_parent) VALUES (@id, @type, @payload::jsonb, @trace)", Transaction.Connection, Transaction);
         Command.Parameters.AddWithValue("id", Guid.NewGuid());
         Command.Parameters.AddWithValue("type", typeof(T).Name);
         Command.Parameters.AddWithValue("payload", JsonSerializer.Serialize(Message));
+        Command.Parameters.AddWithValue("trace", NpgsqlTypes.NpgsqlDbType.Text, (object?)Activity.Current?.Id ?? DBNull.Value);
         await Command.ExecuteNonQueryAsync(CancellationToken);
     }
 
@@ -39,11 +44,13 @@ public static class CoachCallOutbox
         await using var Transaction = await Connection.BeginTransactionAsync(CancellationToken);
         Guid Id;
         object Message;
-        await using (var Query = new NpgsqlCommand($"SELECT message_id, message_type, payload::text FROM {Table(Schema)} ORDER BY created_at, message_id LIMIT 1 FOR UPDATE SKIP LOCKED", Connection, Transaction))
+        string? TraceParent;
+        await using (var Query = new NpgsqlCommand($"SELECT message_id, message_type, payload::text, trace_parent FROM {Table(Schema)} ORDER BY created_at, message_id LIMIT 1 FOR UPDATE SKIP LOCKED", Connection, Transaction))
         await using (var Reader = await Query.ExecuteReaderAsync(CancellationToken))
         {
             if (!await Reader.ReadAsync(CancellationToken)) return false;
             Id = Reader.GetGuid(0);
+            TraceParent = Reader.IsDBNull(3) ? null : Reader.GetString(3);
             var Payload = Reader.GetString(2);
             Message = Reader.GetString(1) switch
             {
@@ -55,7 +62,16 @@ public static class CoachCallOutbox
                 _ => throw new InvalidOperationException("Unknown coach call outbox message type.")
             };
         }
-        await Deliver(Id, Message, CancellationToken);
+        ActivityContext.TryParse(TraceParent, null, isRemote: true, out var Parent);
+        using var Activity = Activities.StartActivity("outbox.deliver", ActivityKind.Producer, Parent);
+        try { await Deliver(Id, Message, CancellationToken); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception Exception)
+        {
+            Activity?.SetStatus(ActivityStatusCode.Error);
+            Activity?.SetTag("error.type", Exception.GetType().FullName);
+            throw;
+        }
         await using var Delete = new NpgsqlCommand($"DELETE FROM {Table(Schema)} WHERE message_id = @id", Connection, Transaction);
         Delete.Parameters.AddWithValue("id", Id);
         await Delete.ExecuteNonQueryAsync(CancellationToken);

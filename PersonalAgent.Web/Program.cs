@@ -13,6 +13,7 @@ if (builder.Environment.IsDevelopment()) builder.Configuration.AddUserSecrets<Pr
 var syntheticDemo = SyntheticEnvironment.IsEnabled(builder.Configuration, builder.Environment);
 builder.Configuration.AddPostgresConfiguration("Web");
 builder.Services.AddRuntimeIntegrations(builder.Configuration, "Web");
+builder.AddApplicationObservability("Web");
 builder.Services.AddPostgresDataProtection(builder.Configuration);
 builder.Services.AddPersonalAgentApiClient(builder.Configuration);
 if (syntheticDemo) builder.Services.AddSyntheticAuthentication();

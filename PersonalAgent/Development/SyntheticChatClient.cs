@@ -7,7 +7,7 @@ namespace PersonalAgent.Development;
 
 internal sealed class SyntheticChatClient : IChatClient, IAgentChatClientFactory
 {
-    public IChatClient Create(string ModelId) => this;
+    public IChatClient Create(string ModelId) => new ObservableChatClient(this, ModelId);
     public object? GetService(Type ServiceType, object? ServiceKey = null) => ServiceKey is null && ServiceType.IsInstanceOfType(this) ? this : null;
     public void Dispose() { }
 

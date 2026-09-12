@@ -12,6 +12,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Adding agent tools](runbooks/adding-agent-tools.md): register a capability with shared metadata, binding, and authorization.
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
 - [Coaching retrieval evaluation](runbooks/coach-retrieval-evaluation.md): synthetic regression baseline and live-model evaluation limits.
+- [Observability](runbooks/observability.md): service tracing, OpenInference, Sentry correlation and OTLP setup.
 - [Integration settings](runbooks/integration-settings.md): in-app Sentry configuration, encrypted revisions, and runtime reload.
 - [Existing settings editor](decisions/0011-existing-settings-editor.md): edit database configuration with masked secrets and explicit restart requirements.
 - [Live provider credentials](decisions/0012-live-provider-credentials.md): OpenAI/AssemblyAI key rotation for new requests; remaining startup-bound consumers.
@@ -38,6 +39,8 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0016: Database chat model policy](decisions/0016-database-chat-model-policy.md) | Accepted; implemented | Database-owned model policy with live catalog updates and insert-only migration |
 | [0017: Coach recording recency](decisions/0017-coach-recording-recency.md) | Accepted; implemented and evaluated locally | Scope latest calls and return dated utterance evidence |
 | [0018: Coaching model evaluations](decisions/0018-coach-model-evaluations.md) | Accepted; first comparison completed | Repeatable local model checks with private evidence and JUnit |
+| [0019: Service observability](decisions/0019-observability.md) | Accepted; service-side implementation complete | Shared OpenTelemetry, OpenInference and correlated Sentry errors |
+| [0020: Live database telemetry settings](decisions/0020-live-database-telemetry-settings.md) | Accepted; implemented | Database-first OpenTelemetry export, sampling and per-service live reload |
 
 ## Working agreement
 

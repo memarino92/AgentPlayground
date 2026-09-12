@@ -418,7 +418,11 @@ internal class CoachCheckinService(
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task<string> SearchCoachCheckinsAsync(string query, string profileId, string? exerciseTag = null, CancellationToken cancellationToken = default, string? fileName = null, string? recency = null)
+    public Task<string> SearchCoachCheckinsAsync(string query, string profileId, string? exerciseTag = null, CancellationToken cancellationToken = default, string? fileName = null, string? recency = null)
+        => AgentPlayground.Integrations.AiTelemetry.RunAsync("coach.retrieve", "RETRIEVER",
+            () => SearchCoachCheckinsCoreAsync(query, profileId, exerciseTag, cancellationToken, fileName, recency));
+
+    private async Task<string> SearchCoachCheckinsCoreAsync(string query, string profileId, string? exerciseTag, CancellationToken cancellationToken, string? fileName, string? recency)
     {
         exerciseTag = string.IsNullOrWhiteSpace(exerciseTag) ? null : exerciseTag.Trim().ToLowerInvariant();
         fileName = string.IsNullOrWhiteSpace(fileName) ? null : fileName.Trim();
