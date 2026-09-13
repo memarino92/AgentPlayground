@@ -22,6 +22,8 @@ flowchart LR
     API --> FCM[Firebase push]
 ```
 
+The projects now target .NET 11 RC1 with a pinned SDK and matching service images. See [migration evidence and Android limits](decisions/0024-dotnet-11-rc1.md).
+
 ## Boundaries worth keeping
 
 Web is the trusted authentication boundary for browser users. The API resolves actor/subject access and owns agent execution, persistence services, retrieval, model providers, and tool authorization. Worker owns background job delivery and domain processing. Contracts provide typed cross-service messages. PostgreSQL is both storage and messaging infrastructure, avoiding another broker for this deployment size.

@@ -48,6 +48,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0021: Scheduled jobs](decisions/0021-scheduled-jobs.md) | Accepted; implemented | Durable task identity, current authorization, recovery and job dashboard |
 | [0022: Scheduled notifications](decisions/0022-scheduled-notifications.md) | Accepted; implemented | Notification job identity, attribution, cancellation and push outcomes |
 | [0023: Query navigation and chat preferences](decisions/0023-query-navigation-and-chat-preferences.md) | Accepted; implemented | URL state, draft chats, model persistence and shared recording views |
+| [0024: .NET 11 RC1](decisions/0024-dotnet-11-rc1.md) | Accepted; server validated; Android build blocked by disk space | Pin SDK/framework packages and align CI/container builds |
 
 ## Working agreement
 

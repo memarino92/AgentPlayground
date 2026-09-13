@@ -2,6 +2,18 @@
 
 Android companion app for PersonalAgent focused on secure 2FA approvals.
 
+## Build prerequisites
+
+Use SDK `11.0.100-rc.1.26425.128` from the repository's `global.json` and install the matching RC1 Android workload from the repository root:
+
+```powershell
+dotnet workload install maui-android --version 11.0.100-rc.1.26460.1
+```
+
+Local validation on 2026-09-13 was blocked by disk space during workload installation and Android runtime restore. Free space before rerunning the pinned workload installation; a base SDK or partially installed packs do not establish a working mobile toolchain. No .NET 11 Android build/device result is claimed yet.
+
+MAUI Controls is centrally pinned to `11.0.0-rc.1.26451.6`. Keep the workload and package release aligned. Android SDK and Java are also required; Android API 24 remains the minimum supported device version. This upgrade does not change the existing mobile identity/release limitations in the roadmap.
+
 ## Current Scope
 
 - Loads the existing `PersonalAgent.Web` experience in a native `WebView`.
@@ -113,19 +125,19 @@ assembly lookup crashes on physical devices.
 
 ```bash
 dotnet publish PersonalAgent.Mobile/PersonalAgent.Mobile.csproj \
-  -f net10.0-android -c Debug \
+  -f net11.0-android -c Debug \
   -p:AndroidSdkDirectory=$ANDROID_SDK_ROOT \
   -p:JavaSdkDirectory=$JAVA_HOME
 ```
 
 Generated APK path:
 
-`PersonalAgent.Mobile/bin/Debug/net10.0-android/publish/com.personalagent.mobile-Signed.apk`
+`PersonalAgent.Mobile/bin/Debug/net11.0-android/publish/com.personalagent.mobile-Signed.apk`
 
 Install on an attached emulator/device:
 
 ```bash
-adb install -r PersonalAgent.Mobile/bin/Debug/net10.0-android/publish/com.personalagent.mobile-Signed.apk
+adb install -r PersonalAgent.Mobile/bin/Debug/net11.0-android/publish/com.personalagent.mobile-Signed.apk
 ```
 
 ## Reviewer Checklist

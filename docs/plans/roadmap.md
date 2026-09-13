@@ -2,6 +2,10 @@
 
 Recorded 2026-09-07; reconciled 2026-09-13 against `b7157f7`. The numbered themes retain the original suggested sequence; the [selection table](#selectable-backlog) records delivered slices and remaining acceptance work. The catalog is unprioritized. Dated validation counts are historical evidence, not results from this documentation review. Estimates remain deferred until slices expose their integration work.
 
+## .NET 11 RC1 adoption — server validated; Android build blocked
+
+Selected 2026-09-13 at the maintainer's request. Projects target .NET 11, with the SDK pinned in `global.json`, central RC1 framework/MAUI versions, matching container tags and CI SDK selection. Blazor authentication-state and interop analyzer fixes preserve warnings-as-errors. Server validation: 327 tests, three Linux Release images, 30 application/audio smoke checks, 13 integration/restart checks and 14 notification checks. Browser sign-in/chat/playback and coach access were verified with synthetic data. Android workload completion/build verification is blocked by local disk space; production deployment and device identity/release acceptance are separate. See [decision 0024](../decisions/0024-dotnet-11-rc1.md).
+
 ## Navigation and recording usability — delivered 2026-09-13
 
 Maintainer-requested changes now persist job/chat selections and filters in query parameters, keep the chat list open on selection, start local drafts automatically, remember models, and unify Settings/integrations and owner/coach recording views. The menu dismisses on outside clicks; Markdown block spacing is corrected. Recordings use filename-derived dates, inline audio and the same compact, playback-following transcript as the evidence drawer. Following can be disabled. This extends PRODUCT-01 presentation; its backup/recovery acceptance remains outstanding.
