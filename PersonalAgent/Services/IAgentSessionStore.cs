@@ -11,5 +11,6 @@ internal interface IAgentSessionStore
     Task<IReadOnlyList<PersistedAgentSessionSummary>> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize, CancellationToken cancellationToken = default);
     Task<bool> SaveInteractionAsync(Guid sessionId, string userMessage, string assistantMessage, string sessionStateJson, CancellationToken cancellationToken = default);
     Task<List<ConversationMessage>?> GetSessionMessagesAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    Task<bool> SetSessionStateAsync(Guid SessionId, string State, CancellationToken Token = default);
     Task<bool> SessionExistsAsync(Guid sessionId, CancellationToken cancellationToken = default);
 }

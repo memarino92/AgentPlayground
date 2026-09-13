@@ -61,6 +61,12 @@ internal class PersonalAgentClient(
         return await JsonSerializer.DeserializeAsync<SessionResponse>(content, JsonOptions);
     }
 
+    public async Task SetChatModelAsync(string SessionId, string ProfileId, string ModelId)
+    {
+        using var Response = await SendJsonAsync(HttpMethod.Put, $"/api/sessions/{SessionId}/model", new { ProfileId, ModelId });
+        if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("change chat model", Response);
+    }
+
     public async Task<ModelCatalogResponse?> GetModelsAsync()
     {
         var response = await SendAsync(HttpMethod.Get, "/api/models");

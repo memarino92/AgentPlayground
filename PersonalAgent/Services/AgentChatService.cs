@@ -97,6 +97,24 @@ internal class AgentChatService
         return GetSessionsAsync(access.ActorId, beforeActivityAt, beforeSessionId, pageSize);
     }
 
+    public async Task<bool> SetModelAsync(string SessionId, AgentAccessContext Access, string ModelId, CancellationToken Token)
+    {
+        ValidateAccess(Access);
+        if (!Guid.TryParse(SessionId, out var Id)) return false;
+        var Gate = _sessionLocks.GetOrAdd(Id.ToString(), _ => new SemaphoreSlim(1, 1));
+        await Gate.WaitAsync(Token);
+        try
+        {
+            var Saved = await _sessionStore.GetSessionAsync(Id, Token);
+            if (Saved is null || !string.Equals(Saved.EffectiveActorId, Access.ActorId, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(Saved.ProfileId, Access.SubjectProfileId, StringComparison.OrdinalIgnoreCase)) return false;
+            var State = await DeserializeSessionStateAsync(Saved.SessionStateJson, Token);
+            if (State.ScheduledTaskId is not null) throw new UnauthorizedAccessException("Scheduled job conversations are read-only.");
+            return await _sessionStore.SetSessionStateAsync(Id, JsonSerializer.Serialize(State with { ModelId = ModelId }), Token);
+        }
+        finally { Gate.Release(); }
+    }
+
     public async Task<string?> SendMessageAsync(string sessionId, string profileId, string message)
         => await SendMessageAsync(sessionId, new AgentAccessContext(profileId, AgentRoles.Owner, profileId), message);
 

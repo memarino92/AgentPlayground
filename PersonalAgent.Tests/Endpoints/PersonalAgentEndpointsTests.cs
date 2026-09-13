@@ -25,6 +25,26 @@ namespace PersonalAgent.Tests.Endpoints;
 
 public class PersonalAgentEndpointsTests
 {
+    [Fact]
+    public async Task ChatModelChange_PersistsWithoutSending_AndRejectsUnavailableModelsAndOtherSubjects()
+    {
+        await using var App = await BuildAppAsync();
+        using var Client = App.GetTestClient();
+        var Created = await ReadJsonAsync(await Client.PostAsJsonAsync("/api/sessions", new { profileId = "test-user", modelId = "gpt-4o-mini" }));
+        var Id = Created.GetProperty("sessionId").GetString();
+        var Models = (await ReadJsonAsync(await Client.GetAsync("/api/models"))).GetProperty("models");
+        var Model = Models.EnumerateArray().Last().GetProperty("id").GetString();
+        (await Client.PutAsJsonAsync($"/api/sessions/{Id}/model", new { profileId = "test-user", modelId = Model })).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var History = await ReadJsonAsync(await Client.GetAsync($"/api/sessions/{Id}/messages?profileId=test-user"));
+        History.GetProperty("modelId").GetString().Should().Be(Model);
+        History.GetProperty("messages").GetArrayLength().Should().Be(0);
+        (await Client.PutAsJsonAsync($"/api/sessions/{Id}/model", new { profileId = "test-user", modelId = "unavailable" })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Client.PutAsJsonAsync($"/api/sessions/{Id}/model", new { profileId = "another-owner", modelId = Model })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var Store = App.Services.GetRequiredService<IAgentSessionStore>();
+        await Store.SetSessionStateAsync(Guid.Parse(Id!), JsonSerializer.Serialize(new AgentSessionState(Model!, Guid.NewGuid())));
+        (await Client.PutAsJsonAsync($"/api/sessions/{Id}/model", new { profileId = "test-user", modelId = Model })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     [Theory]
     [InlineData("gpt-5.5")]
     [InlineData("gpt-5.6-luna")]
@@ -711,6 +731,13 @@ public class PersonalAgentEndpointsTests
 
         public Task<List<ConversationMessage>?> GetSessionMessagesAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_messages.TryGetValue(sessionId, out var messages) ? messages : null);
+
+        public Task<bool> SetSessionStateAsync(Guid SessionId, string State, CancellationToken Token = default)
+        {
+            if (!_sessions.TryGetValue(SessionId, out var Session)) return Task.FromResult(false);
+            _sessions[SessionId] = Session with { SessionStateJson = State };
+            return Task.FromResult(true);
+        }
 
         public Task<bool> SessionExistsAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_sessions.ContainsKey(sessionId));

@@ -68,6 +68,16 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<bool> SetSessionStateAsync(Guid SessionId, string State, CancellationToken Token = default)
+    {
+        await using var Connection = await OpenConnectionAsync(Token);
+        await using var Command = Connection.CreateCommand();
+        Command.CommandText = $"UPDATE {SessionsTable} SET session_state = @state::jsonb WHERE session_id = @id";
+        Command.Parameters.AddWithValue("state", State);
+        Command.Parameters.AddWithValue("id", SessionId);
+        return await Command.ExecuteNonQueryAsync(Token) == 1;
+    }
+
     public async Task<PersistedAgentSession?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
