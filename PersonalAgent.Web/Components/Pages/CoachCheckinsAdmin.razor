@@ -1,15 +1,19 @@
 @page "/coach-checkins/admin"
-@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
+@page "/coach-transcripts"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy)]
 @using System.Security.Claims
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PersonalAgentClient ApiClient
 @inject ILogger<CoachCheckinsAdmin> Logger
 @inject IJSRuntime JsRuntime
+@inject NavigationManager Navigation
 
-<PageTitle>PersonalAgent - Coach Check-ins Admin</PageTitle>
-<CoachCallLiveRefresh OnRefresh="RefreshLiveAsync" />
+<PageTitle>PersonalAgent - Coach check-ins</PageTitle>
+<CoachCallLiveRefresh ProfileId="@profileId" OnRefresh="RefreshLiveAsync" />
 
 <MudContainer MaxWidth="MaxWidth.False" Class="coach-admin-page">
+    <AuthorizeView Roles="Coach"><MudText Typo="Typo.body2">Read-only access: listen to recordings and review transcripts.</MudText></AuthorizeView>
+    <AuthorizeView Roles="Owner">
     <MudPaper Class="pa-3 mb-3 coach-admin-upload" Elevation="1">
         <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" AlignItems="AlignItems.Center">
             <InputFile OnChange="HandleFileSelected" accept=".m4a,audio/mp4" />
@@ -26,6 +30,7 @@
             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">@uploadStatus</MudAlert>
         }
     </MudPaper>
+    </AuthorizeView>
 
     <MudGrid>
         <MudItem xs="12" md="4" lg="4">
@@ -37,12 +42,8 @@
         </MudItem>
         <MudItem xs="12" md="8" lg="8">
             <UploadDetailPanel SelectedItem="SelectedItem"
-                               Transcript="SelectedTranscript"
-                               TranscriptError="@SelectedTranscriptError"
-                               IsLoadingTranscript="IsLoadingSelectedTranscript"
                                IsDownloadingTranscript="isDownloadingTranscript"
                                IsApplyingOverride="isApplyingOverride"
-                               OnLoadTranscript="LoadTranscriptAsync"
                                OnDownloadTranscript="DownloadTranscriptAsync"
                                OnApplyOverride="ApplyOverrideAsync"
                                OnRoleChanged="HandleRoleChanged"
@@ -55,271 +56,3 @@
         <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@errorMessage</MudAlert>
     }
 </MudContainer>
-
-@code {
-    private bool isLoading;
-    private bool isApplyingOverride;
-    private bool isDownloadingTranscript;
-    private bool isUploading;
-    private string? errorMessage;
-    private string? uploadStatus;
-    private IBrowserFile? selectedFile;
-    private List<CoachCheckinAdminItemResponse> items = [];
-    private readonly Dictionary<Guid, Dictionary<int, string>> overrideSelections = [];
-    private readonly HashSet<(Guid UploadId, int SpeakerLabel)> editedRoles = [];
-    private readonly SemaphoreSlim refreshGate = new(1, 1);
-    private Guid? selectedUploadId;
-    private readonly HashSet<Guid> loadingTranscriptUploadIds = [];
-    private readonly Dictionary<Guid, string> transcriptErrorsByUploadId = [];
-    private readonly Dictionary<Guid, CoachCheckinTranscriptResponse> transcriptsByUploadId = [];
-
-    private CoachCheckinAdminItemResponse? SelectedItem => selectedUploadId is null
-        ? null
-        : items.FirstOrDefault(item => item.UploadId == selectedUploadId.Value);
-
-    private CoachCheckinTranscriptResponse? SelectedTranscript => selectedUploadId is not null && transcriptsByUploadId.TryGetValue(selectedUploadId.Value, out var transcript)
-        ? transcript
-        : null;
-
-    private string? SelectedTranscriptError => selectedUploadId is not null && transcriptErrorsByUploadId.TryGetValue(selectedUploadId.Value, out var transcriptError)
-        ? transcriptError
-        : null;
-
-    private bool IsLoadingSelectedTranscript => selectedUploadId is not null && loadingTranscriptUploadIds.Contains(selectedUploadId.Value);
-
-    protected override async Task OnInitializedAsync() => await LoadAsync();
-
-    private async Task LoadAsync()
-    {
-        await refreshGate.WaitAsync();
-        isLoading = true;
-        errorMessage = null;
-        try
-        {
-            items = await ApiClient.GetCoachCheckinAdminItemsAsync();
-            Logger.LogInformation("Loaded {Count} coach check-in admin items", items.Count);
-
-            foreach (var item in items)
-            {
-                var refreshedSelections = item.SpeakerLabels
-                    .GroupBy(label => label.SpeakerLabel)
-                    .ToDictionary(
-                        group => group.Key,
-                        group => group.Select(label => NormalizeRole(label.SpeakerRole)).Distinct().Count() == 1
-                            ? group.Select(label => NormalizeRole(label.SpeakerRole)).First()
-                            : "unknown");
-                if (overrideSelections.TryGetValue(item.UploadId, out var existing))
-                    foreach (var entry in existing.Where(entry => editedRoles.Contains((item.UploadId, entry.Key))))
-                        refreshedSelections[entry.Key] = entry.Value;
-                overrideSelections[item.UploadId] = refreshedSelections;
-            }
-            foreach (var removedId in overrideSelections.Keys.Where(id => items.All(item => item.UploadId != id)).ToList())
-            {
-                overrideSelections.Remove(removedId);
-                editedRoles.RemoveWhere(entry => entry.UploadId == removedId);
-            }
-
-            if (selectedUploadId is null || items.All(item => item.UploadId != selectedUploadId.Value))
-                selectedUploadId = items.FirstOrDefault()?.UploadId;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load coach check-in admin items");
-            errorMessage = ex.Message;
-        }
-        finally
-        {
-            isLoading = false;
-            refreshGate.Release();
-        }
-    }
-
-    private async Task ApplyOverrideAsync(CoachCheckinAdminItemResponse item)
-    {
-        if (isApplyingOverride) return;
-        if (!overrideSelections.TryGetValue(item.UploadId, out var selectionMap) || selectionMap.Count is 0)
-        {
-            errorMessage = "No speaker override choices found for this upload.";
-            return;
-        }
-
-        var overrides = selectionMap
-            .OrderBy(entry => entry.Key)
-            .Select(entry => new SpeakerOverrideItem(entry.Key, entry.Value))
-            .ToList();
-
-        isApplyingOverride = true;
-        errorMessage = null;
-
-        try
-        {
-            await ApiClient.ApplySpeakerOverridesAsync(item.UploadId, item.ProfileId, overrides);
-            editedRoles.RemoveWhere(entry => entry.UploadId == item.UploadId);
-            Logger.LogInformation("Applied speaker override for upload {UploadId}", item.UploadId);
-            await LoadAsync();
-            await LoadTranscriptAsync(item.UploadId);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to apply speaker override for upload {UploadId}", item.UploadId);
-            errorMessage = ex.Message;
-        }
-        finally
-        {
-            isApplyingOverride = false;
-        }
-    }
-
-    private string GetOverrideSelection(Guid uploadId, int speakerLabel, string? defaultRole)
-    {
-        if (!overrideSelections.TryGetValue(uploadId, out var selections))
-        {
-            selections = [];
-            overrideSelections[uploadId] = selections;
-        }
-
-        if (!selections.TryGetValue(speakerLabel, out var selectedRole))
-        {
-            selectedRole = NormalizeRole(defaultRole);
-            selections[speakerLabel] = selectedRole;
-        }
-
-        return selectedRole;
-    }
-
-    private string GetOverrideSelectionForSelectedItem(CoachCheckinSpeakerLabelInfoResponse label)
-    {
-        if (selectedUploadId is null) return NormalizeRole(label.SpeakerRole);
-        return GetOverrideSelection(selectedUploadId.Value, label.SpeakerLabel, label.SpeakerRole);
-    }
-
-    private void SetOverrideSelection(Guid uploadId, int speakerLabel, string? role)
-    {
-        var normalizedRole = NormalizeRole(role);
-        if (!overrideSelections.TryGetValue(uploadId, out var selections))
-        {
-            selections = [];
-            overrideSelections[uploadId] = selections;
-        }
-
-        selections[speakerLabel] = normalizedRole;
-        editedRoles.Add((uploadId, speakerLabel));
-    }
-
-    private async Task RefreshLiveAsync()
-    {
-        await LoadAsync();
-        if (selectedUploadId is Guid uploadId) await LoadTranscriptAsync(uploadId);
-    }
-
-    private static string NormalizeRole(string? role)
-    {
-        if (string.Equals(role, "coach", StringComparison.OrdinalIgnoreCase)) return "coach";
-        if (string.Equals(role, "athlete", StringComparison.OrdinalIgnoreCase)) return "athlete";
-        return "unknown";
-    }
-
-    private async Task SelectUploadAsync(Guid uploadId)
-    {
-        selectedUploadId = uploadId;
-        if (transcriptsByUploadId.ContainsKey(uploadId) || loadingTranscriptUploadIds.Contains(uploadId)) return;
-        await LoadTranscriptAsync(uploadId);
-    }
-
-    private async Task HandleRoleChanged(SpeakerRoleChanged change)
-    {
-        SetOverrideSelection(change.UploadId, change.SpeakerLabel, change.Role);
-        await Task.CompletedTask;
-    }
-
-    private async Task DownloadTranscriptAsync(Guid uploadId)
-    {
-        isDownloadingTranscript = true;
-        errorMessage = null;
-        try
-        {
-            var download = await ApiClient.DownloadCoachCheckinTranscriptAsync(uploadId);
-            var base64 = Convert.ToBase64String(download.Bytes);
-            await JsRuntime.InvokeVoidAsync("downloadTextFileFromBase64", download.FileName, base64, "text/plain;charset=utf-8");
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to download transcript for upload {UploadId}", uploadId);
-            errorMessage = ex.Message;
-        }
-        finally
-        {
-            isDownloadingTranscript = false;
-        }
-    }
-
-    private void HandleFileSelected(InputFileChangeEventArgs args)
-    {
-        if (args.FileCount > 0)
-            selectedFile = args.File;
-    }
-
-    private async Task UploadAsync()
-    {
-        if (selectedFile is null) return;
-
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var profileId = authState.User.FindFirst("urn:github:login")?.Value
-            ?? authState.User.FindFirst(ClaimTypes.Name)?.Value;
-        if (string.IsNullOrWhiteSpace(profileId))
-        {
-            uploadStatus = "Unable to determine the signed-in profile.";
-            return;
-        }
-
-        isUploading = true;
-        uploadStatus = null;
-        try
-        {
-            await using var stream = selectedFile.OpenReadStream(Math.Max(selectedFile.Size, 1));
-            await using var content = new MemoryStream();
-            await stream.CopyToAsync(content);
-            var upload = await ApiClient.UploadCoachCheckinAsync(profileId, selectedFile.Name, selectedFile.ContentType, content.ToArray());
-            uploadStatus = upload is null ? "Upload failed." : $"Uploaded {selectedFile.Name}. It will appear in the queue as processing progresses.";
-            selectedFile = null;
-            await LoadAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to upload coach check-in recording");
-            uploadStatus = ex.Message;
-        }
-        finally
-        {
-            isUploading = false;
-        }
-    }
-
-    private async Task LoadTranscriptAsync(Guid uploadId)
-    {
-        if (loadingTranscriptUploadIds.Contains(uploadId)) return;
-
-        loadingTranscriptUploadIds.Add(uploadId);
-        transcriptErrorsByUploadId.Remove(uploadId);
-        try
-        {
-            var transcript = await ApiClient.GetCoachCheckinTranscriptAsync(uploadId);
-            if (transcript is null)
-            {
-                transcriptErrorsByUploadId[uploadId] = "Transcript not found.";
-                return;
-            }
-
-            transcriptsByUploadId[uploadId] = transcript;
-        }
-        catch (Exception ex)
-        {
-            transcriptErrorsByUploadId[uploadId] = ex.Message;
-            Logger.LogError(ex, "Failed to load transcript for upload {UploadId}", uploadId);
-        }
-        finally
-        {
-            loadingTranscriptUploadIds.Remove(uploadId);
-        }
-    }
-}

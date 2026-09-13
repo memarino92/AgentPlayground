@@ -14,12 +14,9 @@
         </MudItem>
         <MudItem xs="12" md="8" lg="8">
             <UploadDetailPanel SelectedItem="SelectedItem"
-                               Transcript="SelectedTranscript"
-                               TranscriptError="@null"
-                               IsLoadingTranscript="false"
+                               PreviewTranscript="SelectedTranscript"
                                IsDownloadingTranscript="false"
                                IsApplyingOverride="false"
-                               OnLoadTranscript="LoadTranscriptAsync"
                                OnDownloadTranscript="DownloadTranscriptAsync"
                                OnApplyOverride="ApplyOverrideAsync"
                                OnRoleChanged="HandleRoleChanged"

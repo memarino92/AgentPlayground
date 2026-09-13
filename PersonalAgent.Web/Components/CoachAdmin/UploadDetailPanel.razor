@@ -1,3 +1,4 @@
+@using PersonalAgent.Web.Components.Pages
 @if (SelectedItem is null)
 {
     <MudPaper Class="pa-4" Elevation="1">
@@ -11,8 +12,11 @@ else
         <MudStack Spacing="2">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="coach-admin-detail__header">
                 <MudStack Spacing="0">
-                    <MudText Typo="Typo.h6">@SelectedItem.OriginalFileName</MudText>
-                    <MudText Typo="Typo.caption">Upload @SelectedItem.UploadId</MudText>
+                    <MudText Typo="Typo.h6">@RecordingLabel.FromFileName(SelectedItem.OriginalFileName)</MudText>
+                    @if (RecordingLabel.FromFileName(SelectedItem.OriginalFileName) != SelectedItem.OriginalFileName)
+                    {
+                        <MudText Typo="Typo.caption">@SelectedItem.OriginalFileName</MudText>
+                    }
                 </MudStack>
                 <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(SelectedItem.Status)" Variant="Variant.Filled">@SelectedItem.Status</MudChip>
             </MudStack>
@@ -30,12 +34,6 @@ else
             }
 
             <MudStack Row="true" Spacing="1">
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           Disabled="@IsLoadingTranscript"
-                           OnClick="() => OnLoadTranscript.InvokeAsync(SelectedItem.UploadId)">
-                    @(IsLoadingTranscript ? "Loading transcript..." : "Load transcript")
-                </MudButton>
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Default"
                            Disabled="@IsDownloadingTranscript"
@@ -44,6 +42,7 @@ else
                 </MudButton>
             </MudStack>
 
+            <AuthorizeView Roles="Owner">
             @if (SelectedItem.SpeakerLabels.Count > 0)
             {
                 <MudDivider />
@@ -92,48 +91,24 @@ else
                 </details>
             }
 
-            <MudDivider />
-            <MudText Typo="Typo.subtitle1">Transcript timeline</MudText>
-
-            @if (!string.IsNullOrWhiteSpace(TranscriptError))
+            </AuthorizeView>
+            @if (PreviewTranscript is not null)
             {
-                <MudAlert Severity="Severity.Error" Dense="true">@TranscriptError</MudAlert>
-            }
-            else if (Transcript is null)
-            {
-                <MudText Typo="Typo.body2">Transcript not loaded yet.</MudText>
-            }
-            else if (Transcript.Utterances.Count is 0)
-            {
-                <MudText Typo="Typo.body2">No utterances are available for this transcript yet.</MudText>
+                <TranscriptTimeline Transcript="PreviewTranscript" />
             }
             else
             {
-                <div class="coach-admin-detail__timeline">
-                    @foreach (var utterance in Transcript.Utterances)
-                    {
-                        <div class="coach-admin-detail__utterance" data-role="@NormalizeRole(utterance.SpeakerRole)">
-                            <div class="coach-admin-detail__utterance-meta">
-                                <span class="coach-admin-detail__role">@NormalizeRole(utterance.SpeakerRole)</span>
-                                <span>@FormatTimestampRange(utterance.StartMs, utterance.EndMs)</span>
-                            </div>
-                            <div class="coach-admin-detail__utterance-text">@utterance.Text</div>
-                        </div>
-                    }
-                </div>
+            <EvidenceDrawer @key="SelectedItem.UploadId" UploadId="SelectedItem.UploadId" ProfileId="@SelectedItem.ProfileId" Revision="SelectedItem.UpdatedAtUtc" Inline="true" />
             }
         </MudStack>
     </MudPaper>
 }
 
 @code {
+    [Parameter] public CoachCheckinTranscriptResponse? PreviewTranscript { get; set; }
     [Parameter] public required CoachCheckinAdminItemResponse? SelectedItem { get; set; }
-    [Parameter] public required CoachCheckinTranscriptResponse? Transcript { get; set; }
-    [Parameter] public required string? TranscriptError { get; set; }
-    [Parameter] public required bool IsLoadingTranscript { get; set; }
     [Parameter] public required bool IsDownloadingTranscript { get; set; }
     [Parameter] public required bool IsApplyingOverride { get; set; }
-    [Parameter] public required EventCallback<Guid> OnLoadTranscript { get; set; }
     [Parameter] public required EventCallback<Guid> OnDownloadTranscript { get; set; }
     [Parameter] public required EventCallback<CoachCheckinAdminItemResponse> OnApplyOverride { get; set; }
     [Parameter] public required EventCallback<SpeakerRoleChanged> OnRoleChanged { get; set; }
