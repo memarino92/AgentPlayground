@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using Bunit;
+using Bunit.TestDoubles;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
@@ -18,13 +19,39 @@ namespace PersonalAgent.Web.Tests.Components;
 
 public sealed class TranscriptAudioUploadTests : TestContext
 {
+    [Theory]
+    [InlineData("2026-09-13 14.30.00.m4a", true)]
+    [InlineData("2026-02-30 14.30.00.m4a", false)]
+    [InlineData("undated.m4a", false)]
+    public void RecordingLabelUsesValidFilenameDate_WithoutInventingAnUploadDate(string FileName, bool Dated)
+    {
+        var Label = RecordingLabel.FromFileName(FileName);
+        if (Dated) Label.Should().NotBe(FileName).And.Contain("2026");
+        else Label.Should().Be(FileName);
+    }
+
+    [Fact]
+    public void CoachUsesSamePage_WithPlaybackAndWithoutOwnerControls()
+    {
+        using var Handler = new UploadHandler();
+        Configure(Handler, Coach: true);
+        Services.AddMudServices();
+        var Cut = RenderComponent<CoachCheckinsAdmin>();
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic transcript"));
+        Cut.Markup.Should().Contain("Read-only access");
+        Cut.FindAll("input[type=file]").Should().BeEmpty();
+        Cut.FindComponents<TranscriptAudioUpload>().Should().BeEmpty();
+        Cut.FindAll(".coach-admin-detail__overrides").Should().BeEmpty();
+        Cut.FindComponent<EvidenceDrawer>().Instance.Inline.Should().BeTrue();
+    }
+
     [Fact]
     public async Task TranscriptPage_RefreshesCompletionFromLiveEvent()
     {
         using var Handler = new UploadHandler { Status = "Processing" };
         Configure(Handler);
         Services.AddMudServices();
-        var Cut = RenderComponent<CoachTranscripts>();
+        var Cut = RenderComponent<CoachCheckinsAdmin>();
         Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic transcript"));
         Cut.FindComponents<TranscriptAudioUpload>().Should().BeEmpty();
         Handler.Status = "Completed";
@@ -40,7 +67,7 @@ public sealed class TranscriptAudioUploadTests : TestContext
         using var Handler = new UploadHandler { Status = Status };
         Configure(Handler);
         Services.AddMudServices();
-        var Cut = RenderComponent<CoachTranscripts>();
+        var Cut = RenderComponent<CoachCheckinsAdmin>();
         Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic transcript"));
         Cut.FindComponents<TranscriptAudioUpload>().Count.Should().Be(CanUpload ? 1 : 0);
         if (CanUpload)
@@ -50,7 +77,7 @@ public sealed class TranscriptAudioUploadTests : TestContext
             Upload.UploadId.Should().Be(Handler.Id);
             Upload.MaxUploadBytes.Should().Be(1234);
         }
-        Cut.FindAll("button").Single(Button => Button.TextContent.Contains("Read and listen to evidence", StringComparison.OrdinalIgnoreCase)).Click();
+        Cut.FindComponent<EvidenceDrawer>().Instance.Inline.Should().BeTrue();
         Cut.FindComponent<EvidenceDrawer>().Instance.ProfileId.Should().Be("owner");
     }
 
@@ -94,13 +121,19 @@ public sealed class TranscriptAudioUploadTests : TestContext
         Handler.Calls.Should().Be(0);
     }
 
-    private void Configure(UploadHandler Handler)
+    private void Configure(UploadHandler Handler, bool Coach = false)
     {
+        Services.AddAuthorizationCore();
+        Services.AddCascadingAuthenticationState();
         Services.AddSingleton<CoachCallUpdates>();
+        var Authorization = this.AddTestAuthorization();
+        Authorization.SetAuthorized("owner");
+        Authorization.SetRoles(Coach ? "Coach" : "Owner");
         JSInterop.Mode = JSRuntimeMode.Loose;
         var Auth = new Mock<AuthenticationStateProvider>();
         Auth.Setup(Value => Value.GetAuthenticationStateAsync()).ReturnsAsync(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity([
-            new Claim(ClaimTypes.Role, "Owner"), new Claim("urn:github:login", "owner")], "test"))));
+            new Claim(ClaimTypes.Role, Coach ? "Coach" : "Owner"), new Claim("urn:github:login", "owner"),
+            new Claim(ClaimTypes.NameIdentifier, "coach"), new Claim(ClaimTypes.Email, "coach@example.test")], "test"))));
         Services.AddSingleton<AuthenticationStateProvider>(Auth.Object);
         Services.AddSingleton(new PersonalAgentClient(new HttpClient(Handler) { BaseAddress = new("http://localhost") }, Auth.Object,
             Options.Create(new PersonalAgentApiOptions { ActorSigningKey = "test-signing-key" })));
@@ -115,6 +148,8 @@ public sealed class TranscriptAudioUploadTests : TestContext
         public string? UploadUri, UploadMime;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken CancellationToken)
         {
+            if (Request.RequestUri!.AbsolutePath == "/api/coach-assignments")
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { profiles = new[] { "owner" } }) };
             if (Request.Method == HttpMethod.Get)
             {
                 Request.RequestUri!.Query.Should().Be("?profileId=owner" + (Request.RequestUri.AbsolutePath == "/api/coach-checkins" ? "&limit=100" : ""));

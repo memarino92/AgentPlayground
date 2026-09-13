@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using AgentPlayground.Contracts.Events;
 using Bunit;
+using Bunit.TestDoubles;
 using FluentAssertions;
 using MassTransit;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -104,7 +105,7 @@ public sealed class CoachCallLiveUpdatesTests : TestContext
         await Cut.InvokeAsync(() => Detail.Instance.OnApplyOverride.InvokeAsync(Detail.Instance.SelectedItem!));
         Handler.Applied.Should().Equal(new SpeakerOverrideItem(0, "coach"), new SpeakerOverrideItem(1, "athlete"));
         Handler.ApplyCount.Should().Be(1);
-        Cut.WaitForAssertion(() => Detail.Instance.Transcript!.Utterances.Select(Value => Value.SpeakerRole).Should().Equal("coach", "athlete"));
+        Cut.WaitForAssertion(() => Cut.FindAll(".utterance strong").Select(Value => Value.TextContent).Should().Equal("coach", "athlete"));
         Detail.Instance.SelectedItem!.Status.Should().Be("Processing");
 
         Handler.Status = "Completed";
@@ -115,6 +116,9 @@ public sealed class CoachCallLiveUpdatesTests : TestContext
 
     private CoachCallUpdates Configure(HttpMessageHandler Handler)
     {
+        var Authorization = this.AddTestAuthorization();
+        Authorization.SetAuthorized("owner");
+        Authorization.SetRoles("Owner");
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
         var Updates = new CoachCallUpdates();
@@ -146,9 +150,13 @@ public sealed class CoachCallLiveUpdatesTests : TestContext
                 return new(HttpStatusCode.NoContent);
             }
             string Role(int Label) => Applied.FirstOrDefault(Value => Value.SpeakerLabel == Label)?.Role ?? "unknown";
+            if (Request.RequestUri!.AbsolutePath.EndsWith("/evidence"))
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new CoachEvidenceResponse(
+                    new(Id, Id, "owner", Status, "synthetic", DateTimeOffset.UtcNow,
+                        [new(0, Role(0), 0, 100, "one", 1), new(1, Role(1), 101, 200, "two", 1)]), true, 1234)) };
             return new(HttpStatusCode.OK)
             {
-                Content = Request.RequestUri!.AbsolutePath == "/api/coach-checkins/admin"
+                Content = Request.RequestUri!.AbsolutePath == "/api/coach-checkins"
                     ? JsonContent.Create(new[] { new CoachCheckinAdminItemResponse(Id, Id, "owner", "synthetic.m4a", Status, null,
                         DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, true, 2, ChunkCount,
                         [new(0, Role(0), 1, []), new(1, Role(1), 1, [])]) })
