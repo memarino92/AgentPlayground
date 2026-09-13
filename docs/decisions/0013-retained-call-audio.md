@@ -1,6 +1,6 @@
 # 0013: Retained original call audio
 
-- Status: Proposed; retention, authorized playback and active deletion implemented on this branch
+- Status: Proposed; retention, authorized playback and active deletion implemented; broader lifecycle proposal remains open
 - Recorded: 2026-09-11
 - Evidence: PRODUCT-01 roadmap request; `CoachCheckinService`, `ProcessCoachTranscriptConsumer`, `CoachCallCleanupService`, and recovery tests
 - Extends: [0009](0009-transcription-outbox.md)
@@ -33,8 +33,8 @@ Full database backups include these bytes and their source links. Development re
 
 ## Delivery and verification
 
-This branch retains successful recordings, adds authorized evidence/audio/delete endpoints and a cookie-authenticated media proxy, and opens a transcript/player drawer from chat citation buttons or the transcript page. Retrieval returns source links with upload ID, subject and original start milliseconds. The player supports native play/pause, elapsed/total time and seek bar, speed selection, timestamp clicks and clamped 15-second skips. Missing audio/timing is explicit; no alignment or transcript timeline is rewritten. Follow-along is deferred.
+The implementation retains successful recordings, adds authorized evidence/audio/delete endpoints and a cookie-authenticated media proxy, and opens a transcript/player drawer from chat citation buttons or the transcript page. Retrieval returns source links with upload ID, subject and original start milliseconds. The player supports native play/pause, elapsed/total time and seek bar, speed selection, timestamp clicks and clamped 15-second skips. Missing audio/timing is explicit; no alignment or transcript timeline is rewritten. Follow-along is deferred.
 
 PostgreSQL tests verify retained bytes, rollback, concurrent replay, lost acknowledgement, host replacement, range semantics, current assignments, cross-subject denial, pending-delete rejection and transcript availability after deletion/restart. Component tests cover citations, missing timing/audio and deletion confirmation. The synthetic smoke script validates real upload-to-processing and Web cookie/range access for three personas. Browser checks verify playback controls against a 30-second silent PCM fixture, not spoken alignment or live-provider quality.
 
-The API currently materializes the original blob for each range request; the Web proxy streams the response body. This is bounded by the existing upload limit but warrants measurement before concurrent/high-volume playback. A recording-inclusive backup/restore rehearsal, deletion-ledger reconciliation across restores, actual archive expiry, and optional follow-along remain outstanding.
+The API currently materializes the original blob for each range request; the Web proxy streams the response body. This is bounded by the existing upload limit but warrants measurement before concurrent/high-volume playback. A recording-inclusive backup/restore rehearsal, deletion-ledger reconciliation across restores, and actual archive expiry remain outstanding. Optional follow-along shipped on 2026-09-13; see [decision 0023](0023-query-navigation-and-chat-preferences.md).
