@@ -57,6 +57,18 @@ internal static class PersonalAgentEndpoints
             return Results.Ok(new { sessionId = created.SessionId, modelId = created.ModelId, message = "Session created successfully" });
         }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
+        apiGroup.MapPut("/sessions/{sessionId}/model", async (HttpContext context, string sessionId, CreateSessionRequest request,
+            AgentChatService chat, IChatModelCatalog catalog, ICoachAssignmentStore assignments, CancellationToken token) =>
+        {
+            var access = await ResolveAccessAsync(context, request.ProfileId, assignments);
+            if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            var models = await catalog.GetModelsAsync(token);
+            var model = models.FirstOrDefault(value => value.Id == request.ModelId);
+            if (model is null) return Results.BadRequest(new { error = "Model is not available" });
+            try { return await chat.SetModelAsync(sessionId, access, model.Id, token) ? Results.NoContent() : Results.NotFound(); }
+            catch (UnauthorizedAccessException) { return Results.StatusCode(StatusCodes.Status403Forbidden); }
+        }).AddEndpointFilter(new SignedActorFilter(securityOptions));
+
         apiGroup.MapGet("/sessions", async (HttpContext httpContext, string profileId, int? pageSize, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
         {
             if (string.IsNullOrWhiteSpace(profileId))
