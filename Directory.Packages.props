@@ -8,13 +8,13 @@
     <PackageVersion Include="Microsoft.Agents.AI.Abstractions" Version="1.13.0" />
     <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.13.0" />
     <!-- ASP.NET Core -->
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.Google" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.QuickGrid" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.Google" Version="11.0.0-rc.1.26425.128" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="11.0.0-rc.1.26425.128" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.QuickGrid" Version="11.0.0-rc.1.26425.128" />
     <PackageVersion Include="MudBlazor" Version="8.9.0" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0-rc.1.26425.128" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-rc.1.26425.128" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="11.0.0-rc.1.26451.6" />
     <PackageVersion Include="Plugin.Firebase.CloudMessaging" Version="4.0.1" />
     <PackageVersion Include="Plugin.Firebase.Core" Version="4.1.0" />
     <!-- Observability -->
@@ -42,7 +42,7 @@
     <PackageVersion Include="FluentAssertions" Version="6.12.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.2" />
     <PackageVersion Include="Moq" Version="4.20.72" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="11.0.0-rc.1.26425.128" />
     <PackageVersion Include="MassTransit.TestFramework" Version="8.5.8" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
     <PackageVersion Include="bunit" Version="1.40.0" />
