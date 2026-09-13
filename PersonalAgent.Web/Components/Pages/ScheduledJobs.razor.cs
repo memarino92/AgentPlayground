@@ -135,7 +135,7 @@ public partial class ScheduledJobs
             ["before"] = Before?.ToString("O")
         });
         LoadedQuery = Uri;
-        Navigation.NavigateTo(Uri);
+        if (Uri != Navigation.Uri) Navigation.NavigateTo(Uri);
     }
 
     private Task CancelAsync() => LoadAsync(async () =>
