@@ -22,29 +22,63 @@ public sealed class ChatModelDiscoveryTests : TestContext
     [Fact]
     public void ChatPage_LoadsPickerFromApi_AndCreatesChatWithSelectedOpaqueId()
     {
-        JSInterop.Mode = JSRuntimeMode.Loose;
-        Services.AddMudServices();
-        Services.AddDataProtection();
-        Services.AddScoped<ProtectedSessionStorage>();
-        var Auth = new Mock<AuthenticationStateProvider>();
-        Auth.Setup(Value => Value.GetAuthenticationStateAsync()).ReturnsAsync(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity([
-            new Claim(ClaimTypes.Role, "Owner"), new Claim("urn:github:login", "owner")], "test"))));
-        Services.AddSingleton<AuthenticationStateProvider>(Auth.Object);
         using var Handler = new CatalogHandler();
-        Services.AddSingleton(new PersonalAgentClient(new HttpClient(Handler) { BaseAddress = new("http://localhost") }, Auth.Object,
-            Options.Create(new PersonalAgentApiOptions { ActorSigningKey = "test-signing-key" })));
+        Configure(Handler);
         var Cut = RenderComponent<Chat>();
         Cut.WaitForAssertion(() => Handler.CatalogReads.Should().Be(1));
-        Cut.FindAll("button").First(Value => Value.TextContent == "New chat").Click();
         Cut.WaitForAssertion(() => Cut.FindAll("select.composer__model option").Select(Value => Value.GetAttribute("value"))
             .Should().Equal("provider-default", "newly-available-model"));
         Cut.Find("select.composer__model").Change("newly-available-model");
         Cut.FindAll("button").First(Value => Value.TextContent == "New chat").Click();
-        Cut.WaitForAssertion(() => Handler.SelectedModels.Should().Equal("provider-default", "newly-available-model"));
+        Handler.SelectedModels.Should().BeEmpty("blank chats are local drafts");
+        Cut.Find("textarea").Input("First message");
+        Cut.FindAll("button").Single(Value => Value.TextContent == "Send").Click();
+        Cut.WaitForAssertion(() => Handler.SelectedModels.Should().Equal("newly-available-model"));
+    }
+
+    [Fact]
+    public async Task ChatSelectionUpdatesUrl_KeepsListOpen_AndBackRestoresModel()
+    {
+        using var Handler = new CatalogHandler();
+        Configure(Handler);
+        var Navigation = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        Navigation.NavigateTo("/chat?drawer=1");
+        var Cut = RenderComponent<Chat>();
+        Cut.WaitForElement(".session-panel__entry").Click();
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("First saved message"));
+        var First = Navigation.Uri;
+        First.Should().Contain($"sessionId={Handler.FirstId}").And.Contain("drawer=1");
+        Cut.FindAll(".session-panel__entry").Last().Click();
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Second saved message"));
+        Cut.Find("select.composer__model").GetAttribute("value").Should().Be("newly-available-model");
+        Cut.FindComponent<ChatSessionPanel>().Should().NotBeNull();
+        await Cut.InvokeAsync(() => Navigation.NavigateTo(First));
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("First saved message"));
+        Cut.Find("select.composer__model").GetAttribute("value").Should().Be("provider-default");
+        Cut.Find("select.composer__model").Change("newly-available-model");
+        Cut.WaitForAssertion(() => Handler.ChangedModel.Should().Be("newly-available-model"));
+        await Cut.InvokeAsync(() => Navigation.NavigateTo("/jobs"));
+        Navigation.Uri.Should().EndWith("/jobs", "leaving chat must not rewrite the destination");
+    }
+
+    private void Configure(CatalogHandler Handler)
+    {
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddMudServices();
+        Services.AddDataProtection();
+        Services.AddScoped<ProtectedLocalStorage>();
+        var Auth = new Mock<AuthenticationStateProvider>();
+        Auth.Setup(Value => Value.GetAuthenticationStateAsync()).ReturnsAsync(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity([
+            new Claim(ClaimTypes.Role, "Owner"), new Claim("urn:github:login", "owner")], "test"))));
+        Services.AddSingleton<AuthenticationStateProvider>(Auth.Object);
+        Services.AddSingleton(new PersonalAgentClient(new HttpClient(Handler) { BaseAddress = new("http://localhost") }, Auth.Object,
+            Options.Create(new PersonalAgentApiOptions { ActorSigningKey = "test-signing-key" })));
     }
 
     private sealed class CatalogHandler : HttpMessageHandler
     {
+        public Guid FirstId = Guid.NewGuid(), SecondId = Guid.NewGuid();
+        public string? ChangedModel;
         public int CatalogReads { get; private set; }
         public List<string> SelectedModels { get; } = [];
 
@@ -66,7 +100,23 @@ public sealed class ChatModelDiscoveryTests : TestContext
                 SelectedModels.Add(ModelId);
                 return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { sessionId = Guid.NewGuid().ToString(), modelId = ModelId }) };
             }
-            return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { sessions = Array.Empty<object>(), hasMore = false }) };
+            if (Request.Method == HttpMethod.Put)
+            {
+                ChangedModel = (await Request.Content!.ReadFromJsonAsync<JsonElement>(CancellationToken)).GetProperty("modelId").GetString();
+                return new(HttpStatusCode.NoContent);
+            }
+            if (Request.Method == HttpMethod.Get && Request.RequestUri.AbsolutePath.EndsWith("/messages"))
+            {
+                var First = Request.RequestUri.AbsolutePath.Contains(FirstId.ToString());
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new HistoryResponse(
+                    (First ? FirstId : SecondId).ToString(), First ? "provider-default" : "newly-available-model",
+                    [new("user", First ? "First saved message" : "Second saved message")])) };
+            }
+            if (Request.Method == HttpMethod.Post && Request.RequestUri.AbsolutePath.EndsWith("/messages"))
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { response = "Synthetic reply" }) };
+            return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { sessions = new[] {
+                new SessionListItem(FirstId.ToString(), "First chat", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
+                new SessionListItem(SecondId.ToString(), "Second chat", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow) }, hasMore = false }) };
         }
     }
 }
