@@ -16,7 +16,7 @@
             <option value="@model.Id">@model.DisplayName</option>
         }
     </select>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="composer__send" OnClick="OnSendMessage" Disabled="@(IsBusy || string.IsNullOrWhiteSpace(CurrentMessage))">Send</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="composer__send" OnClick="OnSendMessage" Disabled="@(IsBusy || Models.Count == 0 || string.IsNullOrWhiteSpace(CurrentMessage))">Send</MudButton>
 </div>
 
 @code {

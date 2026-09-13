@@ -29,6 +29,7 @@ internal static class ServiceCollectionMessagingExtensions
         });
 
         services.AddScoped<ProtectedSessionStorage>();
+        services.AddScoped<ProtectedLocalStorage>();
         services.AddSingleton<CoachCallUpdates>();
         services.AddMassTransit(x =>
         {
