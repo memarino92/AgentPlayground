@@ -8,6 +8,7 @@ namespace PersonalAgent.Web.Components.Pages;
 
 public partial class ScheduledJobs
 {
+    [Inject] private NavigationManager Navigation { get; set; } = null!;
     [Inject] private PersonalAgentClient Api { get; set; } = null!;
     [Inject] private AuthenticationStateProvider Authentication { get; set; } = null!;
     [Inject] private IJSRuntime Js { get; set; } = null!;
@@ -28,14 +29,21 @@ public partial class ScheduledJobs
     private bool Initialized;
     private bool ProfilesLoaded;
     private bool QueryChanged;
-    private Guid? LoadedJobId;
+    [SupplyParameterFromQuery(Name = "profileId")] public string? QueryProfile { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? QueryStatus { get; set; }
+    [SupplyParameterFromQuery(Name = "before")] public string? QueryBefore { get; set; }
+    private string? LoadedQuery;
     private Task? PollTask;
 
     protected override void OnParametersSet()
     {
-        if (LoadedJobId == JobId) return;
-        LoadedJobId = JobId;
+        if (LoadedQuery == Navigation.Uri) return;
+        LoadedQuery = Navigation.Uri;
         QueryChanged = true;
+        Status = States.Contains(QueryStatus) ? QueryStatus! : "";
+        Before = DateTimeOffset.TryParse(QueryBefore, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out var Cursor) ? Cursor : null;
+        if (Profiles.Contains(QueryProfile)) ProfileId = QueryProfile!;
     }
 
     protected override async Task OnAfterRenderAsync(bool FirstRender)
@@ -51,7 +59,11 @@ public partial class ScheduledJobs
         else if (QueryChanged && Initialized && !Busy)
         {
             QueryChanged = false;
-            if (JobId is { } Id) await SelectAsync(Id);
+            await LoadAsync(async () =>
+            {
+                Selected = JobId is { } Id ? await Api.GetJobAsync(Id, Lifetime.Token) : null;
+                await ReadAsync();
+            });
             StateHasChanged();
         }
     }
@@ -64,7 +76,7 @@ public partial class ScheduledJobs
             Profiles = User.IsInRole("Owner")
                 ? User.FindFirst("urn:github:login")?.Value is { } Owner ? [Owner] : []
                 : await Api.GetAssignedProfilesAsync($"google:{User.FindFirst(ClaimTypes.NameIdentifier)?.Value}", User.FindFirst(ClaimTypes.Email)?.Value ?? "", Lifetime.Token);
-            ProfileId = Profiles.FirstOrDefault() ?? "";
+            ProfileId = Profiles.Contains(QueryProfile) ? QueryProfile! : Profiles.FirstOrDefault() ?? "";
             ProfilesLoaded = true;
             if (JobId is { } Id)
             {
@@ -89,6 +101,7 @@ public partial class ScheduledJobs
     private Task SelectAsync(Guid Id) => LoadAsync(async () =>
     {
         Selected = await Api.GetJobAsync(Id, Lifetime.Token);
+        SaveQuery(Id);
         if (Selected is null) Notice = "This job is unavailable or you no longer have access.";
         else if (ProfileId != Selected.Job.SubjectProfileId)
         {
@@ -102,16 +115,29 @@ public partial class ScheduledJobs
         ProfileId = Args.Value?.ToString() ?? "";
         Selected = null;
         Before = null;
+        SaveQuery(Selected?.Job.TaskId);
         await RefreshAsync();
     }
     private async Task ChangeStatusAsync(ChangeEventArgs Args)
     {
         Status = Args.Value?.ToString() ?? "";
         Before = null;
+        SaveQuery(Selected?.Job.TaskId);
         await RefreshAsync();
     }
-    private async Task OlderAsync() { Before = Jobs.Last().CreatedAt; await RefreshAsync(); }
-    private async Task NewestAsync() { Before = null; await RefreshAsync(); }
+    private async Task OlderAsync() { Before = Jobs.Last().CreatedAt; SaveQuery(Selected?.Job.TaskId); await RefreshAsync(); }
+    private async Task NewestAsync() { Before = null; SaveQuery(Selected?.Job.TaskId); await RefreshAsync(); }
+    private void SaveQuery(Guid? Id)
+    {
+        var Uri = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["jobId"] = Id, ["profileId"] = ProfileId, ["status"] = string.IsNullOrEmpty(Status) ? null : Status,
+            ["before"] = Before?.ToString("O")
+        });
+        LoadedQuery = Uri;
+        Navigation.NavigateTo(Uri);
+    }
+
     private Task CancelAsync() => LoadAsync(async () =>
     {
         if (Selected is null) return;
