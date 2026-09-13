@@ -8,7 +8,7 @@ namespace PersonalAgent.Web.Components.Pages;
 public partial class EvidenceDrawer
 {
     [Inject] private PersonalAgentClient Client { get; set; } = default!;
-    [Inject] private AuthenticationStateProvider Authentication { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
     [Parameter] public DateTimeOffset Revision { get; set; }
     [Parameter] public bool Inline { get; set; }
@@ -39,7 +39,7 @@ public partial class EvidenceDrawer
         ConfirmDelete = false;
         try
         {
-            IsOwner = (await Authentication.GetAuthenticationStateAsync()).User.IsInRole("Owner");
+            IsOwner = (await AuthenticationState).User.IsInRole("Owner");
             var Result = await Client.GetCoachEvidenceAsync(UploadId, ProfileId, Cancellation.Token);
             if (Cancellation.IsCancellationRequested) return;
             Evidence = Result;

@@ -2,7 +2,6 @@
 @page "/coach-transcripts"
 @attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy)]
 @using System.Security.Claims
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PersonalAgentClient ApiClient
 @inject ILogger<CoachCheckinsAdmin> Logger
 @inject IJSRuntime JsRuntime

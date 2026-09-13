@@ -1,5 +1,4 @@
 @page "/"
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
 
 <PageTitle>PersonalAgent</PageTitle>
@@ -9,6 +8,8 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+
     private bool hasRedirected;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -16,7 +17,7 @@
         if (!firstRender || hasRedirected) return;
 
         hasRedirected = true;
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var authState = await AuthenticationState;
         var destination = authState.User.Identity?.IsAuthenticated != true
             ? "/login"
             : authState.User.IsInRole("Owner")

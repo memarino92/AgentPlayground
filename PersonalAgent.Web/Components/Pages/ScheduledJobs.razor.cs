@@ -10,7 +10,7 @@ public partial class ScheduledJobs
 {
     [Inject] private NavigationManager Navigation { get; set; } = null!;
     [Inject] private PersonalAgentClient Api { get; set; } = null!;
-    [Inject] private AuthenticationStateProvider Authentication { get; set; } = null!;
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
     [Inject] private IJSRuntime Js { get; set; } = null!;
     [Inject] private ILogger<ScheduledJobs> Logger { get; set; } = null!;
     [SupplyParameterFromQuery(Name = "jobId")] public Guid? JobId { get; set; }
@@ -72,7 +72,7 @@ public partial class ScheduledJobs
     {
         await LoadAsync(async () =>
         {
-            var User = (await Authentication.GetAuthenticationStateAsync()).User;
+            var User = (await AuthenticationState).User;
             Profiles = User.IsInRole("Owner")
                 ? User.FindFirst("urn:github:login")?.Value is { } Owner ? [Owner] : []
                 : await Api.GetAssignedProfilesAsync($"google:{User.FindFirst(ClaimTypes.NameIdentifier)?.Value}", User.FindFirst(ClaimTypes.Email)?.Value ?? "", Lifetime.Token);
@@ -191,15 +191,17 @@ internal static class JobTimeZone
 {
     public static async Task<TimeZoneInfo> ReadAsync(IJSRuntime Js, CancellationToken Token)
     {
-        var Module = await Js.InvokeAsync<IJSObjectReference>("import", Token, "./Components/Pages/ScheduledJobs.razor.js");
+        IJSObjectReference? Module = null;
         try
         {
+            Module = await Js.InvokeAsync<IJSObjectReference>("import", Token, "./Components/Pages/ScheduledJobs.razor.js");
             var Id = await Module.InvokeAsync<string>("timeZone", Token);
             return TimeZoneInfo.TryFindSystemTimeZoneById(Id, out var Zone) ? Zone : TimeZoneInfo.Utc;
         }
+        catch (JSException) { return TimeZoneInfo.Utc; }
         finally
         {
-            try { await Module.DisposeAsync(); }
+            try { if (Module is not null) await Module.DisposeAsync(); }
             catch (JSDisconnectedException) { }
         }
     }

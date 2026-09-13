@@ -13,6 +13,48 @@ namespace PersonalAgent.Web.Tests.Services;
 public class PersonalAgentClientTests
 {
     [Fact]
+    public async Task Requests_UseChangedIdentity_AndDropActorHeadersAfterSignOut()
+    {
+        var Actors = new List<string?>();
+        using var Handler = new StubHttpMessageHandler(Request =>
+        {
+            Actors.Add(Request.Headers.TryGetValues("X-Agent-Actor", out var Values) ? Values.Single() : null);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"models\":[]}", Encoding.UTF8, "application/json")
+            });
+        });
+        using var Http = new HttpClient(Handler) { BaseAddress = new("http://localhost") };
+        var Authentication = new ChangingAuthenticationStateProvider();
+        using var Client = new PersonalAgentClient(Http, Authentication,
+            Options.Create(new PersonalAgentApiOptions { ActorSigningKey = "test-signing-key" }));
+
+        await Client.GetModelsAsync();
+        Authentication.SetOwner("new-owner");
+        await Client.GetModelsAsync();
+        Authentication.SetOwner(null);
+        await Client.GetModelsAsync();
+
+        Actors.Should().Equal(null, "new-owner", null);
+    }
+
+    private sealed class ChangingAuthenticationStateProvider : AuthenticationStateProvider
+    {
+        private AuthenticationState State = new(new System.Security.Claims.ClaimsPrincipal());
+
+        public void SetOwner(string? Owner)
+        {
+            State = new(new System.Security.Claims.ClaimsPrincipal(Owner is null
+                ? new System.Security.Claims.ClaimsIdentity()
+                : new System.Security.Claims.ClaimsIdentity(
+                    [new("urn:github:login", Owner), new(System.Security.Claims.ClaimTypes.Role, "Owner")], "test")));
+            NotifyAuthenticationStateChanged(Task.FromResult(State));
+        }
+
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() => Task.FromResult(State);
+    }
+
+    [Fact]
     public async Task GetModelsAsync_ThrowsTypedException_WithStatusAndBody()
     {
         var handler = new StubHttpMessageHandler(_ =>

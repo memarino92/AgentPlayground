@@ -8,8 +8,12 @@ internal sealed class MenuInterop(IJSRuntime JS) : IAsyncDisposable
     private IJSObjectReference? Module;
     public async ValueTask InitializeAsync(ElementReference Root)
     {
-        Module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Layout.razor.js");
-        await Module.InvokeVoidAsync("initialize", Root);
+        try
+        {
+            Module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Layout.razor.js");
+            await Module.InvokeVoidAsync("initialize", Root);
+        }
+        catch (JSDisconnectedException) { }
     }
     public async ValueTask DisposeAsync()
     {

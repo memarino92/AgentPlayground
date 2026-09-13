@@ -1,5 +1,4 @@
 @using System.Security.Claims
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PersonalAgentClient ApiClient
 @inject ILogger<CoachCheckins> Logger
 
@@ -70,6 +69,8 @@
 </MudContainer>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+
     private string? profileId;
     private IBrowserFile? selectedFile;
     private string selectedFileName = "call.m4a";
@@ -174,7 +175,7 @@
 
     private async Task<string?> ResolveProfileIdAsync()
     {
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var authState = await AuthenticationState;
         return authState.User.FindFirst("urn:github:login")?.Value
             ?? authState.User.FindFirst(ClaimTypes.Name)?.Value;
     }

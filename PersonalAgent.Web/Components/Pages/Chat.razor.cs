@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.WebUtilities;
@@ -10,6 +11,8 @@ namespace PersonalAgent.Web.Components.Pages;
 
 public partial class Chat
 {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+
     private const string MessageListContainerId = "chat-message-list";
     private const int SessionPageSize = 20;
     private string? sessionId;
@@ -52,7 +55,8 @@ public partial class Chat
 
         if (!shouldScrollToBottom) return;
         shouldScrollToBottom = false;
-        await JsRuntime.InvokeVoidAsync("scrollToChatBottom", MessageListContainerId);
+        try { await JsRuntime.InvokeVoidAsync("scrollToChatBottom", MessageListContainerId); }
+        catch (JSDisconnectedException) { }
     }
 
     private async Task InitializeAsync()
@@ -410,7 +414,7 @@ public partial class Chat
 
     private async Task<string?> ResolveAccessAsync()
     {
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var authState = await AuthenticationState;
         var user = authState.User;
         if (user.IsInRole("Owner"))
         {

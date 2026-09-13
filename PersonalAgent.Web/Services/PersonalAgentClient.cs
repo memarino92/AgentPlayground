@@ -12,11 +12,33 @@ using PersonalAgent.Web.Configuration;
 
 namespace PersonalAgent.Web.Services;
 
-internal class PersonalAgentClient(
-    HttpClient httpClient,
-    AuthenticationStateProvider authenticationStateProvider,
-    IOptions<PersonalAgentApiOptions> options)
+internal class PersonalAgentClient : IDisposable
 {
+    private readonly HttpClient httpClient;
+    private readonly AuthenticationStateProvider authenticationStateProvider;
+    private readonly IOptions<PersonalAgentApiOptions> options;
+    private readonly object AuthenticationLock = new();
+    private Task<AuthenticationState>? AuthenticationState;
+
+    public PersonalAgentClient(HttpClient HttpClient, AuthenticationStateProvider AuthenticationStateProvider, IOptions<PersonalAgentApiOptions> Options)
+    {
+        httpClient = HttpClient;
+        authenticationStateProvider = AuthenticationStateProvider;
+        options = Options;
+        authenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    private void OnAuthenticationStateChanged(Task<AuthenticationState> State)
+    {
+        lock (AuthenticationLock) AuthenticationState = State;
+    }
+
+    private Task<AuthenticationState> GetAuthenticationStateAsync()
+    {
+        lock (AuthenticationLock) return AuthenticationState ??= authenticationStateProvider.GetAuthenticationStateAsync();
+    }
+
+    public void Dispose() => authenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     private const int DefaultPageSize = 20;
 
     public async Task<IReadOnlyList<ScheduledJobResponse>> GetJobsAsync(string ProfileId, string? Status, DateTimeOffset? Before, CancellationToken Token)
@@ -337,7 +359,7 @@ internal class PersonalAgentClient(
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string uri, HttpContent? content = null, CancellationToken cancellationToken = default, ClaimsPrincipal? requestUser = null, string? range = null)
     {
         using var request = new HttpRequestMessage(method, uri) { Content = content };
-        var user = requestUser ?? (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var user = requestUser ?? (await GetAuthenticationStateAsync()).User;
         if (!string.IsNullOrWhiteSpace(range)) request.Headers.TryAddWithoutValidation("Range", range);
         if (user.Identity?.IsAuthenticated == true)
         {

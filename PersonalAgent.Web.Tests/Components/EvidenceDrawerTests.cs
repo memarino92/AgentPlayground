@@ -64,6 +64,7 @@ public sealed class EvidenceDrawerTests : TestContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         var Authentication = new OwnerAuthentication();
+        Services.AddCascadingAuthenticationState();
         Services.AddSingleton<AuthenticationStateProvider>(Authentication);
         Services.AddSingleton(new PersonalAgentClient(new HttpClient(Handler) { BaseAddress = new("http://localhost") }, Authentication,
             Options.Create(new PersonalAgentApiOptions { ActorSigningKey = "test-signing-key" })));

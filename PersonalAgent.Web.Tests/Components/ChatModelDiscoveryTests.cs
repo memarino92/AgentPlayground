@@ -101,6 +101,7 @@ public sealed class ChatModelDiscoveryTests : TestContext
         var Auth = new Mock<AuthenticationStateProvider>();
         Auth.Setup(Value => Value.GetAuthenticationStateAsync()).ReturnsAsync(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity([
             new Claim(ClaimTypes.Role, "Owner"), new Claim("urn:github:login", "owner")], "test"))));
+        Services.AddCascadingAuthenticationState();
         Services.AddSingleton<AuthenticationStateProvider>(Auth.Object);
         Services.AddSingleton(new PersonalAgentClient(new HttpClient(Handler) { BaseAddress = new("http://localhost") }, Auth.Object,
             Options.Create(new PersonalAgentApiOptions { ActorSigningKey = "test-signing-key" })));

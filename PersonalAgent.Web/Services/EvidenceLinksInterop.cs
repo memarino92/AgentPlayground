@@ -11,8 +11,12 @@ internal sealed class EvidenceLinksInterop(IJSRuntime JS) : IAsyncDisposable
     public async ValueTask InitializeAsync(ElementReference Element)
     {
         Root = Element;
-        Module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/ChatMessageList.razor.js");
-        await Module.InvokeVoidAsync("initialize", Root);
+        try
+        {
+            Module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/ChatMessageList.razor.js");
+            await Module.InvokeVoidAsync("initialize", Root);
+        }
+        catch (JSDisconnectedException) { }
     }
 
     public async ValueTask DisposeAsync()
