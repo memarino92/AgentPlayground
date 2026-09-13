@@ -1,4 +1,5 @@
 @page "/admin/settings"
+@page "/admin/integrations"
 @page "/admin/integration-settings"
 @attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
 @inject NavigationManager Navigation
@@ -7,15 +8,20 @@
 <div class="settings-hub">
     <h1>Settings</h1>
     <nav aria-label="Settings sections">
-        <a href="@(Navigation.Uri.Split('#')[0] + "#sentry-settings")">Sentry</a> Â· <a href="@(Navigation.Uri.Split('#')[0] + "#otel-settings")">OpenTelemetry</a> Â· <a href="@(Navigation.Uri.Split('#')[0] + "#database-settings")">Database settings</a> Â· <a href="/admin/integrations">Tool access</a>
+        <a href="/admin/settings?section=sentry">Sentry</a> ·
+        <a href="/admin/settings?section=telemetry">OpenTelemetry</a> ·
+        <a href="/admin/settings?section=database">Database settings</a> ·
+        <a href="/admin/settings?section=integrations">Integrations and coach access</a>
     </nav>
-    <section id="sentry-settings" aria-label="Sentry settings">
-        <IntegrationSettings />
-    </section>
-    <section id="otel-settings" aria-label="OpenTelemetry settings">
-        <IntegrationSettings OpenTelemetry="true" />
-    </section>
-    <section id="database-settings" aria-label="Database settings">
-        <DatabaseSettings />
-    </section>
+    @switch (Section ?? (Navigation.Uri.Contains("/admin/integrations") ? "integrations" : "database"))
+    {
+        case "sentry": <IntegrationSettings /> break;
+        case "telemetry": <IntegrationSettings OpenTelemetry="true" /> break;
+        case "integrations": <IntegrationsAdmin /> break;
+        default: <DatabaseSettings /> break;
+    }
 </div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "section")] public string? Section { get; set; }
+}
