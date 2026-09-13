@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using Bunit;
+using Bunit.TestDoubles;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
@@ -19,6 +20,36 @@ namespace PersonalAgent.Web.Tests.Components;
 
 public sealed class ChatModelDiscoveryTests : TestContext
 {
+    [Fact]
+    public void FailedFirstSend_ReusesEmptyChatInsteadOfCreatingAnother()
+    {
+        using var Handler = new CatalogHandler { FailMessage = true };
+        Configure(Handler);
+        var Cut = RenderComponent<Chat>();
+        Cut.WaitForElement("textarea").Input("First attempt");
+        Cut.FindAll("button").Single(Value => Value.TextContent == "Send").Click();
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Failed to send message"));
+        Cut.FindAll("button").Single(Value => Value.TextContent == "New chat").Click();
+        Handler.FailMessage = false;
+        Cut.Find("textarea").Input("Retry");
+        Cut.FindAll("button").Single(Value => Value.TextContent == "Send").Click();
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic reply"));
+        Handler.SelectedModels.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void DeepLinkLoadsWithoutPushingAnotherHistoryEntry()
+    {
+        using var Handler = new CatalogHandler();
+        Configure(Handler);
+        var Navigation = (FakeNavigationManager)Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        Navigation.NavigateTo($"/chat?sessionId={Handler.FirstId}&profileId=owner");
+        var Entries = Navigation.History.Count;
+        var Cut = RenderComponent<Chat>();
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("First saved message"));
+        Navigation.History.Count.Should().Be(Entries, "one Back should return to the originating job");
+    }
+
     [Fact]
     public void ChatPage_LoadsPickerFromApi_AndCreatesChatWithSelectedOpaqueId()
     {
@@ -79,6 +110,7 @@ public sealed class ChatModelDiscoveryTests : TestContext
     {
         public Guid FirstId = Guid.NewGuid(), SecondId = Guid.NewGuid();
         public string? ChangedModel;
+        public bool FailMessage;
         public int CatalogReads { get; private set; }
         public List<string> SelectedModels { get; } = [];
 
@@ -113,7 +145,8 @@ public sealed class ChatModelDiscoveryTests : TestContext
                     [new("user", First ? "First saved message" : "Second saved message")])) };
             }
             if (Request.Method == HttpMethod.Post && Request.RequestUri.AbsolutePath.EndsWith("/messages"))
-                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { response = "Synthetic reply" }) };
+                return FailMessage ? new(HttpStatusCode.InternalServerError)
+                    : new(HttpStatusCode.OK) { Content = JsonContent.Create(new { response = "Synthetic reply" }) };
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { sessions = new[] {
                 new SessionListItem(FirstId.ToString(), "First chat", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
                 new SessionListItem(SecondId.ToString(), "Second chat", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow) }, hasMore = false }) };

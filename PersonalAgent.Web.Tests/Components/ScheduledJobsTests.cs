@@ -16,6 +16,26 @@ namespace PersonalAgent.Web.Tests.Components;
 public sealed class ScheduledJobsTests : TestContext
 {
     [Fact]
+    public async Task QueryRestoresSelectionAndFilter_AfterNavigatingAway()
+    {
+        using var Handler = new JobHandler();
+        Configure(Handler);
+        var Navigation = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        Navigation.NavigateTo("/jobs");
+        var Cut = RenderComponent<ScheduledJobs>();
+        Cut.WaitForElement(".job-card").Click();
+        Cut.WaitForElement(".job-id");
+        Cut.FindAll(".jobs-filters select").Last().Change("Scheduled");
+        var Saved = Navigation.Uri;
+        Saved.Should().Contain($"jobId={Handler.Id}").And.Contain("status=Scheduled");
+        await Cut.InvokeAsync(() => Navigation.NavigateTo("/jobs"));
+        Cut.WaitForAssertion(() => Cut.FindAll(".job-id").Should().BeEmpty());
+        await Cut.InvokeAsync(() => Navigation.NavigateTo(Saved));
+        Cut.WaitForAssertion(() => Cut.Find(".job-id").TextContent.Should().Contain(Handler.Id.ToString()));
+        Cut.FindAll(".jobs-filters select").Last().GetAttribute("value").Should().Be("Scheduled");
+    }
+
+    [Fact]
     public void NotificationShowsTypeBodyAndCancellationWithoutResultConversation()
     {
         using var Handler = new JobHandler { Notification = true };

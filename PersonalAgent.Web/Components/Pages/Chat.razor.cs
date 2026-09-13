@@ -286,6 +286,12 @@ public partial class Chat
     private async Task CreateSession()
     {
         if (isBusy) return;
+        if (sessionId is not null && messages.Count == 0 && !isReadOnly)
+        {
+            currentMessage = string.Empty;
+            errorMessage = null;
+            return;
+        }
         await ResetSelectionAsync();
         var stored = await ModelStorage.GetAsync<string>(ModelStorageKey);
         selectedModelId = stored.Success && availableModels.Any(model => model.Id == stored.Value) ? stored.Value
@@ -293,11 +299,14 @@ public partial class Chat
             : availableModels.FirstOrDefault(model => model.IsDefault)?.Id ?? availableModels.FirstOrDefault()?.Id;
     }
 
-    private void SaveChatQuery(bool replace = false) => NavigationManager.NavigateTo(
-        NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
+    private void SaveChatQuery()
+    {
+        var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
             ["sessionId"] = sessionId, ["profileId"] = profileId, ["drawer"] = isSessionDrawerOpen ? "1" : null
-        }), replace: replace);
+        });
+        if (uri != NavigationManager.Uri) NavigationManager.NavigateTo(uri);
+    }
 
     private void CloseSessionDrawer() { isSessionDrawerOpen = false; SaveChatQuery(); }
     private void ToggleSessionDrawer() { isSessionDrawerOpen = !isSessionDrawerOpen; SaveChatQuery(); }
