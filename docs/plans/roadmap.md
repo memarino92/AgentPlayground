@@ -2,6 +2,12 @@
 
 Recorded 2026-09-07; selectable backlog expanded 2026-09-10; evidence audio playback expanded 2026-09-11. The numbered themes below retain the original suggested sequence; the [selectable backlog](#selectable-backlog) is an unprioritized menu for a predominantly single-maintainer application. Estimates are deliberately omitted until the first slices expose their integration work.
 
+## Navigation and recording usability — delivered 2026-09-13
+
+Maintainer-requested changes now persist job/chat selections and filters in query parameters, keep the chat list open on selection, start local drafts automatically, remember models, and unify Settings/integrations and owner/coach recording views. The menu dismisses on outside clicks; Markdown block spacing is corrected. Recordings use filename-derived dates, inline audio and the same compact, playback-following transcript as the evidence drawer. Following can be disabled. This extends PRODUCT-01 presentation; its backup/recovery acceptance remains outstanding.
+
+Validation: 53 Web and 218 API tests pass. Synthetic browser checks cover single-Back job/filter restoration from the result conversation, chat Back/list retention, menu dismissal, recording Back, timestamp-to-active-row synchronization, and coach playback without owner controls. See [decision 0023](../decisions/0023-query-navigation-and-chat-preferences.md) and the [navigation runbook](../runbooks/navigation.md).
+
 ## 1. Reproducible local data and proven recovery â€” in progress
 
 **Observed:** `infrastructure/backup/backup.sh` uploads custom-format dumps. Snapshot/restore helpers and a synthetic full-stack local environment are implemented; a production-archive application recovery rehearsal remains outstanding. Encrypted config, push tokens, staged audio, and SQL transport share the database.
