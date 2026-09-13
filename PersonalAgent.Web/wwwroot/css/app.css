@@ -467,3 +467,7 @@ body {
 .message-list__content p + p { margin-top: .65rem; }
 .message-list__content pre { white-space: pre; overflow-x: auto; padding: .75rem; }
 .message-list__content blockquote { border-left: 3px solid #8886; padding-left: .75rem; margin: .65rem 0; }
+
+.navbar-menu > button { font: inherit; cursor: pointer; background: transparent; border: 0; padding: .5rem; }
+.navbar-menu__items[popover] { margin: 0; inset: 3.5rem auto auto 1rem; }
+.navbar-menu__items[popover]:not(:popover-open) { display: none; }

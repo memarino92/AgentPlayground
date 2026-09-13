@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 @using System.Security.Claims
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
@@ -10,29 +12,27 @@
 
     <header class="navbar">
         <div class="navbar__start">
-            <details class="navbar-menu">
-                <summary aria-label="Open menu">☰</summary>
-                <div class="navbar-menu__items">
+            <div class="navbar-menu">
+                <button type="button" popovertarget="site-menu" aria-label="Open menu">☰</button>
+                <div class="navbar-menu__items" id="site-menu" popover="auto" @ref="MenuRoot">
                     <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy">
                         <Authorized>
-                            <a href="/chat?drawer=1" class="navbar-menu__link">Sessions</a>
+                            <a href="/chat?drawer=1" class="navbar-menu__link">Chats</a>
                             <a href="/jobs" class="navbar-menu__link">Scheduled jobs</a>
                         </Authorized>
                     </AuthorizeView>
                     <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.OwnerPolicy">
                         <Authorized>
-                            <a href="/coach-checkins/admin" class="navbar-menu__link">Coach check-ins</a>
-                            <a href="/admin/integrations" class="navbar-menu__link">Integrations</a>
                             <a href="/admin/settings" class="navbar-menu__link">Settings</a>
                         </Authorized>
                     </AuthorizeView>
                     <AuthorizeView Policy="@ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy">
                         <Authorized>
-                            <a href="/coach-transcripts" class="navbar-menu__link">Transcripts</a>
+                            <a href="/coach-checkins/admin" class="navbar-menu__link">Coach check-ins</a>
                         </Authorized>
                     </AuthorizeView>
                 </div>
-            </details>
+            </div>
 
             <div class="navbar__title">
             <h1>PersonalAgent</h1>
@@ -61,4 +61,16 @@
 </div>
 
 @code {
+    private ElementReference MenuRoot;
+    private MenuInterop? Menu;
+    protected override async Task OnAfterRenderAsync(bool FirstRender)
+    {
+        if (!FirstRender) return;
+        Menu = new(JS);
+        await Menu.InitializeAsync(MenuRoot);
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (Menu is not null) await Menu.DisposeAsync();
+    }
 }

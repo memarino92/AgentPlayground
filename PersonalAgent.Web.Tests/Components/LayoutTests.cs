@@ -16,6 +16,7 @@ public class LayoutTests : TestContext
 {
     public LayoutTests()
     {
+        JSInterop.SetupModule("./Components/Layout.razor.js").SetupVoid("initialize", _ => true);
         Services.AddMudServices();
         Services.AddAuthorizationCore(options =>
         {
