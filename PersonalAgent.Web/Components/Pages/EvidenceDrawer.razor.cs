@@ -10,6 +10,8 @@ public partial class EvidenceDrawer
     [Inject] private PersonalAgentClient Client { get; set; } = default!;
     [Inject] private AuthenticationStateProvider Authentication { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Parameter] public DateTimeOffset Revision { get; set; }
+    [Parameter] public bool Inline { get; set; }
     [Parameter] public Guid UploadId { get; set; }
     [Parameter] public string ProfileId { get; set; } = string.Empty;
     [Parameter] public int? StartMs { get; set; }
@@ -20,12 +22,12 @@ public partial class EvidenceDrawer
     private CancellationTokenSource? LoadCancellation;
     private bool Loading, IsOwner, ConfirmDelete, Deleting, InitializePlayer;
     private string? Error;
-    private (Guid, string, int?)? LoadedSource;
+    private (Guid, string, int?, DateTimeOffset)? LoadedSource;
     private string AudioUrl => $"/media/coach-checkins/{UploadId}/audio?profileId={Uri.EscapeDataString(ProfileId)}";
 
     protected override async Task OnParametersSetAsync()
     {
-        var Source = (UploadId, ProfileId, StartMs);
+        var Source = (UploadId, ProfileId, StartMs, Revision);
         if (LoadedSource == Source) return;
         LoadedSource = Source;
         LoadCancellation?.Cancel();
@@ -54,6 +56,12 @@ public partial class EvidenceDrawer
         InitializePlayer = false;
         Player ??= new(JS);
         await Player.InitializeAsync(Root, StartMs);
+    }
+
+    private async Task ReloadAudioAsync(Guid Id)
+    {
+        LoadedSource = null;
+        await OnParametersSetAsync();
     }
 
     private async Task DeleteAsync()

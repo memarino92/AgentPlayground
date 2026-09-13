@@ -26,6 +26,25 @@ export function initialize(root, startMs) {
         status.textContent = '';
         if (Number.isFinite(startMs) && startMs >= 0) seek(startMs / 1000);
     };
+    let active;
+    const follow = () => {
+        const milliseconds = audio.currentTime * 1000;
+        const next = [...root.querySelectorAll('[data-start]')].find(row =>
+            milliseconds >= Number(row.dataset.start) && milliseconds < Number(row.dataset.end));
+        if (next === active) return;
+        if (active) active.dataset.active = 'false';
+        active = next;
+        if (active) {
+            active.dataset.active = 'true';
+            if (!root.querySelector('[data-follow]')?.checked) return;
+            const transcript = root.querySelector('.evidence-transcript');
+            const rowRect = active.getBoundingClientRect();
+            const bounds = transcript.getBoundingClientRect();
+            transcript.scrollTop += rowRect.top - bounds.top - transcript.clientHeight / 3;
+        }
+    };
+    audio.addEventListener('timeupdate', follow, { signal: abort.signal });
+    audio.addEventListener('seeked', follow, { signal: abort.signal });
     audio.addEventListener('loadedmetadata', ready, { signal: abort.signal });
     audio.addEventListener('error', () => { status.textContent = 'Recording could not be played. It may be unavailable, or this browser may not support its format.'; }, { signal: abort.signal });
     audio.addEventListener('waiting', () => { status.textContent = 'Buffering recording…'; }, { signal: abort.signal });

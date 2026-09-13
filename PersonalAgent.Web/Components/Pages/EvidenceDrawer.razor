@@ -1,7 +1,10 @@
 @implements IAsyncDisposable
 
-<aside class="evidence-drawer" aria-label="Call evidence" @ref="Root" @onkeydown="HandleKeyDown">
-    <header><h2 tabindex="-1">Call evidence</h2><button type="button" @onclick="OnClose">Close evidence</button></header>
+<aside class="@(Inline ? "evidence-inline" : "evidence-drawer")" aria-label="Call evidence" @ref="Root" @onkeydown="HandleKeyDown">
+    @if (!Inline)
+    {
+        <header><h2 tabindex="-1">Call evidence</h2><button type="button" @onclick="OnClose">Close evidence</button></header>
+    }
     @if (Loading)
     {
         <p role="status">Loading evidence…</p>
@@ -21,6 +24,7 @@
             <audio controls preload="metadata" aria-label="Original call recording" src="@AudioUrl"></audio>
             <p data-player-status role="status">Loading recording…</p>
             <div class="player-actions">
+                <label><input type="checkbox" data-follow checked /> Follow transcript</label>
                 <button type="button" data-skip="-15">Back 15 seconds</button>
                 <button type="button" data-skip="15">Forward 15 seconds</button>
                 <label>Playback speed <select data-speed><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
@@ -43,30 +47,17 @@
         {
             <p role="status">Audio unavailable. This recording was deleted or was not retained.</p>
         }
-        @if (StartMs is null || StartMs < 0)
+        @if (!Inline && (StartMs is null || StartMs < 0))
         {
             <p>No source timestamp is available. Playback starts at the beginning.</p>
         }
-        <div class="evidence-transcript">
-            @if (Evidence.Transcript.Utterances.Count == 0)
-            {
-                <p>@Evidence.Transcript.TranscriptText</p>
-            }
-            @foreach (var Utterance in Evidence.Transcript.Utterances)
-            {
-                <section class="utterance" data-cited="@(StartMs >= Utterance.StartMs && StartMs < Utterance.EndMs ? "true" : "false")">
-                    <strong>@Utterance.SpeakerRole</strong>
-                    @if (Utterance.StartMs >= 0 && Utterance.EndMs >= Utterance.StartMs)
-                    {
-                        <button type="button" data-seek="@Utterance.StartMs" disabled="@(!Evidence.AudioAvailable)">@Timestamp(Utterance.StartMs) – @Timestamp(Utterance.EndMs)</button>
-                    }
-                    else
-                    {
-                        <span>Timing unavailable</span>
-                    }
-                    <p>@Utterance.Text</p>
-                </section>
-            }
-        </div>
+        @if (Inline && Evidence.Transcript.Status == "Completed")
+        {
+            <AuthorizeView Roles="Owner">
+                <TranscriptAudioUpload UploadId="UploadId" ProfileId="@ProfileId" HasAudio="Evidence.AudioAvailable"
+                    MaxUploadBytes="Evidence.MaxAudioUploadBytes" OnUploaded="ReloadAudioAsync" />
+            </AuthorizeView>
+        }
+        <TranscriptTimeline Transcript="Evidence.Transcript" AudioAvailable="Evidence.AudioAvailable" StartMs="StartMs" />
     }
 </aside>
