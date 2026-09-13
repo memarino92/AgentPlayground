@@ -1,10 +1,9 @@
-@page "/admin/integrations"
 @attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
 @using System.Security.Claims
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PersonalAgentClient ApiClient
 
-<PageTitle>PersonalAgent - Integration access</PageTitle>
+
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
     <MudStack Spacing="3">
