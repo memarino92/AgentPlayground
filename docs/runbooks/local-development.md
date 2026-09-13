@@ -4,7 +4,7 @@ For a fresh checkout without private data or provider accounts, use the [synthet
 
 ## Build without production data
 
-.NET 10 builds the server projects independently of MAUI. Run the four test projects listed in the root README; integration tests require Docker Desktop. A complete solution build also needs Android tooling. On 2026-09-07 the installed toolchain could not find Android API 36 (`android-36/android.jar`), so Android was not build-verified.
+The .NET 11 RC1 SDK pinned in `global.json` builds the server projects independently of MAUI. Run the four test projects listed in the root README; integration tests require Docker Desktop. A complete solution build also needs Android tooling. Use the [mobile setup](../../PersonalAgent.Mobile/README.md) for the matching workload and platform tooling; installing the base SDK alone does not install MAUI Android.
 
 ## Preferred path: exercise database-backed configuration locally
 

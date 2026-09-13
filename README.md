@@ -32,7 +32,7 @@ The API owns AI provider adapters, including AssemblyAI transcription behind a n
 
 ## Build and test
 
-Install the .NET 10 SDK. Backend projects can be built without Android workloads:
+Install .NET 11 RC1 SDK `11.0.100-rc.1.26425.128`, pinned in `global.json`. Backend projects can be built without Android workloads:
 
 ```powershell
 dotnet build PersonalAgent/PersonalAgent.csproj
@@ -49,7 +49,7 @@ dotnet test PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj
 dotnet test PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj
 ```
 
-`dotnet build` includes Android and requires its MAUI workload, Android SDK, and Java toolchain. Follow the [mobile setup](PersonalAgent.Mobile/README.md). Package versions are centrally managed in `Directory.Packages.props`; warnings are errors.
+`dotnet build` includes Android and requires the matching .NET 11 MAUI Android workload, Android SDK, and Java toolchain. Follow the [mobile setup](PersonalAgent.Mobile/README.md). Package versions are centrally managed in `Directory.Packages.props`; warnings are errors.
 
 For an interactive demo without private data or provider accounts, start the synthetic stack with Docker:
 

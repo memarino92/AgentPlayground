@@ -23,7 +23,7 @@ API owns the transcription adapter, provider configuration and the `transcriptio
 ./scripts/migrate-assemblyai-configuration.ps1 -ValuesPath ./scripts/seed-configuration.values.ps1 -Apply
 ```
 
-Omit `-ValuesPath` when the bootstrap environment variables are already set. The helper requires the repository's .NET 10 SDK and restores its normal repository dependencies; it connects directly to PostgreSQL and does not require Docker or psql. Configuration writers may wait briefly during the transaction; readers remain available. Stop old Worker processes before applying because their startup configuration will no longer be in the Worker scope. Restart API afterward. A network failure during commit can leave the outcome uncertain; rerun the preview to inspect the remaining move count.
+Omit `-ValuesPath` when the bootstrap environment variables are already set. The helper requires the repository's pinned .NET 11 RC1 SDK and restores its normal repository dependencies; it connects directly to PostgreSQL and does not require Docker or psql. Configuration writers may wait briefly during the transaction; readers remain available. Stop old Worker processes before applying because their startup configuration will no longer be in the Worker scope. Restart API afterward. A network failure during commit can leave the outcome uncertain; rerun the preview to inspect the remaining move count.
 
 ## Recovery semantics
 
