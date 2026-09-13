@@ -98,6 +98,7 @@ public sealed class ScheduledJobsTests : TestContext
     {
         Services.AddLogging();
         var Authentication = new OwnerAuthentication();
+        Services.AddCascadingAuthenticationState();
         Services.AddSingleton<AuthenticationStateProvider>(Authentication);
         Services.AddSingleton(new PersonalAgentClient(new HttpClient(Handler) { BaseAddress = new("http://localhost") },
             Authentication, Options.Create(new PersonalAgentApiOptions { ActorSigningKey = "synthetic-signing-key" })));

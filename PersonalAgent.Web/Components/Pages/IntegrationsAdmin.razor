@@ -1,6 +1,5 @@
 @attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
 @using System.Security.Claims
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject PersonalAgentClient ApiClient
 
 
@@ -85,6 +84,8 @@
 </MudContainer>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+
     private List<AgentToolDescriptorResponse> tools = [];
     private List<CoachProfileAssignmentResponse> assignments = [];
     private readonly Dictionary<(string Role, string ToolKey), bool> permissions = [];
@@ -101,7 +102,7 @@
     {
         try
         {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var authState = await AuthenticationState;
             ownerProfileId = authState.User.FindFirst("urn:github:login")?.Value;
             if (string.IsNullOrWhiteSpace(ownerProfileId)) throw new InvalidOperationException("Owner profile could not be resolved.");
 

@@ -1,7 +1,7 @@
 @using System.Reflection
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="typeof(Layout)">
+        <AuthorizeRouteView @key="AuthenticationState" RouteData="@routeData" DefaultLayout="typeof(Layout)">
             <NotAuthorized>
                 <LayoutView Layout="typeof(Layout)">
                     @if (context.User.Identity?.IsAuthenticated == true)
@@ -26,3 +26,8 @@
         <p>Sorry, there's nothing at this address.</p>
     </NotFound>
 </Router>
+
+@code {
+    // Recreate routed content on identity changes so cached subject data and drafts cannot cross accounts.
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+}

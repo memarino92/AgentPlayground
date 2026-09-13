@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.WebUtilities;
@@ -10,6 +11,8 @@ namespace PersonalAgent.Web.Components.Pages;
 
 public partial class CoachCheckinsAdmin
 {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+
     private bool isLoading;
     private bool isApplyingOverride;
     private bool isDownloadingTranscript;
@@ -32,7 +35,7 @@ public partial class CoachCheckinsAdmin
     private bool initialized;
     protected override async Task OnInitializedAsync()
     {
-        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var user = (await AuthenticationState).User;
         profileId = user.IsInRole("Owner") ? user.FindFirst("urn:github:login")?.Value
             : (await ApiClient.GetAssignedProfilesAsync($"google:{user.FindFirst(ClaimTypes.NameIdentifier)?.Value}", user.FindFirst(ClaimTypes.Email)?.Value ?? "")).FirstOrDefault();
         await LoadAsync();
@@ -216,7 +219,7 @@ public partial class CoachCheckinsAdmin
     {
         if (selectedFile is null) return;
 
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var authState = await AuthenticationState;
         var profileId = authState.User.FindFirst("urn:github:login")?.Value
             ?? authState.User.FindFirst(ClaimTypes.Name)?.Value;
         if (string.IsNullOrWhiteSpace(profileId))
