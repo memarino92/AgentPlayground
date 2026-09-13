@@ -1,0 +1,28 @@
+        <div class="evidence-transcript">
+            @if (Transcript.Utterances.Count == 0)
+            {
+                <p>@Transcript.TranscriptText</p>
+            }
+            @foreach (var Utterance in Transcript.Utterances)
+            {
+                <section class="utterance" data-role="@Utterance.SpeakerRole" data-start="@Utterance.StartMs" data-end="@Utterance.EndMs" data-cited="@(StartMs >= Utterance.StartMs && StartMs < Utterance.EndMs ? "true" : "false")">
+                    <div class="utterance-meta"><strong>@Utterance.SpeakerRole</strong>
+                    @if (Utterance.StartMs >= 0 && Utterance.EndMs >= Utterance.StartMs)
+                    {
+                        <button type="button" data-seek="@Utterance.StartMs" disabled="@(!AudioAvailable)">@Timestamp(Utterance.StartMs) – @Timestamp(Utterance.EndMs)</button>
+                    }
+                    else
+                    {
+                        <span>Timing unavailable</span>
+                    }
+                    </div><p>@Utterance.Text</p>
+                </section>
+            }
+        </div>
+
+@code {
+    [Parameter, EditorRequired] public CoachCheckinTranscriptResponse Transcript { get; set; } = null!;
+    [Parameter] public bool AudioAvailable { get; set; }
+    [Parameter] public int? StartMs { get; set; }
+    private static string Timestamp(int Milliseconds) => TimeSpan.FromMilliseconds(Milliseconds).ToString(@"hh\:mm\:ss");
+}

@@ -8,7 +8,7 @@ internal sealed class EvidencePlayerInterop(IJSRuntime JS) : IAsyncDisposable
     private IJSObjectReference? Module;
     public async ValueTask InitializeAsync(ElementReference Root, int? StartMs)
     {
-        Module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/EvidenceDrawer.razor.js");
+        Module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/EvidenceDrawer.razor.js?v=2");
         await Module.InvokeVoidAsync("initialize", Root, StartMs);
     }
     public async ValueTask StopAsync(ElementReference Root)
