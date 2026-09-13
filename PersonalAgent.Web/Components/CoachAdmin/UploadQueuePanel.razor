@@ -1,3 +1,4 @@
+@inject NavigationManager Navigation
 <MudPaper Class="pa-3 coach-admin-queue" Elevation="1">
     <MudStack Spacing="2">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -39,10 +40,14 @@
                             class="coach-admin-queue__item @(isSelected ? "coach-admin-queue__item--active" : string.Empty)"
                             @onclick="() => OnSelectUpload.InvokeAsync(item.UploadId)">
                         <div class="coach-admin-queue__item-head">
-                            <strong>@item.OriginalFileName</strong>
+                            <strong>@RecordingLabel.FromFileName(item.OriginalFileName)</strong>
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetStatusColor(item.Status)">@item.Status</MudChip>
                         </div>
                         <div class="coach-admin-queue__item-meta">
+                            @if (RecordingLabel.FromFileName(item.OriginalFileName) != item.OriginalFileName)
+                            {
+                                <span>@item.OriginalFileName</span>
+                            }
                             <span>@item.ProfileId</span>
                             <span>@item.CreatedAtUtc.ToLocalTime().ToString("g")</span>
                             <span>Utterances: @item.UtteranceCount</span>
@@ -65,6 +70,15 @@
     private const int NeedsActionTab = 2;
     private const int CompletedTab = 3;
 
+    [SupplyParameterFromQuery(Name = "filter")] public int? Filter { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? Search { get; set; }
+    protected override void OnParametersSet()
+    {
+        activeTab = Filter is >= 0 and <= 3 ? Filter.Value : AllTab;
+        searchText = Search ?? "";
+    }
+    private void SaveQuery(bool Replace = false) => Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(
+        new Dictionary<string, object?> { ["filter"] = activeTab == 0 ? null : activeTab, ["q"] = string.IsNullOrWhiteSpace(searchText) ? null : searchText }), replace: Replace);
     private int activeTab = AllTab;
     private string searchText = string.Empty;
 
@@ -84,12 +98,14 @@
     private Task HandleTabChanged(int index)
     {
         activeTab = index;
+        SaveQuery();
         return Task.CompletedTask;
     }
 
     private Task HandleSearchChanged(string value)
     {
         searchText = value;
+        SaveQuery(true);
         return Task.CompletedTask;
     }
 
