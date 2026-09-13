@@ -459,3 +459,11 @@ body {
     max-width: 100%;
   }
 }
+
+/* Markdown supplies its own block spacing; preserve whitespace only in plain text. */
+.message-list__item--assistant .message-list__content { white-space: normal; }
+.message-list__content :is(ol, ul) { padding-left: 1.6rem; margin: .65rem 0; }
+.message-list__content li + li { margin-top: .45rem; }
+.message-list__content p + p { margin-top: .65rem; }
+.message-list__content pre { white-space: pre; overflow-x: auto; padding: .75rem; }
+.message-list__content blockquote { border-left: 3px solid #8886; padding-left: .75rem; margin: .65rem 0; }
