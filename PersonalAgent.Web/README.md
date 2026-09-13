@@ -6,8 +6,11 @@
 
 - GitHub-authenticated owner UI and Google-authenticated coach transcript access.
 - Session list, session restore, and transcript browsing.
-- Model selection when creating a chat session.
-- API access via `PersonalAgentClient` with internal API key header forwarding.
+- Draft chats saved on first send, persistent model changes, browser model preference and URL-backed selection.
+- Shared owner/coach recording views, authorized evidence playback and live processing refresh.
+- Scheduled jobs dashboard, pending cancellation and read-only result conversations.
+- Unified Settings for database rows, Sentry, OpenTelemetry, assignments and tool permissions.
+- API access via `PersonalAgentClient` with internal key and signed actor context.
 
 ## Runtime Model
 
@@ -15,7 +18,7 @@
 - Main page: `PersonalAgent.Web/Components/Pages/Chat.razor`.
 - API access wrapper: `PersonalAgent.Web/Services/PersonalAgentClient.cs`.
 
-The web app talks only to the API; it does not call model providers or worker services directly.
+Domain requests go through API. Web also stores Data Protection keys in PostgreSQL, reconciles runtime integration settings and consumes coaching status events over MassTransit SQL transport. It does not call model providers directly. See [navigation and playback](../docs/runbooks/navigation.md).
 
 ## Required Configuration
 
@@ -75,7 +78,7 @@ Create a Google OAuth 2.0 web client in Google Cloud and register the redirect U
 
 Set `GOOGLE_ALLOWED_EMAILS` to the coach's exact Google account email. Only listed,
 verified Google email addresses receive the `Coach` role. An owner must then assign the
-coach email to an athlete profile at `/admin/integrations`. Coaches receive private chat
+coach email to an athlete profile at `/admin/settings?section=integrations` (legacy `/admin/integrations` redirects there). Coaches receive private chat
 sessions and can query only assigned coach check-ins; tool access is controlled by the
 role matrix on that page. GitHub sign-ins retain the `Owner` role.
 

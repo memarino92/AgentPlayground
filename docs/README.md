@@ -11,6 +11,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Snapshot commands](runbooks/snapshot-commands.md): implemented export and guarded local restore.
 - [Adding agent tools](runbooks/adding-agent-tools.md): register a capability with shared metadata, binding, and authorization.
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
+- [Navigation and playback](runbooks/navigation.md): query state, draft chats, saved models and shared recording views.
 - [Scheduled jobs](runbooks/scheduled-jobs.md): authorization, dashboard, cancellation and conservative recovery.
 - [Coaching retrieval evaluation](runbooks/coach-retrieval-evaluation.md): synthetic regression baseline and live-model evaluation limits.
 - [Observability](runbooks/observability.md): service tracing, OpenInference, Sentry correlation and OTLP setup.
@@ -34,6 +35,8 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0008: Synthetic local environment](decisions/0008-synthetic-local-environment.md) | Accepted | Exercise real storage and delivery with deterministic providers and guarded sample sign-in |
 | [0009: Transcription outbox](decisions/0009-transcription-outbox.md) | Accepted; implemented | Commit transcription and processing completion with durable outgoing messages |
 | [0010: Runtime integration settings](decisions/0010-runtime-integration-settings.md) | Accepted; Sentry first slice implemented | Enter, validate, and apply integration settings in the app |
+| [0011: Existing settings editor](decisions/0011-existing-settings-editor.md) | Accepted; implemented | Edit existing database rows with masked secrets and restart requirements |
+| [0012: Live provider credentials](decisions/0012-live-provider-credentials.md) | Accepted; implemented | Reload OpenAI/AssemblyAI API credentials for new requests |
 | [0013: Retained call audio](decisions/0013-retained-call-audio.md) | Proposed; retention and evidence drawer implemented | Preserve and play original recordings with subject access and active deletion |
 | [0014: Live coach processing](decisions/0014-live-coach-processing.md) | Accepted; implemented | Refresh open coach pages from transactional MassTransit status events |
 | [0015: Coach retrieval hints](decisions/0015-coach-retrieval-hints.md) | Accepted, retrospective; implemented | Recover untagged exercise cues and scope follow-ups by recording filename |
@@ -43,9 +46,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0019: Service observability](decisions/0019-observability.md) | Accepted; service-side implementation complete | Shared OpenTelemetry, OpenInference and correlated Sentry errors |
 | [0020: Live database telemetry settings](decisions/0020-live-database-telemetry-settings.md) | Accepted; implemented | Database-first OpenTelemetry export, sampling and per-service live reload |
 | [0021: Scheduled jobs](decisions/0021-scheduled-jobs.md) | Accepted; implemented | Durable task identity, current authorization, recovery and job dashboard |
-
 | [0022: Scheduled notifications](decisions/0022-scheduled-notifications.md) | Accepted; implemented | Notification job identity, attribution, cancellation and push outcomes |
-
 | [0023: Query navigation and chat preferences](decisions/0023-query-navigation-and-chat-preferences.md) | Accepted; implemented | URL state, draft chats, model persistence and shared recording views |
 
 ## Working agreement
@@ -54,4 +55,4 @@ Use [the template](decisions/template.md) for choices affecting service boundari
 
 Create a proposed record before implementation; mark it accepted when the choice is agreed. Record actual implementation separately from intent. For past decisions, cite commits and code, and label reconstructed rationale as inference. Keep accepted records stable; supersede them with a linked record when direction changes.
 
-Update the roadmap's status and validation evidence in the same change that completes an item. Runbooks describe repeatable operations; private credentials and production evidence belong outside Git. The initial review is dated **2026-09-07**, against `34d65e2` plus the accompanying cleanup.
+Update the roadmap's status and validation evidence in the same change that completes an item. Runbooks describe repeatable operations; private credentials and production evidence belong outside Git. The initial review was 2026-09-07. Current-state summaries and roadmap statuses were reconciled **2026-09-13** against `b7157f7`; dated test results retain their original validation scope.

@@ -27,7 +27,7 @@ The API reads policy on every catalog request. Changes invalidate the provider c
 
 Concurrent lookups share a refresh. Each call reads the current database policy under the catalog lock. Provider failures retain the last successful result only for the same policy; otherwise fallback is restricted to the new database policy. Successful empty provider results remain authoritative. Provider fallback cannot prove a subsequent inference request will succeed. Database/policy errors propagate and never take this provider-fallback path. Cancelled requests do not update the snapshot.
 
-If choices stop at an older model, inspect the active database policy and discovery warnings. Adding names to appsettings has no effect. Ensure this version of the API is deployed once; subsequent database edits require only a picker reload. The source transcript retrieval fix in this PR remains independent and requires no reprocessing.
+If choices stop at an older model, inspect the active database policy and discovery warnings. Adding names to appsettings has no effect. Ensure this version of the API is deployed once; subsequent database edits require only a picker reload. The missing-tag transcript retrieval fix is independent of model policy and requires no reprocessing.
 
 ## Verification
 

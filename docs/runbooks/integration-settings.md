@@ -1,6 +1,6 @@
 # Runtime integration settings
 
-The first supported integration is Sentry error reporting. Its settings can be entered, validated, saved, and applied in Web at `/admin/integration-settings`. API, Web, and Worker each own a replaceable Sentry client; these four settings do not require a process restart. This does not reload existing OpenAI, transcription, messaging, or authentication settings.
+The first supported integration is Sentry error reporting. Its settings can be entered, validated, saved, and applied in Web at `/admin/settings?section=sentry` (legacy `/admin/integration-settings` remains an alias). API, Web, and Worker each own a replaceable Sentry client; these four settings do not require a process restart. The separate API credential reload path supports OpenAI/AssemblyAI keys for new requests; messaging, authentication and other startup consumers retain restart requirements. See [credential reload boundaries](../decisions/0012-live-provider-credentials.md).
 
 OpenTelemetry also has a database-owned, live-reloaded section in **Settings**. It uses separate revisions and service status, with independent trace/metric/log export switches. See [OpenTelemetry setup](observability.md). No new environment variables are needed.
 
@@ -68,6 +68,6 @@ docker compose -f compose.synthetic.yml up --build --detach --wait --wait-timeou
 
 The integration smoke suite saves a fake DSN with reporting disabled, verifies authorization and conflicts, applies across all services, restarts the synthetic Worker, and clears the fixture through a new applied revision. It refuses to overwrite preconfigured credentials and sends no Sentry events. CI runs both smoke suites.
 
-API tests also exercise encryption, concurrent migration, SDK envelope redaction/queueing, enable/replace/disable/re-enable, stale revisions, and service authorization. Web component tests verify secret keep/clear behavior, invalid form submission, secret clearing after save, and stale instance presentation. Live project ingestion remains a manual check with the user's DSN.
+API tests also exercise encryption, concurrent migration, SDK envelope redaction/queueing, enable/replace/disable/re-enable, stale revisions, and service authorization. Web component tests verify secret keep/clear behavior, invalid form submission, secret clearing after save, and stale instance presentation. The maintainer confirmed deployed test-event receipt after PR #40. Each new destination still needs a manual ingestion check with its configured DSN.
 
 For direct HTTP examples, see `PersonalAgent/IntegrationSettings.http`. The internal key and signed actor headers are required: sign the UTF-8 payload `actor + "\nOwner\n\n" + unixTimestamp` with HMAC-SHA256 using the server actor signing key and encode as uppercase hexadecimal. Refresh the timestamp/signature within five minutes; keep real values out of committed files. The synthetic smoke script demonstrates this with public fixture credentials.

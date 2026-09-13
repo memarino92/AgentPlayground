@@ -6,7 +6,10 @@
 
 - Session-based chat APIs (`/api/sessions`, `/api/sessions/{id}/messages`, `/api/models`).
 - Agent orchestration with Microsoft Agent Framework.
-- Provider-bound model work (OpenAI) behind app services.
+- Provider-bound chat, extraction, embeddings and persisted AssemblyAI transcription jobs behind app services.
+- Coaching retrieval with dated utterance evidence, subject-authorized audio playback and retention controls.
+- Durable agent/notification job execution with current authorization and conservative recovery.
+- Administrator settings revisions, live API credentials and database-owned model policy.
 - Work journal model tasks consumed over MassTransit request/response:
   - parse markdown into journal entries
   - generate embeddings for entry content
@@ -20,6 +23,9 @@ The Worker is now orchestration-only for journal sync and calls these model task
 - `GET /api/models` available chat models from a cached provider inventory and API-owned policy; see [runtime model behavior](../docs/runbooks/runtime-chat-models.md).
 - `POST /api/sessions` create a session.
 - `GET /api/sessions` list sessions (cursor paging).
+- `PUT /api/sessions/{sessionId}/model` persist an authorized model change from the current catalog.
+- `POST /api/schedule/agent-tasks` and `/api/schedule/notifications` schedule authorized jobs.
+- `GET /api/jobs`, `GET /api/jobs/{id}` and `POST /api/jobs/{id}/cancel` inspect or cancel permitted pending work; see [job operations](../docs/runbooks/scheduled-jobs.md).
 - `POST /api/sessions/{sessionId}/messages` send message.
 - `GET /api/sessions/{sessionId}/messages` read transcript.
 - `POST /api/mobile/devices/register` register/update mobile push token.
@@ -27,7 +33,7 @@ The Worker is now orchestration-only for journal sync and calls these model task
 - `POST /api/approvals/{approvalId}/decision` approve/deny a pending request.
 - `GET /api/approvals/{approvalId}` read approval status.
 
-`/api/*` endpoints use the internal API key filter when configured.
+`/api/*` endpoints use the internal API key filter when configured. Chat, scheduling, job inspection and evidence routes also enforce signed actor and subject access; administrator settings have an explicit administrator policy. Mobile registration and approval routes still need the identity hardening tracked in the roadmap. The list above is a core-route overview, not a complete endpoint reference.
 
 ## Messaging Role
 
@@ -70,8 +76,7 @@ ANDROID_PUSH_CHANNEL_ID      -> PushNotifications:AndroidChannelId
 These legacy environment bindings remain available when database-backed configuration
 is disabled locally, but are not needed after the database has been seeded.
 
-For push notifications, set `PUSH_NOTIFICATIONS_ENABLED=true` and provide either
-`FIREBASE_SERVICE_ACCOUNT_JSON`, `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64`, or `FIREBASE_SERVICE_ACCOUNT_PATH`.
+For database-backed push configuration, enable `PushNotifications:Enabled` and configure `PushNotifications:ServiceAccountJson`, `PushNotifications:ServiceAccountJsonBase64`, or `PushNotifications:ServiceAccountPath`. The environment aliases above are legacy alternatives. New application settings must be database-first; bootstrap secrets remain external.
 
 ## Local Run
 
