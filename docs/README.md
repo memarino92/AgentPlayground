@@ -46,6 +46,8 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 
 | [0022: Scheduled notifications](decisions/0022-scheduled-notifications.md) | Accepted; implemented | Notification job identity, attribution, cancellation and push outcomes |
 
+| [0023: Query navigation and chat preferences](decisions/0023-query-navigation-and-chat-preferences.md) | Accepted; implemented | URL state, draft chats, model persistence and shared recording views |
+
 ## Working agreement
 
 Use [the template](decisions/template.md) for choices affecting service boundaries, persistence, identity, operations, or tool behavior. Small implementation details belong in code and PR descriptions.
