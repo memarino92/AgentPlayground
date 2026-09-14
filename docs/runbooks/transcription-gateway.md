@@ -8,7 +8,13 @@ API owns the transcription adapter, provider configuration and the `transcriptio
 2. Run `scripts/migrate-assemblyai-configuration.ps1` to preview, then add `-Apply` to migrate. It reads `DATABASE_URL` and `CONFIG_ENCRYPTION_KEY` from the environment, or accepts `-ValuesPath scripts/seed-configuration.values.ps1` to use the existing private bootstrap values. It reads all Worker `AssemblyAi:*` rows directly from PostgreSQL, decrypts secret values and re-encrypts them for Api using the application's crypto implementation. Use `-KeepSource` while the old Worker is still deployed to copy settings into Api without removing Worker settings. It preserves activation flags and writes rows in one transaction, without printing secrets or generating SQL files. An existing matching Api row is retained; a conflicting row aborts the whole migration. Reruns are safe. Changing only the scope column would invalidate encrypted values.
 3. If using environment variables or user secrets, move `ASSEMBLYAI_*` / `AssemblyAi:*` settings to the API process/project. API validates these options on startup. Worker no longer needs provider credentials.
 4. Start API with infrastructure creation enabled to add `transcription_jobs`, then start the new Worker. API agent-memory storage and Worker coach-checkin storage must use the same database and schema, as required by the existing staged-upload pipeline.
-5. Verify a synthetic single-speaker upload reaches processing and a multi-speaker upload pauses for speaker review. No live-provider verification is included in automated tests.
+5. Verify a synthetic stereo upload maps channel 1 to coach and channel 2 to athlete and reaches processing without speaker review. Also verify a result without channel metadata pauses for speaker review. No live-provider verification is included in automated tests.
+
+### Stereo attribution and transcript names
+
+New AssemblyAI submissions use multichannel transcription instead of speaker diarization. The supported recording contract is a stereo phone recording with the coach on the left channel (provider channel 1) and the athlete on the right channel (provider channel 2). Do not use this path for a recording whose channel layout is unknown or reversed. Missing or unexpected channel metadata pauses at the existing speaker-review step.
+
+`CoachCheckins:CoachName` and `CoachCheckins:AthleteName` are non-secret Api settings shown in **Settings → Database settings**. Their initial values are `Andrew` and `Michael`; edit them there and restart API to apply a change. API transcript JSON and text downloads show the configured name together with `coach` or `athlete`. Persisted utterances and retrieval chunks keep the domain role, so changing a name does not require reprocessing. Startup inserts missing name rows without replacing an existing Shared or Api value. See [decision 0025](../decisions/0025-stereo-coach-attribution.md).
 
 ### Migration commands
 

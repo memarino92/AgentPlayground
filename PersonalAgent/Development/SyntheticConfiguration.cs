@@ -41,6 +41,8 @@ internal static class SyntheticConfiguration
             ["AssemblyAi:ApiKey"] = "synthetic-unused-key",
             ["Tavily:EnableWebSearch"] = "false",
             ["PushNotifications:Enabled"] = "false",
+            ["CoachCheckins:CoachName"] = "Andrew",
+            ["CoachCheckins:AthleteName"] = "Michael",
             ["AgentMemory:EnableSemanticMemory"] = "true",
             ["AgentMemory:EmbeddingModel"] = "synthetic-token-hash-v1",
             ["ChatModels:DiscoverFromProvider"] = "false",
@@ -49,12 +51,14 @@ internal static class SyntheticConfiguration
         };
         foreach (var (Name, Value) in Settings)
         {
+            var IsParticipantName = Name is "CoachCheckins:CoachName" or "CoachCheckins:AthleteName";
             await using var Insert = new NpgsqlCommand("""
                 INSERT INTO app.configuration_settings (scope, key, value, is_secret)
-                VALUES ('Shared', @key, @value, true) ON CONFLICT DO NOTHING
+                VALUES ('Shared', @key, @value, @secret) ON CONFLICT DO NOTHING
                 """, Connection, Transaction);
             Insert.Parameters.AddWithValue("key", Name);
-            Insert.Parameters.AddWithValue("value", PostgresConfigurationCrypto.Encrypt(Value, "Shared", Name, Key));
+            Insert.Parameters.AddWithValue("value", IsParticipantName ? Value : PostgresConfigurationCrypto.Encrypt(Value, "Shared", Name, Key));
+            Insert.Parameters.AddWithValue("secret", !IsParticipantName);
             await Insert.ExecuteNonQueryAsync();
         }
         await Transaction.CommitAsync();

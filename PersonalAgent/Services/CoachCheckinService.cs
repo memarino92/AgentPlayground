@@ -344,6 +344,8 @@ internal class CoachCheckinService(
         }
 
         var utterances = await GetTranscriptUtterancesAsync(connection, sessionId, cancellationToken);
+        if (utterances.Count > 0)
+            transcriptText = string.Join("\n", utterances.Select(utterance => $"[{utterance.SpeakerName} ({utterance.SpeakerRole})] {utterance.Text}"));
         return new CoachCheckinTranscriptResponse(uploadId, sessionId, profileId, status, transcriptText, updatedAtUtc, utterances);
     }
 
@@ -573,10 +575,18 @@ internal class CoachCheckinService(
                 reader.GetInt32(2),
                 reader.GetInt32(3),
                 reader.GetString(4),
-                reader.GetDouble(5)));
+                reader.GetDouble(5),
+                GetSpeakerName(reader.GetString(1))));
 
         return utterances;
     }
+
+    private string GetSpeakerName(string speakerRole) => speakerRole.ToLowerInvariant() switch
+    {
+        "coach" => _options.CoachName.Trim(),
+        "athlete" => _options.AthleteName.Trim(),
+        _ => "Unknown speaker"
+    };
 
     private async Task<CoachCallUploadResult?> GetExistingUploadByHashAsync(NpgsqlConnection connection, string profileId, string hash, CancellationToken cancellationToken)
     {

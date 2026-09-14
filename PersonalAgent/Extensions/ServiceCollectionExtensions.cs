@@ -89,6 +89,8 @@ internal static class ServiceCollectionExtensions
             })
             .Validate(opts => opts.MaxUploadMb > 0, $"{CoachCheckinOptions.SectionName}:MaxUploadMb must be greater than zero")
             .Validate(opts => opts.FailedUploadRetentionDays > 0, $"{CoachCheckinOptions.SectionName}:FailedUploadRetentionDays must be greater than zero")
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.CoachName) && opts.CoachName.Length <= 100, $"{CoachCheckinOptions.SectionName}:CoachName must contain 1-100 characters")
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.AthleteName) && opts.AthleteName.Length <= 100, $"{CoachCheckinOptions.SectionName}:AthleteName must contain 1-100 characters")
             .ValidateOnStart();
 
         services.AddOptions<SecurityOptions>()

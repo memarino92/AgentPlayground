@@ -27,7 +27,8 @@ public class AssemblyAiTranscriptionServiceTests
         Requests.Select(Request => Request.Path).Should().Equal("/v2/upload", "/v2/transcript");
         Requests[0].Body.Should().Be("audio");
         using var Body = JsonDocument.Parse(Requests[1].Body);
-        Body.RootElement.GetProperty("speaker_labels").GetBoolean().Should().BeTrue();
+        Body.RootElement.GetProperty("multichannel").GetBoolean().Should().BeTrue();
+        Body.RootElement.GetProperty("speaker_labels").GetBoolean().Should().BeFalse();
         Body.RootElement.GetProperty("speech_models")[0].GetString().Should().Be("test-model");
     }
 
@@ -47,11 +48,12 @@ public class AssemblyAiTranscriptionServiceTests
     public async Task Completion_MapsDiarizedSegments()
     {
         using var Handler = new StubHandler(_ => Task.FromResult(Json("""
-            {"status":"completed","utterances":[{"speaker":"B","start":12,"end":120,"text":"Hello","confidence":0.95}]}
+            {"status":"completed","audio_channels":2,"utterances":[{"speaker":"2","channel":"2","start":12,"end":120,"text":"Hello","confidence":0.95}]}
             """)));
         var Result = await Create(Handler).GetResultAsync(Guid.NewGuid(), "job", default);
         Result.Status.Should().Be(TranscriptionStatus.Completed);
-        Result.Segments.Should().Equal(new TranscriptSegment(1, 12, 120, "Hello", 0.95));
+        Result.AudioChannels.Should().Be(2);
+        Result.Segments.Should().Equal(new TranscriptSegment(2, 12, 120, "Hello", 0.95, 2));
     }
 
     private static AssemblyAiTranscriptionService Create(HttpMessageHandler Handler)

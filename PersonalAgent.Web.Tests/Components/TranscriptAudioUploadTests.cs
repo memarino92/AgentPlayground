@@ -38,6 +38,7 @@ public sealed class TranscriptAudioUploadTests : TestContext
         Services.AddMudServices();
         var Cut = RenderComponent<CoachCheckinsAdmin>();
         Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic transcript"));
+        Cut.Markup.Should().Contain("Andrew").And.Contain("(coach)");
         Cut.Markup.Should().Contain("Read-only access");
         Cut.FindAll("input[type=file]").Should().BeEmpty();
         Cut.FindComponents<TranscriptAudioUpload>().Should().BeEmpty();
@@ -157,7 +158,7 @@ public sealed class TranscriptAudioUploadTests : TestContext
                 return new(HttpStatusCode.OK) { Content = Request.RequestUri.AbsolutePath == "/api/coach-checkins"
                     ? JsonContent.Create(new[] { new CoachCheckinAdminItemResponse(Id, Id, "owner", "call.m4a", Status, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, false, 1, 1, []) })
                     : JsonContent.Create(new CoachEvidenceResponse(new(Id, Id, "owner", Status, "Synthetic transcript", DateTimeOffset.UtcNow,
-                        [new(0, "coach", 0, 1000, "Synthetic transcript", 1)]), false, 1234)) };
+                        [new(0, "coach", 0, 1000, "Synthetic transcript", 1, "Andrew")]), false, 1234)) };
             }
             Request.Method.Should().Be(HttpMethod.Put);
             Uploaded = await Request.Content!.ReadAsByteArrayAsync(CancellationToken);
