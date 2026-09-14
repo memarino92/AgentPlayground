@@ -56,7 +56,7 @@ internal class TranscribeCoachCallConsumer(
             await PersistUtterancesAsync(connection, staged.SessionId, utterances, context.CancellationToken);
             await UpdateSessionTranscriptAsync(connection, staged.SessionId, utterances, context.CancellationToken);
 
-            var requiresOverride = utterances.Select(utterance => utterance.SpeakerLabel).Distinct().Count() > 1;
+            var requiresOverride = utterances.Any(utterance => string.Equals(utterance.SpeakerRole, "unknown", StringComparison.OrdinalIgnoreCase));
             await UpdateUploadStatusAsync(connection, staged.UploadId, requiresOverride ? "AwaitingSpeakerOverride" : "Processing", null, context.CancellationToken);
             await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new CoachCallStatusChangedEvent(staged.UploadId, staged.ProfileId, requiresOverride ? "AwaitingSpeakerOverride" : "Processing"), context.CancellationToken);
             if (requiresOverride)

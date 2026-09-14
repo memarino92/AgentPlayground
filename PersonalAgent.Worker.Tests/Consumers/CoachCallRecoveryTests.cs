@@ -25,6 +25,20 @@ namespace PersonalAgent.Worker.Tests.Consumers;
 public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : IClassFixture<WorkerPostgresVectorFixture>
 {
     [Fact]
+    public async Task StereoChannels_AreAttributedAndContinueWithoutSpeakerReview()
+    {
+        var State = await SetupAsync();
+        State.Provider.Complete = true;
+        State.Provider.MultipleSpeakers = true;
+
+        await Transcribe(State);
+
+        (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Processing");
+        (await Roles(State)).Should().Equal("coach", "athlete");
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'ProcessCoachTranscriptCommand'")).Should().Be(1L);
+    }
+
+    [Fact]
     public async Task Outbox_RetryAfterOriginEnds_RetainsTraceParent()
     {
         var State = await SetupAsync();
@@ -61,6 +75,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         var State = await SetupAsync();
         State.Provider.Complete = true;
         State.Provider.MultipleSpeakers = true;
+        State.Provider.IncludeChannelMetadata = false;
         await FailOutboxAsync(State, true);
         await Assert.ThrowsAsync<PostgresException>(() => Transcribe(State));
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Uploaded");
@@ -387,6 +402,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         var State = await SetupAsync();
         State.Provider.Complete = true;
         State.Provider.MultipleSpeakers = true;
+        State.Provider.IncludeChannelMetadata = false;
         await Transcribe(State);
         await Execute(State, $"UPDATE {State.Schema}.coach_call_utterances SET speaker_role = 'unknown'");
         var Review = new CoachCheckinService(Mock.Of<IBus>(), State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
@@ -408,6 +424,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         var State = await SetupAsync();
         State.Provider.Complete = true;
         State.Provider.MultipleSpeakers = true;
+        State.Provider.IncludeChannelMetadata = false;
         await Transcribe(State);
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("AwaitingSpeakerOverride");
         await Execute(State, $"UPDATE {State.Schema}.coach_call_utterances SET speaker_role = 'unknown'");
@@ -479,6 +496,17 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         return await Command.ExecuteScalarAsync();
     }
 
+    private async Task<List<string>> Roles(State State)
+    {
+        await using var Connection = new NpgsqlConnection(Database.ConnectionString);
+        await Connection.OpenAsync();
+        await using var Command = new NpgsqlCommand($"SELECT speaker_role FROM {State.Schema}.coach_call_utterances ORDER BY start_ms", Connection);
+        await using var Reader = await Command.ExecuteReaderAsync();
+        List<string> Roles = [];
+        while (await Reader.ReadAsync()) Roles.Add(Reader.GetString(0));
+        return Roles;
+    }
+
     private sealed class State(string ConnectionString)
     {
         public Guid Id { get; } = Guid.NewGuid();
@@ -499,7 +527,11 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
             TranscriptionResponse Result;
             do { Result = await State.Gateway().GetAsync(UploadId, ProfileId, CancellationToken); }
             while (Result.Status == TranscriptionStatus.Pending);
-            return Result.Segments.Select(Segment => new TranscribedUtterance(Segment.SpeakerLabel, "coach", Segment.StartMs, Segment.EndMs, Segment.Text, Segment.Confidence)).ToList();
+            return Result.Segments.Select(Segment => new TranscribedUtterance(Segment.SpeakerLabel,
+                Result.AudioChannels == 2
+                    ? Segment.AudioChannel switch { 1 => "coach", 2 => "athlete", _ => "unknown" }
+                    : "unknown",
+                Segment.StartMs, Segment.EndMs, Segment.Text, Segment.Confidence)).ToList();
         }
     }
 
@@ -508,6 +540,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         public int Submissions;
         public bool Complete;
         public bool MultipleSpeakers;
+        public bool IncludeChannelMetadata = true;
         public Task<string> SubmitAsync(byte[] Audio, string MimeType, CancellationToken CancellationToken)
         {
             Interlocked.Increment(ref Submissions);
@@ -515,7 +548,11 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         }
         public Task<TranscriptionResponse> GetResultAsync(Guid JobId, string ProviderJobId, CancellationToken CancellationToken) =>
             Task.FromResult(new TranscriptionResponse(JobId, Complete ? TranscriptionStatus.Completed : TranscriptionStatus.Pending,
-                MultipleSpeakers ? [new(0, 0, 100, "Synthetic first speaker", 0.9), new(1, 101, 200, "Synthetic second speaker", 0.9)] : [new(0, 0, 100, "Synthetic transcript", 0.9)]));
+                MultipleSpeakers
+                    ? [new(IncludeChannelMetadata ? 1 : 0, 0, 100, "Synthetic first speaker", 0.9, IncludeChannelMetadata ? 1 : null),
+                       new(IncludeChannelMetadata ? 2 : 1, 101, 200, "Synthetic second speaker", 0.9, IncludeChannelMetadata ? 2 : null)]
+                    : [new(IncludeChannelMetadata ? 1 : 0, 0, 100, "Synthetic transcript", 0.9, IncludeChannelMetadata ? 1 : null)],
+                AudioChannels: IncludeChannelMetadata ? 2 : null));
     }
 }
 

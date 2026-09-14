@@ -15,4 +15,5 @@ internal record CoachCheckinTranscriptUtterance(
     int StartMs,
     int EndMs,
     string Text,
-    double Confidence);
+    double Confidence,
+    string SpeakerName);

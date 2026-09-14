@@ -6,7 +6,7 @@
             @foreach (var Utterance in Transcript.Utterances)
             {
                 <section class="utterance" data-role="@Utterance.SpeakerRole" data-start="@Utterance.StartMs" data-end="@Utterance.EndMs" data-cited="@(StartMs >= Utterance.StartMs && StartMs < Utterance.EndMs ? "true" : "false")">
-                    <div class="utterance-meta"><strong>@Utterance.SpeakerRole</strong>
+                    <div class="utterance-meta"><strong>@DisplayName(Utterance)</strong> <span>(@Utterance.SpeakerRole)</span>
                     @if (Utterance.StartMs >= 0 && Utterance.EndMs >= Utterance.StartMs)
                     {
                         <button type="button" data-seek="@Utterance.StartMs" disabled="@(!AudioAvailable)">@Timestamp(Utterance.StartMs) – @Timestamp(Utterance.EndMs)</button>
@@ -25,4 +25,6 @@
     [Parameter] public bool AudioAvailable { get; set; }
     [Parameter] public int? StartMs { get; set; }
     private static string Timestamp(int Milliseconds) => TimeSpan.FromMilliseconds(Milliseconds).ToString(@"hh\:mm\:ss");
+    private static string DisplayName(CoachCheckinTranscriptUtteranceResponse Utterance) =>
+        string.IsNullOrWhiteSpace(Utterance.SpeakerName) ? Utterance.SpeakerRole : Utterance.SpeakerName;
 }

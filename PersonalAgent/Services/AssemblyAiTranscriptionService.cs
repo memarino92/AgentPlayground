@@ -38,7 +38,8 @@ internal class AssemblyAiTranscriptionService(IHttpClientFactory httpClientFacto
         {
             audio_url = uploadUrl,
             speech_models = _options.SpeechModels,
-            speaker_labels = true
+            multichannel = true,
+            speaker_labels = false
         });
         using var content = new StringContent(body, Encoding.UTF8, "application/json");
         using var response = await client.PostAsync("transcript", content, cancellationToken);
@@ -59,7 +60,8 @@ internal class AssemblyAiTranscriptionService(IHttpClientFactory httpClientFacto
         using var Document = JsonDocument.Parse(await Response.Content.ReadAsStringAsync(CancellationToken));
         return Document.RootElement.GetProperty("status").GetString() switch
         {
-            "completed" => new(JobId, TranscriptionStatus.Completed, ParseUtterances(Document.RootElement)),
+            "completed" => new(JobId, TranscriptionStatus.Completed, ParseUtterances(Document.RootElement),
+                AudioChannels: ParseAudioChannels(Document.RootElement)),
             "error" => new(JobId, TranscriptionStatus.Failed, [], "Transcription failed."),
             "queued" or "processing" => new(JobId, TranscriptionStatus.Pending, [], RetryAfterSeconds: _options.PollIntervalSeconds),
             _ => throw new InvalidOperationException("Unrecognized transcription status.")
@@ -75,14 +77,31 @@ internal class AssemblyAiTranscriptionService(IHttpClientFactory httpClientFacto
         foreach (var element in utterancesElement.EnumerateArray())
         {
             var speakerLabel = ParseSpeaker(element.TryGetProperty("speaker", out var speakerElement) ? speakerElement.GetString() : null);
+            var audioChannel = ParseChannel(element);
             var startMs = element.TryGetProperty("start", out var startElement) ? startElement.GetInt32() : 0;
             var endMs = element.TryGetProperty("end", out var endElement) ? endElement.GetInt32() : startMs;
             var text = element.TryGetProperty("text", out var textElement) ? textElement.GetString() ?? string.Empty : string.Empty;
             var confidence = element.TryGetProperty("confidence", out var confidenceElement) ? confidenceElement.GetDouble() : 0.0;
-            utterances.Add(new TranscriptSegment(speakerLabel, startMs, endMs, text, confidence));
+            utterances.Add(new TranscriptSegment(speakerLabel, startMs, endMs, text, confidence, audioChannel));
         }
 
         return utterances;
+    }
+
+    private static int? ParseAudioChannels(JsonElement root)
+    {
+        if (!root.TryGetProperty("audio_channels", out var channelsElement)) return null;
+        if (channelsElement.ValueKind == JsonValueKind.Number && channelsElement.TryGetInt32(out var channels)) return channels;
+        return channelsElement.ValueKind == JsonValueKind.String && int.TryParse(channelsElement.GetString(), out channels)
+            ? channels
+            : null;
+    }
+
+    private static int? ParseChannel(JsonElement element)
+    {
+        if (!element.TryGetProperty("channel", out var channelElement)) return null;
+        if (channelElement.ValueKind == JsonValueKind.Number && channelElement.TryGetInt32(out var numeric)) return numeric;
+        return channelElement.ValueKind == JsonValueKind.String && int.TryParse(channelElement.GetString(), out numeric) ? numeric : null;
     }
 
     private static int ParseSpeaker(string? value)

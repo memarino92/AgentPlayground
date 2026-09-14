@@ -26,6 +26,32 @@ namespace PersonalAgent.Tests.Endpoints;
 public sealed class CoachEvidenceEndpointsTests(PostgresVectorFixture Database) : IClassFixture<PostgresVectorFixture>
 {
     [Fact]
+    public async Task TranscriptNamesAreConfigurableWithoutReplacingDomainRoles()
+    {
+        var State = await SeedAsync();
+        await using var Connection = new NpgsqlConnection(State.Options.ConnectionString);
+        await Connection.OpenAsync();
+        await using var Command = new NpgsqlCommand($"""
+            INSERT INTO {State.Options.Schema}.coach_call_utterances
+                (session_id, speaker_label, speaker_role, start_ms, end_ms, confidence, content)
+            VALUES (@id, 1, 'coach', 0, 100, 1, 'First'),
+                   (@id, 2, 'athlete', 101, 200, 1, 'Second');
+            """, Connection);
+        Command.Parameters.AddWithValue("id", State.Id);
+        await Command.ExecuteNonQueryAsync();
+        var Service = new CoachCheckinService(Mock.Of<IBus>(),
+            Options.Create(new SqlTransportOptions { ConnectionString = State.Options.ConnectionString }),
+            Options.Create(State.Options), Options.Create(new CoachCheckinOptions { CoachName = "Andrew", AthleteName = "Michael" }),
+            Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
+
+        var Transcript = await Service.GetTranscriptAsync(State.Id, "owner");
+
+        Transcript!.Utterances.Select(Value => (Value.SpeakerName, Value.SpeakerRole))
+            .Should().Equal(("Andrew", "coach"), ("Michael", "athlete"));
+        Transcript.TranscriptText.Should().Contain("[Andrew (coach)] First").And.Contain("[Michael (athlete)] Second");
+    }
+
+    [Fact]
     public async Task ManualAudioAttachment_TrustsOwnerSelection_AndPreservesProcessedEvidenceAcrossRestart()
     {
         var State = await SeedAsync();

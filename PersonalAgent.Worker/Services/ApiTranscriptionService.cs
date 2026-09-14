@@ -14,7 +14,15 @@ internal class ApiTranscriptionService(IRequestClient<TranscriptionRequest> Clie
             var Response = (await Client.GetResponse<TranscriptionResponse>(new(UploadId, ProfileId), CancellationToken)).Message;
             if (Response.Status == TranscriptionStatus.Failed) throw new TranscriptionFailedException(Response.Error ?? "Transcription failed.");
             if (Response.Status == TranscriptionStatus.Completed)
-                return Response.Segments.Select(Segment => new TranscribedUtterance(Segment.SpeakerLabel, "unknown", Segment.StartMs, Segment.EndMs, Segment.Text, Segment.Confidence)).ToList();
+                return Response.Segments.Select(Segment => new TranscribedUtterance(
+                    Segment.SpeakerLabel,
+                    Response.AudioChannels == 2
+                        ? Segment.AudioChannel switch { 1 => "coach", 2 => "athlete", _ => "unknown" }
+                        : "unknown",
+                    Segment.StartMs,
+                    Segment.EndMs,
+                    Segment.Text,
+                    Segment.Confidence)).ToList();
             await Task.Delay(TimeSpan.FromSeconds(Math.Clamp(Response.RetryAfterSeconds, 1, 60)), CancellationToken);
         }
     }

@@ -14,6 +14,9 @@ if (-not (Test-Path -LiteralPath $ValuesPath))
 
 . $ValuesPath
 
+if (-not (Get-Variable -Name CoachName -Scope Script -ErrorAction SilentlyContinue)) { $CoachName = 'Andrew' }
+if (-not (Get-Variable -Name AthleteName -Scope Script -ErrorAction SilentlyContinue)) { $AthleteName = 'Michael' }
+
 function Assert-ConfiguredValue([string]$Name, [string]$Value)
 {
     if ([string]::IsNullOrWhiteSpace($Value) -or $Value.StartsWith('<'))
@@ -117,6 +120,8 @@ $settings = @(
     @{ Scope = 'Api'; Key = 'PushNotifications:FirebaseProjectId'; Value = $FirebaseProjectId; Secret = $false },
     @{ Scope = 'Api'; Key = 'PushNotifications:ServiceAccountJsonBase64'; Value = $FirebaseServiceAccountJsonBase64; Secret = $true },
     @{ Scope = 'Api'; Key = 'PushNotifications:AndroidChannelId'; Value = $AndroidPushChannelId; Secret = $false },
+    @{ Scope = 'Api'; Key = 'CoachCheckins:CoachName'; Value = $CoachName; Secret = $false },
+    @{ Scope = 'Api'; Key = 'CoachCheckins:AthleteName'; Value = $AthleteName; Secret = $false },
 
     @{ Scope = 'Web'; Key = 'PersonalAgentApi:BaseUrl'; Value = $PersonalAgentApiBaseUrl; Secret = $false },
     @{ Scope = 'Web'; Key = 'PersonalAgentApi:InternalApiKey'; Value = $InternalApiKey; Secret = $true },

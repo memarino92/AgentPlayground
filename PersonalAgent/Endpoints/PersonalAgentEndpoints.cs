@@ -344,6 +344,7 @@ internal static class PersonalAgentEndpoints
                     {
                         speakerLabel = utterance.SpeakerLabel,
                         speakerRole = utterance.SpeakerRole,
+                        speakerName = utterance.SpeakerName,
                         startMs = utterance.StartMs,
                         endMs = utterance.EndMs,
                         text = utterance.Text,
@@ -362,7 +363,7 @@ internal static class PersonalAgentEndpoints
             if (transcript is null)
                 return Results.NotFound(new { error = "Coach check-in transcript not found" });
 
-            var content = string.Join(Environment.NewLine, transcript.Utterances.Select(utterance => $"[{TimeSpan.FromMilliseconds(utterance.StartMs):hh\\:mm\\:ss}-{TimeSpan.FromMilliseconds(utterance.EndMs):hh\\:mm\\:ss}] {utterance.SpeakerRole}: {utterance.Text}"));
+            var content = string.Join(Environment.NewLine, transcript.Utterances.Select(utterance => $"[{TimeSpan.FromMilliseconds(utterance.StartMs):hh\\:mm\\:ss}-{TimeSpan.FromMilliseconds(utterance.EndMs):hh\\:mm\\:ss}] {utterance.SpeakerName} ({utterance.SpeakerRole}): {utterance.Text}"));
 
             var fileName = $"coach-checkin-{uploadId}.txt";
             return Results.File(Encoding.UTF8.GetBytes(content), "text/plain; charset=utf-8", fileName);

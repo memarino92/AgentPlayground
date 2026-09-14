@@ -11,19 +11,48 @@ namespace PersonalAgent.Worker.Tests.Services;
 public class ApiTranscriptionServiceTests
 {
     [Fact]
-    public async Task Completion_UsesUploadReference_AndLeavesRoleAttributionToDomain()
+    public async Task Completion_MapsStereoChannelsToDomainRoles()
     {
         var Id = Guid.NewGuid();
         var Response = new Mock<Response<TranscriptionResponse>>();
-        Response.SetupGet(Value => Value.Message).Returns(new TranscriptionResponse(Id, TranscriptionStatus.Completed, [new(1, 10, 20, "Synthetic", 0.9)]));
+        Response.SetupGet(Value => Value.Message).Returns(new TranscriptionResponse(Id, TranscriptionStatus.Completed,
+            [new(1, 10, 20, "Coach", 0.9, 1), new(2, 21, 30, "Athlete", 0.8, 2)], AudioChannels: 2));
         var Client = new Mock<IRequestClient<TranscriptionRequest>>();
         Client.Setup(Value => Value.GetResponse<TranscriptionResponse>(new TranscriptionRequest(Id, "owner"), It.IsAny<CancellationToken>())).ReturnsAsync(Response.Object);
         var Result = await new ApiTranscriptionService(Client.Object).TranscribeAsync(Id, "owner");
-        Result.Should().ContainSingle();
-        Result[0].SpeakerRole.Should().Be("unknown");
+        Result.Select(Value => Value.SpeakerRole).Should().Equal("coach", "athlete");
         Result[0].SpeakerLabel.Should().Be(1);
-        Result[0].Text.Should().Be("Synthetic");
+        Result[0].Text.Should().Be("Coach");
         Client.VerifyAll();
+    }
+
+    [Fact]
+    public async Task Completion_LeavesMissingChannelMetadataForManualReview()
+    {
+        var Id = Guid.NewGuid();
+        var Response = new Mock<Response<TranscriptionResponse>>();
+        Response.SetupGet(Value => Value.Message).Returns(new TranscriptionResponse(Id, TranscriptionStatus.Completed, [new(0, 10, 20, "Legacy", 0.9)]));
+        var Client = new Mock<IRequestClient<TranscriptionRequest>>();
+        Client.Setup(Value => Value.GetResponse<TranscriptionResponse>(It.IsAny<TranscriptionRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Response.Object);
+
+        var Result = await new ApiTranscriptionService(Client.Object).TranscribeAsync(Id, "owner");
+
+        Result.Should().ContainSingle().Which.SpeakerRole.Should().Be("unknown");
+    }
+
+    [Fact]
+    public async Task Completion_DoesNotTreatMonoChannelOneAsCoach()
+    {
+        var Id = Guid.NewGuid();
+        var Response = new Mock<Response<TranscriptionResponse>>();
+        Response.SetupGet(Value => Value.Message).Returns(new TranscriptionResponse(Id, TranscriptionStatus.Completed,
+            [new(1, 10, 20, "Mixed recording", 0.9, 1)], AudioChannels: 1));
+        var Client = new Mock<IRequestClient<TranscriptionRequest>>();
+        Client.Setup(Value => Value.GetResponse<TranscriptionResponse>(It.IsAny<TranscriptionRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Response.Object);
+
+        var Result = await new ApiTranscriptionService(Client.Object).TranscribeAsync(Id, "owner");
+
+        Result.Should().ContainSingle().Which.SpeakerRole.Should().Be("unknown");
     }
 
     [Fact]

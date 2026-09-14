@@ -411,7 +411,7 @@ public record CoachCheckinUploadResponse(Guid UploadId, Guid CorrelationId, stri
 public record CoachCheckinStatusResponse(Guid UploadId, Guid SessionId, string ProfileId, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
 public record CoachCheckinSummaryResponse(Guid UploadId, Guid SessionId, string SummaryMarkdown, string SummaryJson, DateTimeOffset UpdatedAtUtc);
 public record CoachCheckinTranscriptResponse(Guid UploadId, Guid SessionId, string ProfileId, string Status, string TranscriptText, DateTimeOffset UpdatedAtUtc, List<CoachCheckinTranscriptUtteranceResponse> Utterances);
-public record CoachCheckinTranscriptUtteranceResponse(int SpeakerLabel, string SpeakerRole, int StartMs, int EndMs, string Text, double Confidence);
+public record CoachCheckinTranscriptUtteranceResponse(int SpeakerLabel, string SpeakerRole, int StartMs, int EndMs, string Text, double Confidence, string SpeakerName = "");
 public record CoachEvidenceResponse(CoachCheckinTranscriptResponse Transcript, bool AudioAvailable, long MaxAudioUploadBytes = 25 * 1024 * 1024);
 public record SpeakerOverrideItem(int SpeakerLabel, string Role);
 public record CoachCheckinSpeakerLabelInfoResponse(int SpeakerLabel, string SpeakerRole, int UtteranceCount, List<string> SampleTexts);

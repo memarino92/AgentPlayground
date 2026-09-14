@@ -19,6 +19,8 @@ $GoogleClientSecret = '<Google OAuth client secret>'
 $GoogleAllowedEmails = '<comma-separated verified coach emails>'
 $AssemblyAiApiKey = '<AssemblyAI API key>'
 $AllowedOrigins = '<public Web URL, for example https://example.up.railway.app>'
+$CoachName = 'Andrew'
+$AthleteName = 'Michael'
 
 # Optional integrations. Leave empty to keep the integration disabled/unconfigured.
 $TavilyApiKey = ''

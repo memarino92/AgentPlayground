@@ -23,7 +23,11 @@ builder.Services.AddSingleton<DatabaseSettingsStore>();
 builder.Services.AddSingleton<DatabaseCredentialRuntime>();
 builder.Services.AddHostedService<DatabaseCredentialReloadWorker>();
 if (syntheticDemo) builder.Services.AddSyntheticServices();
-else builder.Services.AddHostedService<DatabaseChatModelPolicyInitializer>();
+else
+{
+    builder.Services.AddHostedService<DatabaseChatModelPolicyInitializer>();
+    builder.Services.AddHostedService<CoachCheckinSettingsInitializer>();
+}
 
 var app = builder.Build();
 app.UsePersonalAgentPipeline();

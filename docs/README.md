@@ -49,6 +49,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0022: Scheduled notifications](decisions/0022-scheduled-notifications.md) | Accepted; implemented | Notification job identity, attribution, cancellation and push outcomes |
 | [0023: Query navigation and chat preferences](decisions/0023-query-navigation-and-chat-preferences.md) | Accepted; implemented | URL state, draft chats, model persistence and shared recording views |
 | [0024: .NET 11 RC1](decisions/0024-dotnet-11-rc1.md) | Accepted; server validated; Android build blocked by disk space | Pin SDK/framework packages and align CI/container builds |
+| [0025: Stereo coach attribution](decisions/0025-stereo-coach-attribution.md) | Accepted; implemented | Map fixed left/right recording channels to roles and present configurable participant names |
 
 ## Working agreement
 
