@@ -4,9 +4,9 @@ Status: **Proposed; research and planning only.** Researched 2026-09-18 against 
 
 ## Recommendation
 
-Evaluate Jev first as an optional **coaching-evidence reranker**, then as a transcript-tagging capability if the first evaluation supports further investment. Keep text generation, embeddings, transcription, authorization, and durable action execution in their existing paths. Start with synthetic offline comparisons, then shadow evaluation, then an explicitly promoted opt-in rollout.
+Evaluate two first-class capabilities: **a tool router before the main chat**, including home automation, and **coaching-evidence reranking**. Prioritize simulated automation after the shared provider spike; evaluate retrieval independently. Transcript tagging remains a follow-up. Keep text generation, embeddings, transcription, authorization, and durable action execution in their existing paths. Start with synthetic comparisons, then shadow evaluation, then an explicitly promoted opt-in rollout.
 
-This is a quality experiment, not an assumed cost-saving migration: today's retrieval and tagging use SQL and string matching, so Jev adds inference cost and latency. It earns its place only if it improves evidence selection enough to justify those costs. Savings from fewer chat retries or smaller evidence payloads must be measured across complete answers.
+The experiments have different economics. Direct automation may avoid a full chat-model round trip; tool-selection assistance may improve calls while still using the chat model. Today's retrieval and tagging use SQL and string matching, so Jev adds cost and latency there. Measure complete-turn correctness, cost and latency separately for each path, including fallbacks.
 
 ## What Jev provides, and what the evidence establishes
 
@@ -34,6 +34,7 @@ The priorities below are repository-specific engineering judgments, not vendor p
 
 | Priority | Current evidence | Proposed change and value | Scope and limitation |
 | --- | --- | --- | --- |
+| First-class: automation/tool routing | `AgentToolRegistry` and `AgentToolBinder` expose authorized functions; main chat currently selects tools. | Directly dispatch clear commands or suggest tools before the main model. | Simulated home devices first; real platform integration and durable direct-action records are new work. |
 | 1: evidence reranking | [`CoachCheckinService.SearchCoachCheckinsCoreAsync`](../../PersonalAgent/Services/CoachCheckinService.cs) ranks by exercise hints, vector distance and recency, returns five chunks, and attaches preceding utterances. [Current evaluation](../runbooks/coach-retrieval-evaluation.md) records remaining exercise-transition and exact-citation errors. | Score whether each candidate actually supports the question; distinguish an actionable coach cue from an acknowledgement or adjacent topic. | API-only initial capability. Jev cannot retrieve evidence absent from the candidate pool or guarantee the final chat answer. |
 | 2: semantic transcript tags | [`CoachTranscriptProcessingService`](../../PersonalAgent.Worker/Services/CoachTranscriptProcessingService.cs) groups four utterances and derives exercise/intent/priority tags with substring matching. | Independent Noul judgments over the existing vocabulary could recover paraphrases and reduce accidental matches. | Additional API capability and neutral Worker request/result contract. Preserve lexical recovery; tags remain relevance hints. Measure against today's effectively free classifier. |
 | 3: offline answer review | [`CoachRetrievalEvaluation`](../../scripts/CoachRetrievalEvaluation/README.md) has repeatable trials, saved outputs, citation checks and versioned scoring. | Use Jev to flag possible unsupported claims or wrong exercise attribution for human inspection. | Supplement exact citation checks and independent labels. Do not use Jev as both sole judge and candidate, or let it promote itself. |
@@ -46,7 +47,75 @@ Poor initial uses:
 - **Chat, summaries, embeddings, or speech recognition:** their required outputs differ from Jev's decision primitives. Existing coach summaries are templated, so there is no summary-model bill to eliminate today.
 - **Authorization, scheduler execution, or safety authority:** retain server-bound actor/subject checks, tool permission checks, idempotency, and human review. Model probabilities never grant access, send notifications, or diagnose injuries.
 
-## First slice: coaching-evidence reranking
+## Automation track: tool routing before the main chat
+
+The maintainer requested general automation testing, home-control chat, and better tool calling before the main chat on 2026-09-18. This is part of the initial experiment, not dependent on retrieval succeeding. TypeSafe's [smart-home demo](https://docs.typesafe.ai/demos/smart-home) batches questions about request category, scope and action, with code ignoring irrelevant answers. It uses an LLM for conversation and decomposing compound requests. This supports the architecture, but establishes neither our accuracy nor real-device reliability.
+
+### Three paths to compare
+
+```mermaid
+flowchart LR
+    U[Chat message and bounded recent context] --> A[Validate session and bind authorized tools]
+    A --> J[Jev routing decisions]
+    J --> D[Validated direct command]
+    J --> H[Tool suggestion or main-chat handoff]
+    J --> C[Clarify ambiguous target or argument]
+    D --> E[Existing authorized execution wrapper]
+    E --> R[Persist outcome and render acknowledgement]
+    H --> L[Main chat and normal tool loop]
+```
+
+- **Direct:** a single supported operation with complete, validated arguments invokes a bound function once; code formats a factual acknowledgement from its result. This can avoid the main chat model.
+- **Suggest:** Jev supplies a tool and validated candidate arguments; the main model handles remaining interpretation and execution. No tool has already run. Initially retain the full authorized tool set; evaluate shortlisting separately so a mistaken router cannot hide a needed capability.
+- **Clarify or hand off:** conversation, ambiguous targets, missing arguments, compound operations and unsupported input go to a targeted question or normal chat without speculative effects. Provider failure before execution also follows normal chat. Include Conversation, NeedsClarification and Unsupported outcomes rather than forcing a tool choice.
+
+### Selection and arguments
+
+[`AgentToolRegistry`](../../PersonalAgent/Services/AgentToolRegistry.cs) defines local and MCP registrations, and [`AgentToolBinder`](../../PersonalAgent/Services/AgentToolBinder.cs) binds functions to server-resolved access and wraps them with execution-time permission checks. Derive router candidates from that bound set. Add explicit per-tool fast-path adapters for supported arguments, parsing, execution policy and result formatting alongside the registrations; do not duplicate the catalog. Unreviewed MCP tools remain main-chat-only. Current `HasSideEffects` metadata is descriptive, not an approval or retry mechanism.
+
+For home control, provide authorized devices/groups, aliases, supported operations and fresh state. Choice selects known device/action options; Noul can detect compound intent. Batch independent questions, then discard irrelevant outputs and validate device/action combinations in code. Independently confident answers can form an invalid combination. Include unknown/none options; above 255 choices, scope or stage lookup rather than silently truncating targets.
+
+Jev cannot generate arbitrary string arguments. Parse explicit numbers, units, dates or exact source spans deterministically and validate against both schema and domain limits. Do not use a relevance Score to extract a thermostat temperature or silently map an exact request to a nearby preset. Free-text notifications, journal searches and complex scheduling can use main-chat argument generation. Preserve the existing current-time prerequisite and timezone rules for scheduling. Every generated argument still passes validation.
+
+Use bounded recent user turns and trusted previous action results for “turn it off.” Resolve only a unique, currently authorized referent; otherwise clarify. Quoted commands, device names and retrieved text are data, not new requests. No model-selected actor, profile or role is authoritative.
+
+| Test request | Expected behavior |
+| --- | --- |
+| “What time is it?” | Direct existing time tool and deterministic result formatting |
+| “Turn on the living-room lamp” | Select the known simulated lamp, set `on`, invoke once and acknowledge its result |
+| “Set the desk lamp to 35%” | Parse 35%, validate capability/range, then set the value |
+| “Turn off all downstairs lights” | Resolve an explicit group; bounded execution with per-device outcomes |
+| “Turn it off” after one device / after two different devices | Resolve the unique referent / clarify without acting |
+| “Don't turn off the light” or “Explain how to turn off a light” | No device mutation |
+| “Set the mood for dinner” | Use an unambiguous configured scene alias, or clarify/use main chat |
+| “Turn the lamp on, then remind me in ten minutes” | Main-chat orchestration initially; do not execute a prefix before handing off the whole request |
+| “Notify my phone that dinner is ready” | Tool-assisted chat for string arguments, or an exact-source-copy adapter if separately implemented |
+| “Why did my coach change my squat cue?” | Normal chat/retrieval; existing behavior must remain usable |
+| Unauthorized device, stale inventory, revoked permission | No unauthorized invocation or substitution of another target |
+
+### Integration and execution lifecycle
+
+Introduce API-local `IAgentRequestRouter` and `ToolRouteDecision` (Direct, Suggest, Clarify, MainChat), plus `IHomeAutomationGateway` with a stateful fake. There is no home-control adapter in the inspected registry. The actual platform is unspecified: Home Assistant or another provider is a later adapter choice. Keep its endpoint and credentials database-first. Register narrow capabilities such as read state, set light state and activate an allowlisted scene, rather than arbitrary service calls.
+
+Place routing in [`AgentChatService.SendMessageCoreAsync`](../../PersonalAgent/Services/AgentChatService.cs) after session ownership and scheduled-conversation checks and tool binding, before semantic recall and main-model execution when the direct path needs neither. Refactor agent construction so router and chat share bound functions. Execute through `BoundAgentTool.Function`, preserving execution-time authorization. Persist direct user/assistant turns and outcomes so later conversation retains context. Home commands should not require semantic-memory recall or storage to complete.
+
+The current chat persistence saves user/assistant interactions, not a complete execution ledger. Before enabling direct writes, add a durable operation record keyed by actor, session and client turn/request ID, with argument digest, status and result. Propagate the turn ID across retries; message text is not an idempotency key because repeating a command can be intentional. Atomically claim execution across API instances. Save action outcomes separately from response generation so a failed chat save cannot repeat an action.
+
+Use absolute setters (`on`, `off`, explicit brightness), not toggles, for initial writes; pass provider idempotency keys where supported. After a submission timeout or crash between an external action and result persistence, mark the outcome Unknown and reconcile or request review. Do not blindly retry or hand the original instruction to another executor. An LLM may explain a saved result but must not redispatch it. Group actions retain per-target outcomes. Distinguish submitted, confirmed, failed and unknown; transport acceptance alone does not prove physical completion.
+
+Start with simulated reads and light setters. Real locks, alarms and other consequential operations require explicit per-tool policies before enrollment. Routine authorized light commands need no blanket confirmation. Clarification or policy-required confirmation must bind to the exact operation and arguments. Autonomous monitoring and persistent home rules are separate trigger/scheduling/recovery work, outside this chat-command experiment.
+
+### Automation evaluation gates
+
+Add an opt-in automation harness alongside the coaching runner. Compare unchanged main-chat tool calling, Jev suggestions plus chat, and direct dispatch with fallback on identical inventories, messages and stateful fakes. Judge complete arguments, action count, resulting state and truthful acknowledgement, not just the tool name. CI uses deterministic providers; paid model evaluations remain explicit local runs.
+
+Freeze a development split and at least 100 independently labeled held-out scenarios spanning direct, ambiguous, conversational, adversarial and multi-turn requests. Proposed gates: at least 95% exact tool-and-argument success on eligible simple commands, at least 50% direct coverage of that eligible set, zero mutations on no-action/ambiguous/unauthorized cases, and no existing chat/retrieval regression. Require at least 30% lower p95 latency or total model cost than the paired main-chat baseline on eligible commands, without lower correctness. Report uncertainty intervals and fallback-inclusive totals; abstention must not manufacture apparent accuracy. Freeze action-specific thresholds before the held-out run; do not multiply marginal confidences as proof of joint correctness.
+
+Test stale state, invalid argument combinations, absent tools, outages, duplicate client submissions, multi-instance claims, revoked permissions, partial group failure and restart after dispatch/before persistence. Duplicate and ambiguous-outcome tests must avoid repeated effects. Track false dispatches, clarification quality, direct coverage, full-turn latency and every fallback call's cost.
+
+Use independent router modes `Off`, `Shadow`, `Suggest`, `Direct`; retrieval keeps its own switch. Shadow predicts but never adds executions. Direct initially enrolls only read-only tools, then simulated setters, then explicitly configured real lights after recovery tests. Rollback disables new routing decisions while preserving in-flight reconciliation. Share the provider client, encrypted credentials and telemetry, but keep capability-specific policies and promotion decisions separate.
+
+## Retrieval track: coaching-evidence reranking
 
 ```mermaid
 flowchart LR
@@ -92,7 +161,7 @@ Extend existing `AiTelemetry` with metadata-only capability/model/policy revisio
 
 Add neutral Contracts messages for chunk classification and an API consumer; Worker retains chunking and outbox-backed domain persistence. Batch independent labels over a fixed taxonomy, with Unknown/abstain behavior. Persist proposed annotations separately with content hash and classifier version so existing tags and embeddings remain recoverable. Do not hold database transactions during vendor requests. Deduplicate redelivery by subject, source version and classifier version; apply results only if the source still matches. Provider failure preserves current substring tags and does not fail an otherwise valid transcript. Historical backfill is a bounded, resumable opt-in job, not an implicit side effect of deployment.
 
-## Evaluation and promotion gates
+## Retrieval evaluation and promotion gates
 
 Extend the existing runner with a decision-provider experiment mode; keep the chat model, embedding model and corpus fixed across paired runs. Compare (a) current five-result baseline, (b) same five reranked by Jev, and (c) wider-pool reranking. This separates ranking gains from candidate expansion. If worthwhile, add an existing chat model answering the same fixed rubric as a cost/quality comparator. Do not compare unlike tasks to reproduce headline speedups.
 
@@ -118,8 +187,12 @@ Estimates are planning ranges for one developer familiar with this codebase, exc
 | --- | --- | --- | --- |
 | 0 | Obtain access; synthetic contract/usage/latency probe; confirm pinning and terms | 0.5–1 day | Verified response fixtures and known account limits; private data still gated |
 | 1 | API capability, HTTP adapter, fake, database settings and telemetry | 2–3 days | Contract/failure/reload tests pass; default Off; no Worker or chat-catalog change |
+| A1 | Router seam, per-tool adapters, simulated home inventory and stateful tools | 2–3 days | Direct/Suggest/Clarify/MainChat paths tested; reuse authorized bound functions |
+| A2 | Durable action records, turn identity, reconciliation and fault tests | 2–4 days | Duplicate requests and ambiguous external outcomes cannot blindly repeat effects |
+| A3 | Paired automation benchmark, shadow/suggest rollout and gated direct mode | 2–3 days | Independent automation gates met; full-turn correctness/cost/latency recorded |
 | 2 | Retrieval seam, bounded shadow mode, paired evaluation and independent labels | 2–4 days | Reproducible report against frozen baseline; full current regressions pass |
 | 3 | Review gates, limited Active rollout, rollback verification and runbook | 1–2 days | Measured quality/latency/cost and tested Off switch; otherwise retain Off |
 | Optional | Semantic tags with neutral bus contract, provenance and resumable backfill | 3–5 days | Separate accuracy/cost evaluation and redelivery/source-change tests |
+| Optional | Selected real home-platform adapter and limited device rollout | 2–5 days | Platform/network access established; real-state verification and rollback demonstrated |
 
-The initial rollout is roughly 5.5–10 developer days, with scope reduced if the contract probe or held-out comparison fails. Merging this plan authorizes neither private-data transfer nor production activation. Open questions before activation: account access and retention terms, regional latency, actual question/token limits, stable pinned-model availability, and whether quality improves enough to justify another provider. An inconclusive or negative result is a valid outcome; retain the baseline and publish the bounded evaluation finding.
+Sequence shared slices 0–1, then automation A1–A3; retrieval slices 2–3 have independent acceptance. Shared foundation plus simulated automation is roughly 8.5–14 developer days. Adding retrieval brings the combined estimate to 11.5–20 days, excluding optional tagging and a real home-platform adapter. Reduce scope if the contract probe or held-out comparisons fail. Merging this plan authorizes neither private-data transfer nor production activation. Open questions include account terms, regional latency, stable model availability, actual quality benefit, and the user's home platform/device inventory and API-to-home network path. Simulated automation does not depend on selecting that platform. An inconclusive or negative result is valid; retain the baseline and record the bounded finding.
