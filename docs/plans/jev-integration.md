@@ -4,7 +4,7 @@ Status: **Proposed; research and planning only.** Researched 2026-09-18 against 
 
 ## Recommendation
 
-Evaluate two first-class capabilities: **a tool router before the main chat**, including home automation, and **coaching-evidence reranking**. Prioritize simulated automation after the shared provider spike; evaluate retrieval independently. Transcript tagging remains a follow-up. Keep text generation, embeddings, transcription, authorization, and durable action execution in their existing paths. Start with synthetic comparisons, then shadow evaluation, then an explicitly promoted opt-in rollout.
+Evaluate **pre-chat routing**, **LLM-delegated structured decisions and tool dispatch**, **tool-call judging**, and **coaching-evidence reranking** as independently switchable experiments. Automation includes simulated home devices. Prioritize the shared provider/binding foundation and automation experiments; retrieval and transcript tagging do not block them. Keep text generation, embeddings, transcription and authorization in their existing paths. Start with synthetic comparisons, then shadow evaluation, then explicitly promoted opt-in modes.
 
 The experiments have different economics. Direct automation may avoid a full chat-model round trip; tool-selection assistance may improve calls while still using the chat model. Today's retrieval and tagging use SQL and string matching, so Jev adds cost and latency there. Measure complete-turn correctness, cost and latency separately for each path, including fallbacks.
 
@@ -35,6 +35,7 @@ The priorities below are repository-specific engineering judgments, not vendor p
 | Priority | Current evidence | Proposed change and value | Scope and limitation |
 | --- | --- | --- | --- |
 | First-class: automation/tool routing | `AgentToolRegistry` and `AgentToolBinder` expose authorized functions; main chat currently selects tools. | Directly dispatch clear commands or suggest tools before the main model. | Simulated home devices first; real platform integration and durable direct-action records are new work. |
+| First-class: LLM delegation and tool-call judging | Main chat already invokes bound functions; `LoggingAIFunction` checks access before invocation. | Expose structured decision and delegated-action tools, sharing a deterministic argument-binding layer; judge proposed calls and recorded outcomes. | Model chooses from supported values; code validates and dispatches. Judging is advisory initially and cannot replace permission checks. |
 | 1: evidence reranking | [`CoachCheckinService.SearchCoachCheckinsCoreAsync`](../../PersonalAgent/Services/CoachCheckinService.cs) ranks by exercise hints, vector distance and recency, returns five chunks, and attaches preceding utterances. [Current evaluation](../runbooks/coach-retrieval-evaluation.md) records remaining exercise-transition and exact-citation errors. | Score whether each candidate actually supports the question; distinguish an actionable coach cue from an acknowledgement or adjacent topic. | API-only initial capability. Jev cannot retrieve evidence absent from the candidate pool or guarantee the final chat answer. |
 | 2: semantic transcript tags | [`CoachTranscriptProcessingService`](../../PersonalAgent.Worker/Services/CoachTranscriptProcessingService.cs) groups four utterances and derives exercise/intent/priority tags with substring matching. | Independent Noul judgments over the existing vocabulary could recover paraphrases and reduce accidental matches. | Additional API capability and neutral Worker request/result contract. Preserve lexical recovery; tags remain relevance hints. Measure against today's effectively free classifier. |
 | 3: offline answer review | [`CoachRetrievalEvaluation`](../../scripts/CoachRetrievalEvaluation/README.md) has repeatable trials, saved outputs, citation checks and versioned scoring. | Use Jev to flag possible unsupported claims or wrong exercise attribution for human inspection. | Supplement exact citation checks and independent labels. Do not use Jev as both sole judge and candidate, or let it promote itself. |
@@ -115,6 +116,68 @@ Test stale state, invalid argument combinations, absent tools, outages, duplicat
 
 Use independent router modes `Off`, `Shadow`, `Suggest`, `Direct`; retrieval keeps its own switch. Shadow predicts but never adds executions. Direct initially enrolls only read-only tools, then simulated setters, then explicitly configured real lights after recovery tests. Rollback disables new routing decisions while preserving in-flight reconciliation. Share the provider client, encrypted credentials and telemetry, but keep capability-specific policies and promotion decisions separate.
 
+## LLM-delegation track: structured decisions between chat and tools
+
+The maintainer also requested Jev as an LLM-callable capability: the main model describes an intended action, Jev supplies constrained decisions, and a deterministic binding layer constructs the downstream tool request. This is distinct from the pre-chat router: the main LLM is already running and may delegate after reasoning or gathering context. Both entry points must share binding, policy and execution code.
+
+```mermaid
+flowchart LR
+    L[Main LLM] --> S[Structured decision tool]
+    S --> J[Jev adapter]
+    J --> T[Validated typed result to LLM]
+    L --> D[Delegated action description]
+    D --> J2[Jev constrained decisions]
+    J2 --> B[Deterministic tool and argument binding]
+    B --> G[Optional pre-call judge and policy]
+    G --> E[Authorized bound tool and operation ledger]
+    E --> R[Typed execution result to LLM]
+    E --> P[Post-call assessment]
+```
+
+### Separate decision-only and effectful tools
+
+Propose two registered, permission-controlled tools with distinct contracts:
+
+- `evaluate_structured(description, contractId)`: return a typed decision without executing anything. `contractId` selects a versioned, server-owned output contract: for example, known categories, booleans or a rubric with optional known entity handles. Return Completed, Abstained or Unsupported plus validated values, probabilities and provenance. This lets the LLM ask Jev for structured intermediate judgments.
+- `delegate_action(description)`: resolve one supported action, bind validated arguments, apply execution policy and invoke it through the existing wrapper. Return Executed, NeedsClarification, Unsupported, Denied, Failed or OutcomeUnknown with the operation reference and actual result. The description is untrusted intent, not a command string or arbitrary JSON to forward.
+
+Actor, subject, session, turn identity, candidate inventory, original user request and authorized tools are supplied by the server. The LLM cannot choose permissions, credential scope, provider URL, confidence thresholds, execution mode or the judge's acceptance policy. A delegated action must be consistent with the original user request and current trusted context; a persuasive LLM paraphrase does not create authorization. Check both delegation-tool permission and selected leaf-tool permission, including device-level access, immediately before execution.
+
+Start decision-only contracts with closed fields. An optional later experiment can accept a bounded LLM-proposed decision schema, but validate it against a restricted Choice/Noul/Score grammar, question/option/depth/token limits, and data-access policy. That schema can describe outputs only; it cannot register executable functions, change tool permissions or redefine grading policy. It remains a read-only capability. Do not present Jev as a general arbitrary-JSON or free-text generator.
+
+### Deterministic binding and the malformed-request claim
+
+Introduce API-local `IStructuredDecisionService`, `IDelegatedActionService` and `IToolInvocationCompiler`, sharing the existing TypeSafe adapter and registry. Each enrolled tool has a reviewed binding specification: stable tool key, schema version, allowed option sources, required/optional fields, parsers, range/unit/cross-field constraints and result mapping. Build typed argument records and serialize them in code; do not concatenate or execute model-generated JSON. Validate against the currently registered function schema before invocation. Unsupported schemas, missing values and version mismatches return a typed failure without calling the leaf function.
+
+Example: the LLM describes “set the desk lamp to 35 percent.” Jev selects supplied lamp/action handles; deterministic parsing extracts 35 from an authorized source span, validates brightness support and range, and constructs the setter request. A missing percentage prompts clarification. Jev's Score is never repurposed as an arbitrary numeric argument. Free-text values must come from validated source spans, trusted stored values, or an explicitly supported LLM-generated field that is validated as untrusted input; otherwise that operation is unsupported in this mode. Never invent a value to complete a schema.
+
+The target invariant is **no structurally invalid request reaches an enrolled leaf-tool handler**. Jev's documented [closed-option outputs](https://docs.typesafe.ai/primitives/choice) help select values; our compiler and final validation enforce the tool contract. This cannot promise that the LLM's outer delegation envelope is always valid, that all requested operations are representable, or that a schema-valid action is correct. Invalid outer calls fail before delegation. Measure schema validity separately from correct tool selection, argument meaning and user-intent alignment.
+
+For the strict delegated experiment, hide enrolled leaf tools from the LLM's advertised tool set while retaining their bound functions inside the dispatcher. Otherwise the LLM could bypass the middleware and invalidate the experiment. Non-enrolled tools remain on their existing path, and reports identify that scope explicitly. A before-execution fallback may use normal chat for explanation or clarification, but must not silently expose the same mutation outside the delegated path. Never fall back to re-execution after dispatch or an unknown outcome.
+
+Use the same durable action records and client-turn identity as direct routing. Repeated outer calls in one turn must retrieve an existing operation or require a separately tracked, explicitly intended action step; a new LLM function-call ID alone cannot authorize duplicate effects. Exclude delegation and judging tools from the delegate's leaf candidates, cap tool steps/provider calls/total time, and reject recursive dispatch. Start with one action per delegation; compound actions remain normal orchestration with individually tracked steps.
+
+## Tool-call judge track
+
+Add `IToolCallJudge` as an application-controlled observer or gate, separate from selection and binding. An optional LLM-callable assessment tool can evaluate a server-resolved proposal/operation reference, but the LLM choosing whether to ask is not an enforcement mechanism. Mandatory checks, when enabled, run in the execution path for every enrolled call, whether proposed by direct routing, delegation or the main LLM.
+
+- **Pre-call assessment:** compare the original user request, relevant trusted history, current tool schema, resolved arguments and device state. Independently judge whether a call is needed, whether the target/action/arguments match the request, whether information is missing, and whether it appears to duplicate a completed step. Keep deterministic permission, schema, limits and deduplication checks authoritative. Evaluate the concrete compiled call, not only the LLM's description. If judged arguments or inventory change, invalidate the assessment and revalidate.
+- **Post-call assessment:** compare the recorded attempt/result, independently observed state when available, and proposed assistant acknowledgement. Flag wrong-target effects, partial outcomes, unsupported success claims and unnecessary repeated calls. An uncertain external result remains uncertain; a judge cannot turn it into a confirmed success. Assessment never triggers automatic retries, compensating actions or extra device mutations.
+
+Use a fixed application rubric and retain per-dimension probabilities plus reason codes such as WrongTarget, MissingArgument, UnnecessaryCall, PossibleDuplicate and UnsupportedSuccessClaim. Jev does not generate a free-form explanation; render standard explanations from codes, or let the LLM explain the recorded assessment without changing it. Low confidence yields Unknown/NeedsClarification rather than assumed approval.
+
+Roll out judge modes independently: Off, Observe, then Enforce for specifically enrolled operations. Observe records disagreements without changing execution. In Enforce, a rejecting, indeterminate or unavailable judge prevents the enrolled mutation and returns a typed result; never quietly bypass enforcement through another tool path. Read-only/advisory handling may retain baseline behavior under explicit policy. A manual switch to Observe or Off is a recorded configuration change, not an outage workaround inside the request.
+
+### Paired experiment and acceptance
+
+Extend the automation harness with LLM-to-leaf baseline, pre-chat routing, LLM-to-Jev delegation, and delegation with judging on/off. Also test the judge against ordinary LLM-proposed calls so its value is not conflated with delegation. Use the same inventories, prompts and stateful fakes; count both LLM and Jev calls, clarification turns, retries and complete-turn latency/cost. Include the simpler baseline of schema-constrained LLM tool calling plus deterministic validation, to determine whether Jev adds semantic benefit beyond validation alone.
+
+Add deliberately malformed envelopes, unknown tools/options, omitted and extra arguments, wrong types, ranges/units, incompatible argument combinations, stale schema versions, invented description details, unsupported free text, judge injection, recursive delegation, and duplicate outer calls with different function-call IDs. Valid-but-wrong calls must appear alongside malformed ones. Include requests requiring no tool, actual execution failures and false success acknowledgements. Test that private data and inaccessible tool/device details never enter provider requests.
+
+Compiler/fake tests require zero invalid requests reaching enrolled handlers, no permission bypass and no duplicate effects. Report outer-envelope validity, successful binding coverage, unsupported/clarification rates, exact action correctness and full-turn outcomes separately. Apply the automation correctness and coverage gates to delegation, but do not assume its extra model hop meets the direct-router speed target: adopt delegation only with either at least five percentage points higher full-turn correctness at no more than 20% added p95 latency, or at least 30% lower total model cost without lower correctness. Freeze the chosen criterion before held-out trials.
+
+Judge evaluation uses independently human-labeled correct and incorrect calls, including rare high-impact mistakes. Proposed gates: at least 95% recall of incorrect calls and at most 5% rejection of correct calls on a held-out set with at least 100 of each; publish sample counts and uncertainty intervals before considering enforcement. Assess calibration, Unknown rate and improvement in executed-call outcomes, not just agreement with its own selections. The same model may make correlated selector/judge errors: use separate fixed prompts, hide selector confidence from judging, and retain independent labels. This reduces coupling but does not establish independence. Jev is never the sole oracle used to approve Jev.
+
 ## Retrieval track: coaching-evidence reranking
 
 ```mermaid
@@ -143,7 +206,7 @@ In shadow mode, return baseline results while capturing comparison metadata. Bou
 
 ### Capability and adapter
 
-Propose an API-local `ICoachEvidenceReranker` with neutral candidate/result records and statuses such as Applied, Abstained and Unavailable. Keep domain rubrics separate from a private `TypeSafeDecisionClient` responsible for HTTP serialization, credentials and vendor error mapping. A deterministic fake and baseline implementation exercise the same interface. Do not implement Jev as `IChatClient`, add it to `/api/models`, or expose arbitrary vendor questions as an agent tool.
+Propose an API-local `ICoachEvidenceReranker` with neutral candidate/result records and statuses such as Applied, Abstained and Unavailable. Keep domain rubrics separate from a private `TypeSafeDecisionClient` shared by routing, delegation, judging and reranking. It owns HTTP serialization, credentials and vendor error mapping. Fakes exercise the same interfaces. Jev remains outside `IChatClient` and `/api/models`; expose it to the LLM through the explicit bounded decision/delegation tools above, not unrestricted vendor access.
 
 Use .NET's existing HTTP/JSON facilities; no new service or mandatory package is needed for the spike. Validate question coverage, types, finite numbers, range bounds, option membership and probability sums within a documented tolerance. Missing usage stays unknown. Character/byte caps and conservative token estimates must respect both context limits until a verified tokenizer is available.
 
@@ -190,9 +253,11 @@ Estimates are planning ranges for one developer familiar with this codebase, exc
 | A1 | Router seam, per-tool adapters, simulated home inventory and stateful tools | 2–3 days | Direct/Suggest/Clarify/MainChat paths tested; reuse authorized bound functions |
 | A2 | Durable action records, turn identity, reconciliation and fault tests | 2–4 days | Duplicate requests and ambiguous external outcomes cannot blindly repeat effects |
 | A3 | Paired automation benchmark, shadow/suggest rollout and gated direct mode | 2–3 days | Independent automation gates met; full-turn correctness/cost/latency recorded |
+| B1 | Decision-only/delegated tools, typed invocation compiler and strict leaf-tool hiding | 2–4 days | Closed contracts work; invalid/unsupported requests never reach enrolled handlers; reuse A2 action records |
+| B2 | Pre/post-call judge, Observe/Enforce policies and independent labeled comparison | 2–4 days | Judge false-accept/reject rates measured; enforcement outage and bypass tests pass |
 | 2 | Retrieval seam, bounded shadow mode, paired evaluation and independent labels | 2–4 days | Reproducible report against frozen baseline; full current regressions pass |
 | 3 | Review gates, limited Active rollout, rollback verification and runbook | 1–2 days | Measured quality/latency/cost and tested Off switch; otherwise retain Off |
 | Optional | Semantic tags with neutral bus contract, provenance and resumable backfill | 3–5 days | Separate accuracy/cost evaluation and redelivery/source-change tests |
 | Optional | Selected real home-platform adapter and limited device rollout | 2–5 days | Platform/network access established; real-state verification and rollback demonstrated |
 
-Sequence shared slices 0–1, then automation A1–A3; retrieval slices 2–3 have independent acceptance. Shared foundation plus simulated automation is roughly 8.5–14 developer days. Adding retrieval brings the combined estimate to 11.5–20 days, excluding optional tagging and a real home-platform adapter. Reduce scope if the contract probe or held-out comparisons fail. Merging this plan authorizes neither private-data transfer nor production activation. Open questions include account terms, regional latency, stable model availability, actual quality benefit, and the user's home platform/device inventory and API-to-home network path. Simulated automation does not depend on selecting that platform. An inconclusive or negative result is valid; retain the baseline and record the bounded finding.
+Sequence shared slices 0–1 and automation foundation A1–A2, then evaluate A3 and B1–B2 independently; retrieval slices 2–3 have separate acceptance. Shared foundation plus simulated automation is roughly 8.5–14 developer days. Delegation and judging add 4–8 days; adding retrieval brings the combined estimate to 15.5–28 days, excluding optional tagging and a real home adapter. Reduce scope if comparisons fail. Merging this plan authorizes neither private-data transfer nor production activation. Open questions include account terms, regional latency, model stability, measured benefit, and the user's home platform/inventory and API-to-home network path. Simulated experiments do not depend on choosing that platform. An inconclusive or negative result is valid; retain the baseline and record the finding.
