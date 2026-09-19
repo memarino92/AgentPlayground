@@ -6,6 +6,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 
 - [Architecture](architecture.md): current responsibilities and boundaries.
 - [Roadmap](plans/roadmap.md): work themes, evidence, and acceptance criteria; includes a [selectable backlog](plans/roadmap.md#selectable-backlog) of unprioritized ideas.
+- [Jev implementation proposal](plans/jev-integration.md): researched fit, API integration design, evaluation gates and staged effort; not implemented.
 - [Local development](runbooks/local-development.md): current setup and known gaps.
 - [Synthetic demo](runbooks/synthetic-demo.md): start API/Web/Worker without private data or provider accounts.
 - [Snapshot commands](runbooks/snapshot-commands.md): implemented export and guarded local restore.
@@ -50,6 +51,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0023: Query navigation and chat preferences](decisions/0023-query-navigation-and-chat-preferences.md) | Accepted; implemented | URL state, draft chats, model persistence and shared recording views |
 | [0024: .NET 11 RC1](decisions/0024-dotnet-11-rc1.md) | Accepted; server validated; Android build blocked by disk space | Pin SDK/framework packages and align CI/container builds |
 | [0025: Stereo coach attribution](decisions/0025-stereo-coach-attribution.md) | Accepted; implemented | Map fixed left/right recording channels to roles and present configurable participant names |
+| [0026: Structured decision provider](decisions/0026-structured-decision-provider.md) | Proposed; not implemented | Evaluate API-owned Jev coaching-evidence reranking with measured promotion gates |
 
 ## Working agreement
 
