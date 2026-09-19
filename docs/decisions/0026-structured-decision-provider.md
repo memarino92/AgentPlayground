@@ -3,27 +3,28 @@
 - Status: Proposed; not implemented
 - Recorded: 2026-09-18
 - Decision date: Pending
-- Evidence: [Jev research and implementation plan](../plans/jev-integration.md); `CoachCheckinService`, `CoachTranscriptProcessingService`, and the coaching evaluation runner at `b14490e`
+- Evidence: [Jev research and implementation plan](../plans/jev-integration.md); `AgentChatService`, `AgentToolRegistry`, `AgentToolBinder`, `CoachCheckinService`, and the coaching evaluation runner at `b14490e`; maintainer request for general automation and home-control routing on 2026-09-18
 - Extends: [0004: Agent service boundary](0004-agent-service-boundary.md)
 
 ## Context
 
-Coaching retrieval currently combines SQL scope, vector ranking, exercise hints and timestamped evidence. Exercise transitions and exact supporting-utterance selection remain quality gaps. Jev offers constrained probabilistic decisions; its output contract differs from the chat interface. The linked plan records primary sources, vendor claims, current code evidence and uncertainty.
+Main chat currently selects authorized tools through the agent loop. The maintainer wants to test general automation and home-control commands through a faster front-end decision layer. Coaching retrieval also has exercise-transition and exact-utterance quality gaps. Jev offers constrained probabilistic decisions; its output contract differs from chat. The plan records sources, current code evidence and uncertainty for both experiments.
 
 ## Decision
 
-Propose an optional API-local evidence-reranking capability with a TypeSafe HTTP adapter, a deterministic fake and baseline fallback. Evaluate it offline and in shadow mode before any Active promotion. Keep Jev out of the chat catalog and keep generation, embeddings, authorization and durable actions unchanged. Use encrypted database-first settings, versioned policy, bounded calls and metadata-only telemetry. Speaker roles continue to follow [stereo source evidence](0025-stereo-coach-attribution.md).
+Propose two independently gated API capabilities sharing a TypeSafe HTTP adapter: pre-chat tool routing and evidence reranking. Test automation with stateful simulated devices first. Clear supported commands may execute through existing bound functions; incomplete or complex requests receive clarification or main-chat handoff. Add durable operation identity and outcome tracking before direct mutations, since current chat persistence alone cannot prevent duplicate effects. Keep authorization in the existing execution wrapper and Jev out of the chat catalog. Use encrypted database-first settings, separate capability modes, versioned policy, bounded calls and metadata-only telemetry. Speaker roles continue to follow [stereo source evidence](0025-stereo-coach-attribution.md).
 
 ## Alternatives
 
 - Retain current ranking and improve deterministic retrieval: the default and rollback path; remains preferable if Jev's measured benefit is insufficient.
 - Use the existing chat model for the same decision rubric: a useful optional evaluation comparator, with no assumed accuracy or cost disadvantage.
+- Keep all tool execution in the main chat loop: the baseline; compare Jev suggestions and direct dispatch against it, including fallback overhead and complete argument correctness.
 - Add Jev as a chat model or replace journal extraction: incompatible with its lack of free-text generation.
 - Call TypeSafe directly from Worker or a new microservice: unnecessary provider/configuration spread for the first API-local use case.
 
 ## Consequences
 
-Potentially better evidence selection comes with additional latency, cost and a new data processor. Valid output types do not establish truthful classifications or secure decisions. Account terms must be established before private inputs are transmitted. Domain quality, fallback and rollback require explicit evaluation; type safety alone is not a promotion criterion.
+Direct commands may avoid chat-model cost and latency; suggestions and reranking add overhead that must earn its place through measured quality. Home integration adds device inventory, argument validation and external-action recovery work. The actual platform is unspecified, so start with a fake. Valid output types do not establish correct intent or permission. Account terms must be established before private inputs are transmitted. Domain quality, fallback and rollback require explicit evaluation; type safety alone is not a promotion criterion.
 
 ## Delivery and verification
 
