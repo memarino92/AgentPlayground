@@ -2,6 +2,14 @@
 
 Recorded 2026-09-07; reconciled 2026-09-13 against `b7157f7`. The numbered themes retain the original suggested sequence; the [selection table](#selectable-backlog) records delivered slices and remaining acceptance work. The catalog is unprioritized. Dated validation counts are historical evidence, not results from this documentation review. Estimates remain deferred until slices expose their integration work.
 
+## Jev structured decisions — proposed 2026-09-18
+
+Research and planning only; no provider integration or production activation. The [implementation plan](jev-integration.md) recommends an API-owned coaching-evidence reranker, initially evaluated offline and in shadow mode, with semantic transcript tagging as a separately gated follow-up. See [proposed decision 0026](../decisions/0026-structured-decision-provider.md). This proposal contributes to MEMORY-02 and LAB-01/05 without marking those items complete or adding a delivered backlog item.
+
+**Deliver:** verify the synthetic HTTP contract and account terms; implement a neutral API capability with database-first encrypted settings and bounded baseline fallback; extend paired retrieval evaluation; promote only after measured benefit. Preserve stereo attribution, chat generation, citation membership, subject isolation and hard recording scope.
+
+**Done when:** frozen held-out evaluation meets the plan's proposed quality, latency and cost gates; current retrieval/security regressions pass; provider outage and invalid settings preserve baseline behavior; default Off, limited activation and rollback are verified. Private-data processing terms are resolved before private trials. Record actual evidence here when implemented; estimates and vendor benchmarks are not acceptance evidence.
+
 ## Stereo coach attribution — delivered 2026-09-14
 
 Maintainer-confirmed stereo recordings now use source channels instead of inferred speaker diarization: left/channel 1 is coach and right/channel 2 is athlete. Recognized stereo results continue directly to processing; mono and missing legacy channel metadata still pause for manual review. Transcript presentation and downloads use startup-bound database settings for participant names while retaining `coach` and `athlete` in persisted roles and retrieval content. Five provider tests, five Worker mapping tests, 22 related Web tests and all 24 contract tests pass; PostgreSQL recovery tests are implemented but were not run because Docker Desktop was unavailable. The server projects compile; the full solution remains blocked by the previously documented missing Android API 37 SDK. Live-provider audio validation remains outstanding. See [decision 0025](../decisions/0025-stereo-coach-attribution.md) and the [transcription runbook](../runbooks/transcription-gateway.md).
