@@ -8,23 +8,24 @@
 
 ## Context
 
-Main chat currently selects authorized tools through the agent loop. The maintainer wants to test general automation and home-control commands through a faster front-end decision layer. Coaching retrieval also has exercise-transition and exact-utterance quality gaps. Jev offers constrained probabilistic decisions; its output contract differs from chat. The plan records sources, current code evidence and uncertainty for both experiments.
+Main chat currently selects authorized tools through the agent loop. The maintainer wants pre-chat routing, LLM-delegated structured outputs/actions through Jev and deterministic binding, and judging of tool-call use. Automation includes home-control experiments. Coaching retrieval also has exercise-transition and exact-utterance quality gaps. Jev offers constrained decisions rather than general text generation. The plan records source evidence and uncertainty for each experiment.
 
 ## Decision
 
-Propose two independently gated API capabilities sharing a TypeSafe HTTP adapter: pre-chat tool routing and evidence reranking. Test automation with stateful simulated devices first. Clear supported commands may execute through existing bound functions; incomplete or complex requests receive clarification or main-chat handoff. Add durable operation identity and outcome tracking before direct mutations, since current chat persistence alone cannot prevent duplicate effects. Keep authorization in the existing execution wrapper and Jev out of the chat catalog. Use encrypted database-first settings, separate capability modes, versioned policy, bounded calls and metadata-only telemetry. Speaker roles continue to follow [stereo source evidence](0025-stereo-coach-attribution.md).
+Propose independently gated API capabilities sharing a TypeSafe HTTP adapter: pre-chat routing, LLM-callable structured decisions/delegated actions, tool-call judging, and evidence reranking. Direct and delegated automation share deterministic argument binding, existing authorized functions, and durable operation identity/outcome tracking. Strict delegated mode hides enrolled leaf tools from the LLM to prevent bypass. The judge observes concrete proposed calls and recorded outcomes first; enforcement requires independent evaluation and explicit enrollment. Keep Jev out of the chat catalog. Use encrypted database-first settings, separate modes, versioned policy, bounded calls and metadata-only telemetry. Speaker roles continue to follow [stereo source evidence](0025-stereo-coach-attribution.md).
 
 ## Alternatives
 
 - Retain current ranking and improve deterministic retrieval: the default and rollback path; remains preferable if Jev's measured benefit is insufficient.
 - Use the existing chat model for the same decision rubric: a useful optional evaluation comparator, with no assumed accuracy or cost disadvantage.
 - Keep all tool execution in the main chat loop: the baseline; compare Jev suggestions and direct dispatch against it, including fallback overhead and complete argument correctness.
+- Use schema-constrained LLM tool calls with deterministic validation alone: a necessary comparator for delegated Jev calls; measure whether Jev improves semantic decisions enough to justify another model hop.
 - Add Jev as a chat model or replace journal extraction: incompatible with its lack of free-text generation.
 - Call TypeSafe directly from Worker or a new microservice: unnecessary provider/configuration spread for the first API-local use case.
 
 ## Consequences
 
-Direct commands may avoid chat-model cost and latency; suggestions and reranking add overhead that must earn its place through measured quality. Home integration adds device inventory, argument validation and external-action recovery work. The actual platform is unspecified, so start with a fake. Valid output types do not establish correct intent or permission. Account terms must be established before private inputs are transmitted. Domain quality, fallback and rollback require explicit evaluation; type safety alone is not a promotion criterion.
+Direct commands may avoid chat-model cost; delegation, judging and reranking add overhead. Deterministic binding can prevent structurally invalid requests from reaching enrolled handlers, but cannot guarantee correct actions or a valid outer LLM envelope. Free-text and arbitrary numeric fields need separate validated sources. A Jev selector and judge can share errors, so judging needs independent labels. Home integration adds inventory and external-action recovery work; start with a fake. Account terms must be established before private inputs are transmitted. Type safety alone is not a promotion criterion.
 
 ## Delivery and verification
 
