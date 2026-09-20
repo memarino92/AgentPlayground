@@ -12,9 +12,9 @@ internal sealed class OpenAiAgentChatClientFactory(IOptions<ApiKeyOptions> Optio
     public IChatClient Create(string ModelId) => new ObservableChatClient(ApplyCompatibility(Clients.Current.GetChatClient(ModelId).AsIChatClient(), ModelId), ModelId);
 
     internal static IChatClient ApplyCompatibility(IChatClient Client, string ModelId)
-        => ModelId == "gpt-5.6-luna" ? new ConfigureOptionsChatClient(Client, Options =>
+        => ModelId is "gpt-5.6-luna" or "gpt-5.6-terra" ? new ConfigureOptionsChatClient(Client, Options =>
         {
-            // Luna rejects function tools with reasoning on Chat Completions. Responses is a separate migration.
+            // Luna and Terra reject function tools with reasoning on Chat Completions. Responses is a separate migration.
             if (Options.Tools is { Count: > 0 }) Options.Reasoning = new ReasoningOptions { Effort = ReasoningEffort.None };
         }) : Client;
 }

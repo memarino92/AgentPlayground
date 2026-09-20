@@ -6,10 +6,14 @@ using Xunit;
 
 namespace PersonalAgent.Tests.Services;
 
-public sealed class LunaChatCompatibilityTests
+public sealed class ChatToolCompatibilityTests
 {
-    [Fact]
-    public async Task FunctionTools_UseSupportedEffortWithoutMutatingCallerOptions()
+    [Theory]
+    [InlineData("gpt-5.6-luna", true)]
+    [InlineData("gpt-5.6-terra", true)]
+    [InlineData("gpt-5.6-luna", false)]
+    [InlineData("gpt-5.6-terra", false)]
+    public async Task FunctionTools_UseSupportedEffortWithoutMutatingCallerOptions(string ModelId, bool HasTools)
     {
         var Inner = new Mock<IChatClient>();
         ChatOptions? Captured = null;
@@ -19,10 +23,10 @@ public sealed class LunaChatCompatibilityTests
                 Captured = Options;
                 return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
             });
-        var Original = new ChatOptions { Tools = [AIFunctionFactory.Create(() => "evidence", "search")], Reasoning = new() { Effort = ReasoningEffort.Medium } };
-        var Client = OpenAiAgentChatClientFactory.ApplyCompatibility(Inner.Object, "gpt-5.6-luna");
+        var Original = new ChatOptions { Tools = HasTools ? [AIFunctionFactory.Create(() => "evidence", "search")] : null, Reasoning = new() { Effort = ReasoningEffort.Medium } };
+        var Client = OpenAiAgentChatClientFactory.ApplyCompatibility(Inner.Object, ModelId);
         await Client.GetResponseAsync([new(ChatRole.User, "question")], Original);
-        Captured!.Reasoning!.Effort.Should().Be(ReasoningEffort.None);
+        Captured!.Reasoning!.Effort.Should().Be(HasTools ? ReasoningEffort.None : ReasoningEffort.Medium);
         Original.Reasoning.Effort.Should().Be(ReasoningEffort.Medium);
     }
 
