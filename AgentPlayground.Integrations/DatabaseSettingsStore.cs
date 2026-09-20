@@ -7,6 +7,7 @@ public sealed record DatabaseSetting(string Scope, string Key, string Version, s
 {
     public bool SupportsLiveReload => LiveCredentialPolicy.Supports(Scope, Key);
     public bool IsLiveChatModelPolicy => Scope is "Shared" or "Api" && Key.StartsWith("ChatModels:", StringComparison.OrdinalIgnoreCase);
+    public bool IsLiveJevPolicy => Scope == "Api" && Key is "Jev:Settings" or "Jev:ApiKey";
 }
 public sealed record DatabaseSettingEdit(string Scope, string Key, string Version, string? Value, bool IsActive);
 public sealed record SaveDatabaseSettingsRequest(List<DatabaseSettingEdit> Changes);

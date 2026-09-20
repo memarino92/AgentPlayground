@@ -133,6 +133,13 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IToolAccessStore, PostgresToolAccessStore>();
         services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
         services.AddSingleton<AgentToolBinder>();
+        services.AddSingleton<JevRoutingRuntime>();
+        services.AddSingleton<IJevRoutingSettings>(sp => sp.GetRequiredService<JevRoutingRuntime>());
+        services.AddHttpClient("Jev", Client => Client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddSingleton<IToolDecisionClient>(sp => new TypeSafeDecisionClient(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("Jev"), sp.GetRequiredService<ILogger<TypeSafeDecisionClient>>()));
+        services.AddSingleton<IAgentRequestRouter, JevRequestRouter>();
         services.AddSingleton<ToolAccessService>();
         services.AddSingleton<ICoachAssignmentStore, PostgresCoachAssignmentStore>();
         services.AddSingleton<AgentChatService>();

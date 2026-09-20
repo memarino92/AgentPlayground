@@ -29,6 +29,8 @@ else
     builder.Services.AddHostedService<CoachCheckinSettingsInitializer>();
 }
 
+builder.Services.AddHostedService(sp => sp.GetRequiredService<JevRoutingRuntime>());
+
 var app = builder.Build();
 app.UsePersonalAgentPipeline();
 app.MapPersonalAgentEndpoints();

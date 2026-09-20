@@ -1,6 +1,6 @@
 # Jev implementation plan
 
-Status: **Proposed; research and planning only.** Researched 2026-09-18 against repository commit `b14490e`. No provider account, paid inference, private-data transfer, application changes, or deployment was performed. Architectural proposal: [decision 0026](../decisions/0026-structured-decision-provider.md). Acceptance tracking: [roadmap](roadmap.md#jev-structured-decisions--proposed-2026-09-18).
+Status: **First pre-chat routing slice implemented 2026-09-19; broader experiments remain proposed.** Research was completed 2026-09-18 against `b14490e`. The API Choice adapter, database settings, shadow/suggestion modes, narrow clock fast path and synthetic fixtures now exist. No live provider call, paid inference, private-data transfer or deployment was performed. See [implemented scope and verification](../runbooks/jev-routing.md), [decision 0026](../decisions/0026-structured-decision-provider.md) and [roadmap](roadmap.md#jev-structured-decisions--first-routing-slice-implemented-2026-09-19). Slice 0 still needs a key; slices 1/A1 are partial. The maintainer prioritized pre-chat routing and deferred recovery rehearsals on 2026-09-19.
 
 ## Recommendation
 

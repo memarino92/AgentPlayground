@@ -85,7 +85,8 @@ public sealed class TelemetryPrivacyProcessor : BaseProcessor<Activity>
         "messaging.system", "messaging.operation", "messaging.operation.name", "messaging.operation.type",
         "messaging.destination.name", "messaging.masstransit.message_type",
         "openinference.span.kind", "llm.model_name", "llm.system", "embedding.model_name", "tool.name",
-        "llm.token_count.prompt", "llm.token_count.completion", "llm.token_count.total", "error.type"
+        "llm.token_count.prompt", "llm.token_count.completion", "llm.token_count.total", "error.type",
+        "routing.mode", "routing.outcome", "decision.policy"
     ];
 
     public override void OnEnd(Activity Activity)

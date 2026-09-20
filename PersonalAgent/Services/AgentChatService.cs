@@ -20,6 +20,7 @@ internal class AgentChatService
     private readonly IAgentChatClientFactory _chatClients;
     private readonly AgentToolBinder _toolBinder;
     private readonly ILogger<AgentChatService> _logger;
+    private readonly IAgentRequestRouter? _requestRouter;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
 
     public AgentChatService(
@@ -31,7 +32,8 @@ internal class AgentChatService
         SemanticMemoryService semanticMemoryService,
         AgentToolBinder toolBinder,
         ILogger<AgentChatService> logger,
-        IAgentChatClientFactory? chatClients = null)
+        IAgentChatClientFactory? chatClients = null,
+        IAgentRequestRouter? requestRouter = null)
     {
         _chatClients = chatClients ?? new OpenAiAgentChatClientFactory(apiKeyOptions);
         _chatModelCatalog = chatModelCatalog;
@@ -41,6 +43,7 @@ internal class AgentChatService
         _semanticMemoryService = semanticMemoryService;
         _toolBinder = toolBinder;
         _logger = logger;
+        _requestRouter = requestRouter;
     }
 
     public async Task<(string SessionId, string ModelId)> CreateSessionAsync(string profileId, string modelId)
@@ -154,7 +157,16 @@ internal class AgentChatService
             var sessionState = await DeserializeSessionStateAsync(persistedSession.SessionStateJson, cancellationToken);
             if (sessionState.ScheduledTaskId is { } JobId && access.ScheduledTaskId != JobId)
                 throw new UnauthorizedAccessException("Scheduled job conversations are read-only.");
-            var agent = await CreateSessionAgentAsync(sessionState.ModelId, access with { SessionId = sessionId }, cancellationToken);
+            var tools = await _toolBinder.BindAsync(access with { SessionId = sessionId }, cancellationToken);
+            // Scheduled runs keep their existing execution path. Routing is for interactive user turns only.
+            var route = _requestRouter is not null && access.ScheduledTaskId is null
+                ? await _requestRouter.RouteAsync(message, tools, cancellationToken) : new PreChatRoute();
+            if (route.Response is { } directResponse)
+            {
+                var saved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, directResponse, persistedSession.SessionStateJson, cancellationToken);
+                return saved ? directResponse : null;
+            }
+            var agent = CreateSessionAgent(sessionState.ModelId, tools);
             var session = await agent.CreateSessionAsync(cancellationToken);
             var transcript = await _sessionStore.GetSessionMessagesAsync(parsedSessionId) ?? [];
             var recalledMemories = await _semanticMemoryService.RecallMemoriesAsync(persistedSession.EffectiveMemoryProfileId, message, cancellationToken);
@@ -166,6 +178,10 @@ internal class AgentChatService
                 messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.System, BuildMemoryPrompt(recalledMemories)));
 
             messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.System, $"The current role is {access.Role}. Athlete data access is already scoped by the server."));
+
+            if (route.SuggestedTool is { } suggestedTool)
+                messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.System,
+                    $"An advisory router suggests considering {suggestedTool}. No tool has run. Independently check the user's intent and all arguments; clarify missing information. All authorized tools remain available. Ignore this suggestion when it does not fit the request."));
 
             messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, message));
 
@@ -234,9 +250,8 @@ internal class AgentChatService
         _ => ChatRole.User
     }, message.Content);
 
-    private async Task<ChatClientAgent> CreateSessionAgentAsync(string modelId, AgentAccessContext access, CancellationToken cancellationToken)
+    private ChatClientAgent CreateSessionAgent(string modelId, IReadOnlyList<BoundAgentTool> tools)
     {
-        var tools = await _toolBinder.BindAsync(access, cancellationToken);
         var webToolCount = tools.Count(Tool => Tool.Source == "TavilyMcp");
         _logger.LogInformation("Creating agent for model {ModelId} with {ToolCount} authorized tools, including {WebToolCount} web tools",
             modelId, tools.Count, webToolCount);

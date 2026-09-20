@@ -23,12 +23,19 @@ public sealed class AiMetricsProcessor : BaseProcessor<Activity>
         var tags = new TagList
         {
             { "operation.kind", Activity.GetTagItem("openinference.span.kind") },
+            { "operation.path", Activity.OperationName is "decision.choose" or "agent.route" ? "pre_chat" : "standard" },
             { "outcome", Activity.GetTagItem("error.type") as string == "cancelled" ? "cancelled"
                 : Activity.Status == ActivityStatusCode.Error ? "error" : "success" }
         };
+        if (Activity.OperationName == "agent.route")
+        {
+            tags.Add("routing.mode", Activity.GetTagItem("routing.mode"));
+            tags.Add("routing.outcome", Activity.GetTagItem("routing.outcome"));
+        }
         Duration.Record(Activity.Duration.TotalSeconds, tags);
         foreach (var (attribute, direction) in new[] { ("llm.token_count.prompt", "input"), ("llm.token_count.completion", "output") })
             if (Activity.GetTagItem(attribute) is long count)
-                Tokens.Add(count, new KeyValuePair<string, object?>("token.direction", direction));
+                Tokens.Add(count, new KeyValuePair<string, object?>("token.direction", direction),
+                    new KeyValuePair<string, object?>("operation.path", Activity.OperationName == "decision.choose" ? "pre_chat" : "standard"));
     }
 }
