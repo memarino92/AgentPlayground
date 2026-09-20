@@ -22,6 +22,8 @@ internal sealed partial class JevRequestRouter(IJevRoutingSettings Settings, ITo
         var Started = Stopwatch.GetTimestamp();
         var CandidateCount = 0;
         string? SelectedTool = null;
+        double? Probability = null, Confidence = null;
+        string? Gate = null;
         using var Span = AiTelemetry.Start("agent.route", "CHAIN");
         Span?.SetTag("routing.mode", Snapshot.Settings.Mode.ToString());
         Span?.SetTag("decision.policy", JevToolRoutingCatalog.Policy);
@@ -38,10 +40,21 @@ internal sealed partial class JevRequestRouter(IJevRoutingSettings Settings, ITo
         if (Decision.Choice == "main_chat") return Finish(new());
         var Selected = Candidates.SingleOrDefault(Candidate => Candidate.Tool.Function.Name == Decision.Choice).Tool;
         if (Selected is null || !double.IsFinite(Decision.Probability) || !double.IsFinite(Decision.Confidence)
-            || Decision.Probability > 1 || Decision.Confidence > 1
-            || Decision.Probability < Snapshot.Settings.MinimumProbability || Decision.Confidence < Snapshot.Settings.MinimumConfidence)
+            || Decision.Probability is < 0 or > 1 || Decision.Confidence is < 0 or > 1)
+        {
+            Gate = "invalid_selection";
             return Finish(new(Reason: "abstained"));
+        }
         SelectedTool = Selected.Function.Name;
+        Probability = Decision.Probability;
+        Confidence = Decision.Confidence;
+        var LowProbability = Probability < Snapshot.Settings.MinimumProbability;
+        var LowConfidence = Confidence < Snapshot.Settings.MinimumConfidence;
+        if (LowProbability || LowConfidence)
+        {
+            Gate = LowProbability && LowConfidence ? "probability_and_confidence" : LowProbability ? "probability" : "confidence";
+            return Finish(new(Reason: "abstained"));
+        }
         Span?.SetTag("tool.name", Selected.Function.Name);
         if (Snapshot.Settings.Mode == JevRoutingMode.Shadow) return Finish(new(Reason: "shadow"));
         var Arguments = new AIFunctionArguments();
@@ -75,8 +88,9 @@ internal sealed partial class JevRequestRouter(IJevRoutingSettings Settings, ITo
         {
             Span?.SetTag("routing.outcome", Result.Reason);
             Logger?.LogInformation(new EventId(2604),
-                "Jev routing: mode={RoutingMode}; outcome={RoutingOutcome}; tool={SelectedTool}; candidates={CandidateCount}; elapsedMs={ElapsedMilliseconds}",
-                Snapshot.Settings.Mode, Result.Reason, SelectedTool, CandidateCount, Stopwatch.GetElapsedTime(Started).TotalMilliseconds);
+                "Jev routing: mode={RoutingMode}; outcome={RoutingOutcome}; tool={SelectedTool}; candidates={CandidateCount}; elapsedMs={ElapsedMilliseconds}; probability={Probability}; confidence={Confidence}; minimumProbability={MinimumProbability}; minimumConfidence={MinimumConfidence}; gate={Gate}",
+                Snapshot.Settings.Mode, Result.Reason, SelectedTool, CandidateCount, Stopwatch.GetElapsedTime(Started).TotalMilliseconds,
+                Probability, Confidence, Snapshot.Settings.MinimumProbability, Snapshot.Settings.MinimumConfidence, Gate);
             return Result;
         }
     }
