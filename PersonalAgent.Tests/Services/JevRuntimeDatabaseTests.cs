@@ -9,16 +9,21 @@ namespace PersonalAgent.Tests.Services;
 
 public sealed class JevRuntimeDatabaseTests(PostgresVectorFixture Fixture) : IClassFixture<PostgresVectorFixture>
 {
-    [Fact]
-    public async Task SeedAndReload_PreserveEditsEncryptKeysAndRetainValidSnapshot()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SeedAndReload_PreserveEditsEncryptKeysAndRetainValidSnapshot(bool HasTimestamp)
     {
         var Database = new IntegrationDatabase(Fixture.ConnectionString, Convert.ToBase64String(new byte[32]));
         await using var Connection = await Database.OpenAsync(default);
-        await using var Command = new NpgsqlCommand("""
+        await using var Command = new NpgsqlCommand($"""
             CREATE SCHEMA IF NOT EXISTS app;
-            CREATE TABLE IF NOT EXISTS app.configuration_settings (
+            DROP TABLE IF EXISTS app.configuration_settings;
+            CREATE TABLE app.configuration_settings (
                 scope text NOT NULL, key text NOT NULL, value text NOT NULL,
-                is_secret boolean NOT NULL, is_active boolean NOT NULL, PRIMARY KEY(scope,key));
+                is_secret boolean NOT NULL, is_active boolean NOT NULL,
+                {(HasTimestamp ? "updated_at timestamptz NOT NULL," : "")}
+                PRIMARY KEY(scope,key));
             """, Connection);
         await Command.ExecuteNonQueryAsync();
         using var Runtime = new JevRoutingRuntime(Database, NullLogger<JevRoutingRuntime>.Instance);
@@ -34,7 +39,17 @@ public sealed class JevRuntimeDatabaseTests(PostgresVectorFixture Fixture) : ICl
         await Store.SaveAsync(new([
             new(Key.Scope, Key.Key, Key.Version, "synthetic-key", true),
             new(Settings.Scope, Settings.Key, Settings.Version, "{\"mode\":\"Suggest\",\"allowUserContent\":true}", true)]), default);
+        if (HasTimestamp)
+        {
+            Command.CommandText = "UPDATE app.configuration_settings SET updated_at = '2026-01-01T00:00:00Z'";
+            await Command.ExecuteNonQueryAsync();
+        }
         await Runtime.InitializeAsync(default); // Insert-only seeding must not overwrite settings or keys.
+        if (HasTimestamp)
+        {
+            Command.CommandText = "SELECT count(*) FROM app.configuration_settings WHERE updated_at = '2026-01-01T00:00:00Z'";
+            ((long)(await Command.ExecuteScalarAsync())!).Should().Be(2);
+        }
         await Runtime.ReloadAsync(default);
         Runtime.Current.CanCall.Should().BeTrue();
         Runtime.Current.ApiKey.Should().Be("synthetic-key");

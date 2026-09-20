@@ -75,15 +75,20 @@ internal sealed class JevRoutingRuntime(IntegrationDatabase Database, ILogger<Je
     {
         await using var Connection = await Database.OpenAsync(Token);
         await using var Transaction = await Connection.BeginTransactionAsync(Token);
+        await using var TimestampCommand = new NpgsqlCommand("""
+            SELECT EXISTS(SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'app' AND table_name = 'configuration_settings' AND column_name = 'updated_at')
+            """, Connection, Transaction);
+        var HasTimestamp = (bool)(await TimestampCommand.ExecuteScalarAsync(Token))!;
         foreach (var (Key, Value, Secret) in new[]
         {
             ("Jev:Settings", JsonSerializer.Serialize(new JevRoutingSettings(), JsonOptions), false),
             ("Jev:ApiKey", "", true)
         })
         {
-            await using var Command = new NpgsqlCommand("""
-                INSERT INTO app.configuration_settings(scope, key, value, is_secret, is_active)
-                VALUES ('Api', @key, @value, @secret, true) ON CONFLICT DO NOTHING
+            await using var Command = new NpgsqlCommand($"""
+                INSERT INTO app.configuration_settings(scope, key, value, is_secret, is_active{(HasTimestamp ? ", updated_at" : "")})
+                VALUES ('Api', @key, @value, @secret, true{(HasTimestamp ? ", now()" : "")}) ON CONFLICT DO NOTHING
                 """, Connection, Transaction);
             Command.Parameters.AddWithValue("key", Key);
             Command.Parameters.AddWithValue("value", Secret
