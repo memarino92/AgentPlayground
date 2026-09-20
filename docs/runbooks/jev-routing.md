@@ -14,10 +14,34 @@ Selection covers all 12 currently registered tools when enabled for the actor: m
 | `Shadow` | Evaluate tool selection and record metadata; keep existing chat behavior. This is a bounded awaited call, so shadow adds latency. |
 | `Suggest` | Add a server-validated tool-name suggestion to chat instructions. Chat independently supplies arguments and retains all authorized tools. No tool has already run. |
 | `DirectReadOnly` | Execute the enrolled clock adapter for a complete standalone clock request; other selected tools are suggestions. |
+| `DirectTools` | Execute a selected tool directly when its explicit request grammar and bound schema match; otherwise suggest it to chat. Includes notifications and scheduling. |
 
-The first direct adapter accepts narrow phrases such as “What time is it?”, “What time is it now?” and “Tell me the current date please.” It supplies an explicit null timezone and returns the actual tool result. Timezone requests, compounds, context-dependent requests, quoted commands and other unsupported forms cannot enter this direct adapter, even if the classifier confidently selects the clock. They continue through chat. No production mutation is directly routed. Existing tools are neither hidden nor bypassed.
+The clock adapter accepts narrow phrases such as “What time is it?”, “What time is it now?” and “Tell me the current date please.” It supplies an explicit null timezone and returns the actual tool result. Timezone requests, compounds, context-dependent requests, quoted commands and other unsupported forms cannot enter this adapter, even if the classifier confidently selects the clock. They continue through chat. `DirectTools` additionally enables the explicit forms below; `DirectReadOnly` remains clock-only. Existing authorization wrappers remain in use.
 
-Direct calls use the bound `LoggingAIFunction`, including execution-time authorization and tool tracing. Their user/assistant turns are persisted in the ordinary session; they skip chat inference and semantic embedding work. Once invocation begins, an error propagates instead of re-entering chat and potentially repeating a call. The clock result is ephemeral read-only data; this is not a durable action journal or support for directly routing external mutations.
+Direct calls use the bound `LoggingAIFunction`, including execution-time authorization and tool tracing. Their user/assistant turns are persisted in the ordinary session; they skip chat inference and semantic embedding work. Once invocation begins, an error propagates instead of re-entering chat and potentially repeating a call. No inline execution retry is added. Scheduled notifications/tasks use their existing durable job store. Request-level deduplication across repeated chat submissions is not implemented; inspect job state before retrying an interrupted scheduling request. Recovery rehearsal remains deferred.
+
+## Direct tool requests
+
+Set only `mode` to `DirectTools` in the existing Jev settings JSON, keep the key and `allowUserContent: true`, and wait 15 seconds. This mode can perform side effects through currently authorized tools. Jev must select the corresponding tool above both thresholds; the compiler copies source values and checks the bound function schema before invocation. It does not ask a chat model to fill arguments. TypeSafe's [function-calling cookbook](https://docs.typesafe.ai/cookbooks/function_calling) describes closed-set selection; the app's free text comes from explicit request spans instead.
+
+| Tool | Supported direct example |
+| --- | --- |
+| Clock | `what time is it now?` |
+| Mobile push | `notify me: drink water` |
+| Reminder | `remind me in 5 minutes to drink water` |
+| Future agent task | `schedule a task in 1 hour: check the weather` |
+| Journal sync | `sync my work journal` |
+| Journal search | `search my work journal for database migrations` |
+| Coaching search | `search my coaching notes for yoke` |
+| Web search | `search the web for dotnet releases` |
+| Web research | `research: battery recycling` |
+| Page extraction | `extract https://example.com/docs` |
+| Site crawl | `crawl https://example.com` |
+| Site map | `map https://example.com` |
+
+These are supported command forms, not unrestricted natural-language argument extraction. Timing accepts positive integer seconds/minutes/hours/days up to one year; tomorrow/absolute times and timezone interpretation fall back to chat. Notification titles are `Notification` or `Reminder`; bodies/instructions are copied exactly. Scheduled tasks notify on completion. Search tools return their actual evidence, without an LLM-written summary. Coaching search uses recent ordering without filename/exercise filtering. URL tools accept one explicit HTTP(S) DNS URL without userinfo; Tavily applies its remaining defaults. The current [Tavily MCP source](https://github.com/tavily-ai/tavily-mcp/blob/main/src/index.ts) defines these parameter names; runtime schema mismatches fail closed to chat.
+
+Other phrasings, missing arguments, unsupported constraints and low confidence fall back to normal chat. Jev does not gain access to tools disabled for the current role. Direct results are tool output, including remote text/error content, rather than generated success claims.
 
 ## Configuration
 
@@ -71,9 +95,9 @@ Informational log event 2604 records `Jev routing: mode=...; outcome=...; tool=.
 
 ## Expanded catalog verification
 
-All 288 API tests passed after adding full current-catalog selection, metadata privacy checks, and synthetic chat-loop scheduling/web invocation tests. Live expanded-catalog accuracy is still unverified. Keep `DirectReadOnly` for clock plus suggestions, or `Suggest` for suggestions only; existing settings apply without edits after deployment.
+All 308 API tests passed after adding full current-catalog selection and direct argument adapters. Coverage includes a PostgreSQL job created through the direct reminder path, chat/embedding bypass for a direct notification, MCP argument/result handling, unsupported grammar/schema rejection, metadata privacy, and existing authorization/failure tests. Live expanded-catalog accuracy and device delivery are still unverified. Use `DirectTools` to enable the additional direct adapters; existing modes retain their behavior.
 
-For a user-requested reminder, look for `outcome=suggest; tool=schedule_notification`, followed by the actual tool invocation and a persisted job visible on the job dashboard. A routing suggestion alone does not prove scheduling or delivery. For web search, expect `tool=tavily_search` followed by its invocation and sourced response. Low-confidence decisions produce `outcome=abstained` and retain ordinary chat. For the clock, `outcome=direct` confirms execution by the pre-chat path. Tool permissions remain managed in the existing tool catalog.
+For a direct reminder, look for `outcome=direct; tool=schedule_notification`, its tool invocation, and a persisted job visible on the job dashboard, with no chat-model creation. Scheduling does not prove device delivery. Web search similarly records `outcome=direct; tool=tavily_search` and returns tool evidence. `suggest` means the arguments could not be bound directly or the mode only allows suggestions. Low-confidence decisions produce `abstained` and retain ordinary chat. Tool permissions remain managed in the existing tool catalog.
 
 Sentry uses the existing logger integration and its trace/span correlation. Event 2601 is a settings reload failure, 2602 is an HTTP 401/422 contract/credential rejection, and 2603 is an invalid decision response. Raw exception and provider response bodies are deliberately omitted. Expected capacity/uncertainty fallbacks are trace outcomes, not Sentry exceptions. Backend receipt and dashboards have not been verified for this slice.
 

@@ -28,6 +28,18 @@ public class AgentToolRegistryTests
         var Binder = Services.GetRequiredService<AgentToolBinder>();
         var Tools = await Binder.BindAsync(new("owner", AgentRoles.Owner, "subject"));
         Tools.Should().HaveCount(12);
+        var DirectMessages = new Dictionary<string, string>
+        {
+            [AgentToolKeys.PublishMobileNotification] = "notify me: drink water",
+            [AgentToolKeys.SyncWorkJournal] = "sync my work journal",
+            [AgentToolKeys.SearchWorkJournal] = "search my work journal for database migrations",
+            [AgentToolKeys.SearchCoachCheckins] = "search my coaching notes for yoke",
+            [AgentToolKeys.ScheduleNotification] = "remind me in 5 minutes to drink water",
+            [AgentToolKeys.ScheduleAgentTask] = "schedule a task in 1 hour: check the weather",
+            [AgentToolKeys.GetCurrentDateTime] = "what time is it?"
+        };
+        foreach (var Tool in Tools.Where(Tool => Tool.Source == "Local"))
+            JevToolArgumentCompiler.TryCompile(DirectMessages[Tool.Descriptor.Key], Tool, out _).Should().BeTrue(Tool.Function.Name);
         foreach (var Mode in new[] { JevRoutingMode.Shadow, JevRoutingMode.Suggest, JevRoutingMode.DirectReadOnly })
         foreach (var Tool in Tools)
         {

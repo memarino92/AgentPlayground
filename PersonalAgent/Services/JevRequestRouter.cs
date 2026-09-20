@@ -44,14 +44,21 @@ internal sealed partial class JevRequestRouter(IJevRoutingSettings Settings, ITo
         SelectedTool = Selected.Function.Name;
         Span?.SetTag("tool.name", Selected.Function.Name);
         if (Snapshot.Settings.Mode == JevRoutingMode.Shadow) return Finish(new(Reason: "shadow"));
-        if (Snapshot.Settings.Mode == JevRoutingMode.DirectReadOnly && TryCompile(Message, Selected, out var Arguments))
+        var Arguments = new AIFunctionArguments();
+        var CanExecute = Snapshot.Settings.Mode switch
+        {
+            JevRoutingMode.DirectReadOnly => TryCompile(Message, Selected, out Arguments),
+            JevRoutingMode.DirectTools => JevToolArgumentCompiler.TryCompile(Message, Selected, out Arguments),
+            _ => false
+        };
+        if (CanExecute)
         {
             // Invoke the already bound wrapper: current authorization, tool tracing and error capture remain authoritative.
             // Do not fall back after execution starts; that could cause the LLM to repeat an operation.
             try
             {
                 var Result = await Selected.Function.InvokeAsync(Arguments, Token);
-                return Finish(new(Response: Result?.ToString() ?? "The tool returned no result.", Reason: "direct"));
+                return Finish(new(Response: JevToolResultFormatter.Format(Result), Reason: "direct"));
             }
             catch (Exception Exception)
             {

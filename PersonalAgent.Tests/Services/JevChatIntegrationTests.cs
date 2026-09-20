@@ -15,6 +15,20 @@ namespace PersonalAgent.Tests.Services;
 
 public sealed class JevChatIntegrationTests
 {
+    [Fact]
+    public async Task DirectNotification_ExecutesAndPersistsWithoutChatOrEmbeddings()
+    {
+        using var Test = new Harness(JevRoutingMode.DirectTools, ExtraToolName: "publish_mobile_notification");
+        Test.DecisionName = "publish_mobile_notification";
+        var Answer = await Test.Chat.SendMessageAsync(Test.Id.ToString(), Test.Access, "notify me: drink water");
+        Answer.Should().Be("synthetic-tool-result");
+        Test.ExtraToolCalls.Should().Be(1);
+        Test.LastArgument.Should().Be("drink water");
+        Test.ChatFactory.VerifyNoOtherCalls();
+        Test.Embeddings.VerifyNoOtherCalls();
+        Test.Store.Verify(Store => Store.SaveInteractionAsync(Test.Id, "notify me: drink water", Answer!, Test.State, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Theory]
     [InlineData("schedule_notification", "Local")]
     [InlineData("tavily_search", "TavilyMcp")]
@@ -157,7 +171,14 @@ public sealed class JevChatIntegrationTests
                 new AgentToolRegistration(
                     new(ExtraSource == "Local" ? "Local:" + ExtraToolName : AgentToolKeys.Tavily(ExtraToolName),
                         ExtraToolName, ExtraToolName, "Test", "Test description", true, true, true, HasSideEffects: true),
-                    ExtraSource, (_, _) => AIFunctionFactory.Create((string payload) =>
+                    ExtraSource, (_, _) => ExtraToolName == "publish_mobile_notification"
+                    ? AIFunctionFactory.Create((string title, string body) =>
+                    {
+                        ExtraToolCalls++;
+                        LastArgument = body;
+                        return "synthetic-tool-result";
+                    }, ExtraToolName)
+                    : AIFunctionFactory.Create((string payload) =>
                     {
                         ExtraToolCalls++;
                         LastArgument = payload;
