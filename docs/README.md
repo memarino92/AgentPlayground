@@ -53,7 +53,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0024: .NET 11 RC1](decisions/0024-dotnet-11-rc1.md) | Accepted; server validated; Android build blocked by disk space | Pin SDK/framework packages and align CI/container builds |
 | [0025: Stereo coach attribution](decisions/0025-stereo-coach-attribution.md) | Accepted; implemented | Map fixed left/right recording channels to roles and present configurable participant names |
 | [0026: Structured decision provider](decisions/0026-structured-decision-provider.md) | First pre-chat routing slice accepted and implemented; broader experiments proposed | Jev tool suggestions and clock fast path; evaluate delegation, judging and reranking separately |
-| [0027: Full tool routing](decisions/0027-full-tool-routing.md) | Accepted; implemented | Jev selection across authorized local and Tavily tools, with routing outcome logs |
+| [0027: Full tool routing](decisions/0027-full-tool-routing.md) | Accepted; implemented | Jev selection and opt-in direct dispatch across local and Tavily tools, with routing outcome logs |
 
 ## Working agreement
 

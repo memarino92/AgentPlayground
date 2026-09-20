@@ -6,7 +6,7 @@ using Npgsql;
 
 namespace PersonalAgent.Services;
 
-internal enum JevRoutingMode { Off, Shadow, Suggest, DirectReadOnly }
+internal enum JevRoutingMode { Off, Shadow, Suggest, DirectReadOnly, DirectTools }
 
 internal sealed record JevRoutingSettings
 {

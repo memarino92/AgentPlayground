@@ -2,6 +2,8 @@ using AgentPlayground.Contracts.Messaging.Commands;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Npgsql;
 using PersonalAgent.Configuration;
@@ -13,6 +15,36 @@ namespace PersonalAgent.Tests.Services;
 
 public class ScheduledNotificationTests(PostgresVectorFixture Database) : IClassFixture<PostgresVectorFixture>
 {
+    [Fact]
+    public async Task JevDirectReminder_UsesBoundToolAndPersistsExactBodyTimeAndActor()
+    {
+        var (Store, _) = await new ScheduledJobTests(Database).SetupAsync();
+        var Auth = Authorization();
+        var Registry = new AgentToolRegistry(Mock.Of<ITavilyMcpToolProvider>(Provider => Provider.GetTools() == Array.Empty<AIFunction>()));
+        using var Services = new ServiceCollection().AddSingleton(new AgentEventService(Mock.Of<MassTransit.IBus>(),
+            new SchedulingService(NullLogger<SchedulingService>.Instance, Store, Auth), NullLogger<AgentEventService>.Instance)).BuildServiceProvider();
+        var Access = new AgentAccessContext("owner", "Owner", "owner") { SessionId = "direct-chat" };
+        var Registration = Registry.GetRegistrations().Single(Tool => Tool.Descriptor.Key == AgentToolKeys.ScheduleNotification);
+        var Function = new LoggingAIFunction(Registration.CreateFunction(Services, Access), NullLogger.Instance,
+            Registration.Source, Registration.Descriptor.Key, Access, new ToolAccessService(Permissions.Object, Registry));
+        var Bound = new BoundAgentTool(Registration.Descriptor, Registration.Source, Function);
+        var Decisions = new Mock<IToolDecisionClient>();
+        Decisions.Setup(Client => Client.ChooseAsync(It.IsAny<ToolChoiceRequest>(), It.IsAny<JevRoutingSnapshot>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ToolChoiceResult("schedule_notification", 1, 1));
+        var Settings = Mock.Of<IJevRoutingSettings>(Value => Value.Current == new JevRoutingSnapshot(
+            new JevRoutingSettings { Mode = JevRoutingMode.DirectTools, AllowUserContent = true }, "synthetic-key"));
+        var Before = DateTimeOffset.UtcNow;
+        var Result = await new JevRequestRouter(Settings, Decisions.Object)
+            .RouteAsync("remind me in 5 minutes to drink water", [Bound], default);
+        Result.Reason.Should().Be("direct");
+        var Job = (await Store.ListAsync("owner", null, null, null, default)).Should().ContainSingle().Subject;
+        Result.Response.Should().Contain(Job.TaskId.ToString());
+        Job.Notification!.Body.Should().Be("drink water");
+        Job.ActorId.Should().Be("owner");
+        Job.SourceSessionId.Should().Be("direct-chat");
+        Job.ExecuteAt.Should().BeOnOrAfter(Before.AddMinutes(5)).And.BeOnOrBefore(DateTimeOffset.UtcNow.AddMinutes(5));
+    }
+
     private readonly Mock<IScheduledActorPolicy> Policy = new();
     private readonly Mock<IToolAccessStore> Permissions = new();
 
