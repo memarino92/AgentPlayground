@@ -89,6 +89,27 @@ public sealed class JevRoutingTests
         Result.Reason.Should().Be("abstained");
     }
 
+    [Theory]
+    [InlineData(0.9, 0.9, "probability")]
+    [InlineData(0.99, 0.7, "confidence")]
+    [InlineData(0.9, 0.7, "probability_and_confidence")]
+    public async Task AbstentionDiagnostics_IdentifySelectedToolScoresAndFailedGate(double Probability, double Confidence, string Gate)
+    {
+        var Logger = new Moq.Mock<ILogger<JevRequestRouter>>();
+        var Result = await new JevRequestRouter(new Settings(Snapshot()), new Decision(new(Clock, Probability, Confidence)), Logger.Object)
+            .RouteAsync("private-message-marker", [Tool(() => throw new Exception("Must not run"))], default);
+        Result.Reason.Should().Be("abstained");
+        var Log = Logger.Invocations.Single(Call => Call.Method.Name == "Log");
+        var Fields = ((IEnumerable<KeyValuePair<string, object?>>)Log.Arguments[2]).ToDictionary();
+        Fields["SelectedTool"].Should().Be(Clock);
+        Fields["Probability"].Should().Be(Probability);
+        Fields["Confidence"].Should().Be(Confidence);
+        Fields["MinimumProbability"].Should().Be(0.95);
+        Fields["MinimumConfidence"].Should().Be(0.8);
+        Fields["Gate"].Should().Be(Gate);
+        Log.Arguments[2].ToString().Should().NotContain("private-message-marker").And.NotContain(Secret);
+    }
+
     [Fact]
     public async Task MissingKeyOrContentConsent_DoesNotCallProvider()
     {
