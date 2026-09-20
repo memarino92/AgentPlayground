@@ -12,6 +12,8 @@ internal static class SyntheticServiceExtensions
         Services.AddSingleton<IAgentEmbeddingService, SyntheticEmbeddingService>();
         Services.AddSingleton<ITranscriptionProvider, SyntheticTranscriptionProvider>();
         Services.AddSingleton<IWorkJournalParsingService, SyntheticJournalParsingService>();
+        Services.AddSingleton<IToolDecisionClient, SyntheticToolDecisionClient>();
+        Services.AddSingleton<IJevRoutingSettings, SyntheticRoutingSettings>();
         Services.PostConfigure<ChatModelCatalogOptions>(Options =>
         {
             Options.Models.Clear();

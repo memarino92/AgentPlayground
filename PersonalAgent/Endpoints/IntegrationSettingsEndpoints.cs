@@ -22,6 +22,7 @@ internal static class IntegrationSettingsEndpoints
         settings.MapPut("", (SaveDatabaseSettingsRequest Request, [Microsoft.AspNetCore.Mvc.FromServices] DatabaseSettingsStore Store, CancellationToken CancellationToken) =>
             ExecuteAsync(async () =>
             {
+                JevRoutingRuntime.ValidateEdits(Request);
                 await Store.SaveAsync(Request, CancellationToken);
                 return TypedResults.NoContent();
             }))
