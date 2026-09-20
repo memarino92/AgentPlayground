@@ -65,6 +65,7 @@ public class SyncWorkJournalConsumer(
         
         int entriesSynced = 0;
         int filesFailed = 0;
+        int filesSkippedUnchanged = 0;
         int entriesSkippedUnchanged = 0;
         int entriesParsed = 0;
         var connectionString = sqlOptions.Value.ConnectionString;
@@ -87,6 +88,14 @@ public class SyncWorkJournalConsumer(
                 embedding vector(1536)
             );
             CREATE INDEX IF NOT EXISTS ix_work_journal_entries_embedding ON work_journal_entries USING hnsw (embedding vector_cosine_ops);
+            CREATE TABLE IF NOT EXISTS work_journal_file_sync (
+                repo_owner text NOT NULL,
+                repo_name text NOT NULL,
+                branch text NOT NULL,
+                file_path text NOT NULL,
+                blob_sha text NOT NULL,
+                PRIMARY KEY (repo_owner, repo_name, branch, file_path)
+            );
         ", connection))
         {
             await cmd.ExecuteNonQueryAsync(context.CancellationToken);
@@ -108,8 +117,24 @@ public class SyncWorkJournalConsumer(
 
             try
             {
+                var path = element.TryGetProperty("path", out var pathElement) ? pathElement.GetString() : null;
+                var sha = element.TryGetProperty("sha", out var shaElement) ? shaElement.GetString() : null;
+                var canCheckpoint = !string.IsNullOrWhiteSpace(path) && !string.IsNullOrWhiteSpace(sha);
+                if (canCheckpoint && await GetSyncedShaAsync(connection, path!, context.CancellationToken) == sha)
+                {
+                    filesSkippedUnchanged++;
+                    logger.LogInformation("Skipping unchanged journal file {FileName}", name);
+                    continue;
+                }
+
                 logger.LogInformation("Downloading journal file {FileName}", name);
-                var fileContent = await client.GetStringAsync(downloadUrl, context.CancellationToken);
+                using var fileResponse = await client.GetAsync(downloadUrl, context.CancellationToken);
+                fileResponse.EnsureSuccessStatusCode();
+                var fileBytes = await fileResponse.Content.ReadAsByteArrayAsync(context.CancellationToken);
+                // The branch may advance between listing and download. Never checkpoint different bytes.
+                if (canCheckpoint && !string.Equals(GetBlobSha(fileBytes), sha, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Journal file {name} changed during sync; retry on the next sync.");
+                var fileContent = await fileResponse.Content.ReadAsStringAsync(context.CancellationToken);
 
                 logger.LogInformation("Requesting journal parsing for {FileName}", name);
                 var parseResponse = await RequestWithTimeoutAsync(
@@ -123,6 +148,7 @@ public class SyncWorkJournalConsumer(
                 entriesParsed += entries.Count;
                 logger.LogInformation("Parsed {EntryCount} entries from {FileName}", entries.Count, name);
 
+                await using var transaction = await connection.BeginTransactionAsync(context.CancellationToken);
                 var changedEntries = new List<(Guid Id, DateTime Date, string Content)>();
                 foreach (var entry in entries)
                 {
@@ -144,6 +170,8 @@ public class SyncWorkJournalConsumer(
                 if (changedEntries.Count == 0)
                 {
                     logger.LogInformation("No changed entries found in {FileName}; skipping embedding generation", name);
+                    if (canCheckpoint) await SaveSyncedShaAsync(connection, path!, sha!, context.CancellationToken);
+                    await transaction.CommitAsync(context.CancellationToken);
                     continue;
                 }
 
@@ -163,8 +191,11 @@ public class SyncWorkJournalConsumer(
                 {
                     var changedEntry = changedEntries[index];
                     await UpsertEntryAsync(connection, changedEntry.Id, name, changedEntry.Date, changedEntry.Content, embeddings[index], context.CancellationToken);
-                    entriesSynced++;
                 }
+
+                if (canCheckpoint) await SaveSyncedShaAsync(connection, path!, sha!, context.CancellationToken);
+                await transaction.CommitAsync(context.CancellationToken);
+                entriesSynced += changedEntries.Count;
 
                 logger.LogInformation(
                     "Finished processing {FileName}. Parsed: {ParsedCount}, Changed: {ChangedCount}, Upserted: {UpsertedCount}",
@@ -188,6 +219,10 @@ public class SyncWorkJournalConsumer(
                 filesFailed++;
                 logger.LogWarning(ex, "Model request hit local timeout for file {FileName}; continuing with remaining files", name);
             }
+            catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 filesFailed++;
@@ -197,8 +232,9 @@ public class SyncWorkJournalConsumer(
 
         stopwatch.Stop();
         logger.LogInformation(
-            "Finished work journal sync. Files: {FileCount}, FailedFiles: {FailedFileCount}, ParsedEntries: {ParsedEntries}, SkippedUnchanged: {SkippedUnchanged}, SyncedEntries: {SyncedEntries}, StartedAtUtc: {StartedAtUtc}, DurationMs: {DurationMs}",
+            "Finished work journal sync. Files: {FileCount}, SkippedUnchangedFiles: {SkippedUnchangedFiles}, FailedFiles: {FailedFileCount}, ParsedEntries: {ParsedEntries}, SkippedUnchanged: {SkippedUnchanged}, SyncedEntries: {SyncedEntries}, StartedAtUtc: {StartedAtUtc}, DurationMs: {DurationMs}",
             markdownFiles.Count,
+            filesSkippedUnchanged,
             filesFailed,
             entriesParsed,
             entriesSkippedUnchanged,
@@ -207,6 +243,44 @@ public class SyncWorkJournalConsumer(
             stopwatch.ElapsedMilliseconds);
         await context.Publish(new WorkJournalSyncedEvent(entriesSynced, DateTime.UtcNow), context.CancellationToken);
         logger.LogInformation("Published WorkJournalSyncedEvent with {EntriesSynced} synced entries", entriesSynced);
+    }
+
+    private NpgsqlCommand CreateCheckpointCommand(NpgsqlConnection Connection, string Sql, string Path)
+    {
+        var Command = new NpgsqlCommand(Sql, Connection);
+        Command.Parameters.AddWithValue("owner", _options.RepoOwner.ToLowerInvariant());
+        Command.Parameters.AddWithValue("repo", _options.RepoName.ToLowerInvariant());
+        Command.Parameters.AddWithValue("branch", _options.Branch);
+        Command.Parameters.AddWithValue("path", Path);
+        return Command;
+    }
+
+    private async Task<string?> GetSyncedShaAsync(NpgsqlConnection Connection, string Path, CancellationToken CancellationToken)
+    {
+        await using var Command = CreateCheckpointCommand(Connection, """
+            SELECT blob_sha FROM work_journal_file_sync
+            WHERE repo_owner = @owner AND repo_name = @repo AND branch = @branch AND file_path = @path;
+            """, Path);
+        return (string?)await Command.ExecuteScalarAsync(CancellationToken);
+    }
+
+    private async Task SaveSyncedShaAsync(NpgsqlConnection Connection, string Path, string Sha, CancellationToken CancellationToken)
+    {
+        await using var Command = CreateCheckpointCommand(Connection, """
+            INSERT INTO work_journal_file_sync (repo_owner, repo_name, branch, file_path, blob_sha)
+            VALUES (@owner, @repo, @branch, @path, @sha)
+            ON CONFLICT (repo_owner, repo_name, branch, file_path) DO UPDATE SET blob_sha = EXCLUDED.blob_sha;
+            """, Path);
+        Command.Parameters.AddWithValue("sha", Sha);
+        await Command.ExecuteNonQueryAsync(CancellationToken);
+    }
+
+    internal static string GetBlobSha(byte[] Content)
+    {
+        using var Hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA1);
+        Hash.AppendData(System.Text.Encoding.ASCII.GetBytes($"blob {Content.Length}\0"));
+        Hash.AppendData(Content);
+        return Convert.ToHexString(Hash.GetHashAndReset()).ToLowerInvariant();
     }
 
     private async Task<string?> GetExistingContentAsync(NpgsqlConnection connection, Guid id, CancellationToken cancellationToken)

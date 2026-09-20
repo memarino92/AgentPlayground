@@ -15,6 +15,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
 - [Navigation and playback](runbooks/navigation.md): query state, draft chats, saved models and shared recording views.
 - [Scheduled jobs](runbooks/scheduled-jobs.md): authorization, dashboard, cancellation and conservative recovery.
+- [Journal sync](runbooks/journal-sync.md): Git blob checkpoints, retries, and reprocessing unchanged files.
 - [Coaching retrieval evaluation](runbooks/coach-retrieval-evaluation.md): synthetic regression baseline and live-model evaluation limits.
 - [Observability](runbooks/observability.md): service tracing, OpenInference, Sentry correlation and OTLP setup.
 - [Integration settings](runbooks/integration-settings.md): in-app Sentry configuration, encrypted revisions, and runtime reload.
@@ -54,6 +55,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0025: Stereo coach attribution](decisions/0025-stereo-coach-attribution.md) | Accepted; implemented | Map fixed left/right recording channels to roles and present configurable participant names |
 | [0026: Structured decision provider](decisions/0026-structured-decision-provider.md) | First pre-chat routing slice accepted and implemented; broader experiments proposed | Jev tool suggestions and clock fast path; evaluate delegation, judging and reranking separately |
 | [0027: Full tool routing](decisions/0027-full-tool-routing.md) | Accepted; implemented | Jev selection and opt-in direct dispatch across local and Tavily tools, with routing outcome logs |
+| [0028: Journal file checkpoints](decisions/0028-journal-file-checkpoints.md) | Accepted; implemented | Skip downloads and model parsing for unchanged Git blobs; checkpoint successful files atomically with entry writes |
 
 ## Working agreement
 
