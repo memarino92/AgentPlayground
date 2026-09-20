@@ -38,6 +38,6 @@ dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj
 dotnet test PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj
 ```
 
-## Luna tool compatibility
+## Luna and Terra tool compatibility
 
-A local live evaluation observed HTTP 400 from Luna when function tools were used on Chat Completions with its default reasoning. The provider requires reasoning_effort=none for that combination, or use of Responses. OpenAiAgentChatClientFactory now applies none to Luna requests containing tools, without changing other models or mutating caller options. This is endpoint compatibility, not a general recommendation to disable reasoning across models. See the [coaching evaluation results](coach-retrieval-evaluation.md#formal-low-cost-model-comparison-2026-09-12).
+A local live evaluation observed HTTP 400 from Luna when function tools were used on Chat Completions with its default reasoning. Production Terra requests reproduced the same provider restriction on 2026-09-19. The provider requires reasoning_effort=none for that combination, or use of Responses. OpenAiAgentChatClientFactory applies none to Luna and Terra requests containing tools, without changing other models, requests without tools, or caller options. This retains Chat Completions compatibility; using reasoning with tools requires a separate Responses migration. See the [coaching evaluation results](coach-retrieval-evaluation.md#formal-low-cost-model-comparison-2026-09-12).
