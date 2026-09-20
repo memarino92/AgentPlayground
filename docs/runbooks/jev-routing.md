@@ -1,10 +1,12 @@
 # Jev pre-chat routing
 
-Implemented 2026-09-19: an API-owned Choice adapter and pre-chat routing seam. No live TypeSafe request has been made. HTTP fixtures follow the [TypeSafe API reference](https://docs.typesafe.ai/api), checked 2026-09-19; they are documentation-based fixtures, not captured provider responses. Accuracy, account access, model availability, latency and cost remain unmeasured.
+Implemented 2026-09-19: an API-owned Choice adapter and pre-chat routing seam. Maintainer-driven production clock tests confirmed successful live TypeSafe requests and direct clock execution without creating a chat model. Observed provider HTTP durations were roughly 275–398 ms; these individual observations are not latency benchmarks or evidence of general routing accuracy. HTTP fixtures follow the [TypeSafe API reference](https://docs.typesafe.ai/api), checked 2026-09-19; they are documentation-based fixtures, not captured provider responses. Broader accuracy and cost remain unmeasured.
 
 ## Current behavior
 
-After session ownership validation, the API binds the current authorized tools and routes the latest user message before creating the chat client or retrieving semantic memory. Scheduled tasks retain their existing path. Only static local tool names/descriptions and the current message go to TypeSafe; no stored transcript, remembered content, source records, subject identifiers or MCP descriptions are included. A current message can itself contain private information.
+After session ownership validation, the API binds the current authorized tools and routes the latest user message before creating the chat client or retrieving semantic memory. Scheduled tasks retain their existing path. Only local catalog descriptions, application-owned descriptions for known Tavily tools, their function names and the current message go to TypeSafe; no stored transcript, remembered content, source records, subject identifiers or remote MCP descriptions/schemas are included. A current message can itself contain private information.
+
+Selection covers all 12 currently registered tools when enabled for the actor: mobile push, work-journal sync/search, coaching search, notification scheduling, agent-task scheduling, clock, and Tavily search/extract/crawl/map/research. Unknown remote tools remain available to chat but require reviewed routing metadata in `JevToolRoutingCatalog` before inclusion in Jev choices. Infrastructure integrations such as Sentry, telemetry and transcription do not expose new administrative chat tools.
 
 | Mode | Behavior |
 | --- | --- |
@@ -63,7 +65,15 @@ HTTP failures establish a bounded cooldown (honoring delta `Retry-After` within 
 
 The existing `agent.run` span contains `agent.route` (`CHAIN`) and `decision.choose` (`LLM`), followed by either the existing `tool.invoke` (`TOOL`) or ordinary chat/retrieval spans. OpenInference records the configured model and provider-reported usage when available. Absent usage stays unknown.
 
-The trace privacy allowlist retains `routing.mode`, `routing.outcome`, and `decision.policy=pre-chat-v1`, alongside existing model, error and token fields. No message, arguments, provider response, key or subject identifier is attached. Span duration provides routing/provider latency. Existing `agent.operation.duration` and `agent.token.usage` metrics distinguish `operation.path=pre_chat` from `standard`; routing duration also carries mode/outcome. These metrics are derived from sampled spans and are not billing records.
+The trace privacy allowlist retains `routing.mode`, `routing.outcome`, and `decision.policy=pre-chat-v2`, alongside existing tool, model, error and token fields. No message, arguments, provider response, key or subject identifier is attached. Span duration provides routing/provider latency. Existing `agent.operation.duration` and `agent.token.usage` metrics distinguish `operation.path=pre_chat` from `standard`; routing duration also carries mode/outcome. These metrics are derived from sampled spans and are not billing records.
+
+Informational log event 2604 records `Jev routing: mode=...; outcome=...; tool=...; candidates=...; elapsedMs=...` for completed routing decisions, including disabled/fallback outcomes. The tool is populated only after selection passes validation and thresholds. No user text, arguments, credentials or remote descriptions are logged. This provides Railway diagnostics without requiring a sampled trace; informational events do not create Sentry issues.
+
+## Expanded catalog verification
+
+All 288 API tests passed after adding full current-catalog selection, metadata privacy checks, and synthetic chat-loop scheduling/web invocation tests. Live expanded-catalog accuracy is still unverified. Keep `DirectReadOnly` for clock plus suggestions, or `Suggest` for suggestions only; existing settings apply without edits after deployment.
+
+For a user-requested reminder, look for `outcome=suggest; tool=schedule_notification`, followed by the actual tool invocation and a persisted job visible on the job dashboard. A routing suggestion alone does not prove scheduling or delivery. For web search, expect `tool=tavily_search` followed by its invocation and sourced response. Low-confidence decisions produce `outcome=abstained` and retain ordinary chat. For the clock, `outcome=direct` confirms execution by the pre-chat path. Tool permissions remain managed in the existing tool catalog.
 
 Sentry uses the existing logger integration and its trace/span correlation. Event 2601 is a settings reload failure, 2602 is an HTTP 401/422 contract/credential rejection, and 2603 is an invalid decision response. Raw exception and provider response bodies are deliberately omitted. Expected capacity/uncertainty fallbacks are trace outcomes, not Sentry exceptions. Backend receipt and dashboards have not been verified for this slice.
 
