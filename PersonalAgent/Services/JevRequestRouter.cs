@@ -74,6 +74,6 @@ internal sealed partial class JevRequestRouter(IJevRoutingSettings Settings, ITo
         return Result;
     }
 
-    [GeneratedRegex(@"\A(?:what(?:'s| is) (?:the )?(?:current )?(?:time|date|date and time)|what time is it|tell me (?:the )?(?:current )?(?:time|date|date and time))(?: please)?[?.!]?\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\A(?:what(?:'s| is) (?:the )?(?:current )?(?:time|date|date and time)|what time is it(?: now)?|tell me (?:the )?(?:current )?(?:time|date|date and time))(?: please)?[?.!]?\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ClockRequest();
 }
