@@ -16,6 +16,40 @@ namespace PersonalAgent.Tests.Services;
 public sealed class JevChatIntegrationTests
 {
     [Theory]
+    [InlineData("schedule_notification", "Local")]
+    [InlineData("tavily_search", "TavilyMcp")]
+    public async Task SuggestedTool_IsInvokedByChatWithArguments_AndItsResultIsPersisted(string ToolName, string Source)
+    {
+        using var Test = new Harness(JevRoutingMode.DirectReadOnly, MemoryEnabled: false, ExtraToolName: ToolName, ExtraSource: Source);
+        Test.DecisionName = ToolName;
+        var Calls = 0;
+        var Client = new Mock<IChatClient>();
+        Client.Setup(Value => Value.GetResponseAsync(It.IsAny<IEnumerable<ChatMessage>>(), It.IsAny<ChatOptions?>(), It.IsAny<CancellationToken>()))
+            .Returns((IEnumerable<ChatMessage> Messages, ChatOptions? Options, CancellationToken _) =>
+            {
+                Calls++;
+                Options!.Tools!.Select(Tool => Tool.Name).Should().BeEquivalentTo("get_current_date_time", ToolName);
+                if (Calls == 1)
+                {
+                    Test.ExtraToolCalls.Should().Be(0);
+                    Messages.Should().Contain(Message => Message.Role == ChatRole.System && Message.Text.Contains($"router suggests considering {ToolName}"));
+                    return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+                        [new FunctionCallContent("synthetic-call", ToolName, new Dictionary<string, object?> { ["payload"] = "validated-by-handler" })])));
+                }
+                var Result = Messages.SelectMany(Message => Message.Contents).OfType<FunctionResultContent>().Single();
+                Result.Result!.ToString().Should().Contain("synthetic-tool-result");
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Completed using the tool result")));
+            });
+        Test.ChatFactory.Setup(Factory => Factory.Create("test-model")).Returns(Client.Object);
+        var Answer = await Test.Chat.SendMessageAsync(Test.Id.ToString(), Test.Access, "Synthetic task request");
+        Answer.Should().Be("Completed using the tool result");
+        Calls.Should().Be(2);
+        Test.ExtraToolCalls.Should().Be(1);
+        Test.LastArgument.Should().Be("validated-by-handler");
+        Test.Store.Verify(Store => Store.SaveInteractionAsync(Test.Id, "Synthetic task request", Answer!, Test.State, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task DirectRoute_SavesInteraction_WithoutChatOrEmbeddings(bool SaveSucceeds)
@@ -105,18 +139,30 @@ public sealed class JevChatIntegrationTests
         public Dictionary<string, bool> Permissions { get; } = [];
         public int ToolCalls { get; private set; }
         public int DecisionCalls { get; private set; }
+        public string DecisionName { get; set; } = "get_current_date_time";
+        public int ExtraToolCalls { get; private set; }
+        public string? LastArgument { get; private set; }
         public Action? OnDecision { get; set; }
         public AgentChatService Chat { get; }
         public JevRoutingSnapshot Current { get; }
         private readonly ServiceProvider _services;
 
-        public Harness(JevRoutingMode Mode, bool SaveSucceeds = true, bool MemoryEnabled = true)
+        public Harness(JevRoutingMode Mode, bool SaveSucceeds = true, bool MemoryEnabled = true,
+            string ExtraToolName = "other_tool", string ExtraSource = "Local")
         {
             Current = new(new() { Mode = Mode, AllowUserContent = true }, "synthetic-key");
             var Registry = new Mock<IAgentToolRegistry>();
             Registry.Setup(Registry => Registry.GetRegistrations()).Returns([
                 Registration("get_current_date_time", () => { ToolCalls++; return "Synthetic clock result"; }),
-                Registration("other_tool", () => "other")]);
+                new AgentToolRegistration(
+                    new(ExtraSource == "Local" ? "Local:" + ExtraToolName : AgentToolKeys.Tavily(ExtraToolName),
+                        ExtraToolName, ExtraToolName, "Test", "Test description", true, true, true, HasSideEffects: true),
+                    ExtraSource, (_, _) => AIFunctionFactory.Create((string payload) =>
+                    {
+                        ExtraToolCalls++;
+                        LastArgument = payload;
+                        return "synthetic-tool-result";
+                    }, ExtraToolName))]);
             var AccessStore = new Mock<IToolAccessStore>();
             AccessStore.Setup(Store => Store.GetRolePermissionsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Permissions);
             _services = new ServiceCollection().AddLogging().AddSingleton(Registry.Object).AddSingleton(AccessStore.Object)
@@ -135,7 +181,7 @@ public sealed class JevChatIntegrationTests
         {
             DecisionCalls++;
             OnDecision?.Invoke();
-            return Task.FromResult(new ToolChoiceResult("get_current_date_time", 1, 1));
+            return Task.FromResult(new ToolChoiceResult(DecisionName, 1, 1));
         }
         public void Dispose() => _services.Dispose();
         private static AgentToolRegistration Registration(string Name, Func<string> Handler) => new(

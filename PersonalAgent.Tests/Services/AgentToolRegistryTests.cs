@@ -16,6 +16,46 @@ namespace PersonalAgent.Tests.Services;
 
 public class AgentToolRegistryTests
 {
+    private static readonly string[] WebTools = ["tavily_search", "tavily_extract", "tavily_crawl", "tavily_map", "tavily_research"];
+
+    [Fact]
+    public async Task Jev_CoversEveryCurrentTool_UsingOnlyAuthorizedApplicationMetadata()
+    {
+        var Provider = new MutableTavilyProvider { Tools = WebTools.Select(Name => (AIFunction)new StubFunction(Name)).ToArray() };
+        var Store = new MutableStore();
+        foreach (var Name in WebTools) Store.Permissions[AgentToolKeys.Tavily(Name)] = true;
+        using var Services = BuildServices(Provider, Store);
+        var Binder = Services.GetRequiredService<AgentToolBinder>();
+        var Tools = await Binder.BindAsync(new("owner", AgentRoles.Owner, "subject"));
+        Tools.Should().HaveCount(12);
+        foreach (var Mode in new[] { JevRoutingMode.Shadow, JevRoutingMode.Suggest, JevRoutingMode.DirectReadOnly })
+        foreach (var Tool in Tools)
+        {
+            var Decisions = new Mock<IToolDecisionClient>();
+            Decisions.Setup(Client => Client.ChooseAsync(It.IsAny<ToolChoiceRequest>(), It.IsAny<JevRoutingSnapshot>(), It.IsAny<CancellationToken>()))
+                .Returns((ToolChoiceRequest Request, JevRoutingSnapshot _, CancellationToken _) =>
+                {
+                    Request.Choices.Keys.Should().BeEquivalentTo(Tools.Select(Item => Item.Function.Name).Append("main_chat"));
+                    string.Join(" ", Request.Choices.Values).Should().NotContain("private-remote-description");
+                    return Task.FromResult(new ToolChoiceResult(Tool.Function.Name, 1, 1));
+                });
+            var Settings = Mock.Of<IJevRoutingSettings>(Value => Value.Current == new JevRoutingSnapshot(
+                new JevRoutingSettings { Mode = Mode, AllowUserContent = true }, "synthetic-key"));
+            var Result = await new JevRequestRouter(Settings, Decisions.Object).RouteAsync("synthetic request", Tools, default);
+            Result.Reason.Should().Be(Mode == JevRoutingMode.Shadow ? "shadow" : "suggest");
+            Result.SuggestedTool.Should().Be(Mode == JevRoutingMode.Shadow ? null : Tool.Function.Name);
+            Result.Response.Should().BeNull();
+        }
+        Provider.Tools.Cast<StubFunction>().Should().OnlyContain(Tool => Tool.Invocations == 0);
+
+        Store.Permissions[AgentToolKeys.ScheduleNotification] = false;
+        Store.Permissions[AgentToolKeys.Tavily("tavily_search")] = false;
+        var Restricted = await Binder.BindAsync(new("owner", AgentRoles.Owner, "subject"));
+        Restricted.Select(Tool => Tool.Descriptor.Key).Should().NotContain([
+            AgentToolKeys.ScheduleNotification, AgentToolKeys.Tavily("tavily_search")]);
+        Restricted.Should().OnlyContain(Tool => JevToolRoutingCatalog.Description(Tool) != null);
+    }
+
     [Fact]
     public async Task CatalogAndBoundFunctions_ShareIdentityDescriptionAndDefaults()
     {
@@ -172,6 +212,7 @@ public class AgentToolRegistryTests
     {
         public int Invocations { get; private set; }
         public override string Name => FunctionName;
+        public override string Description => "private-remote-description";
         public override JsonElement JsonSchema => JsonSerializer.SerializeToElement(new { type = "object", properties = new { } });
         protected override ValueTask<object?> InvokeCoreAsync(AIFunctionArguments Arguments, CancellationToken CancellationToken)
         {

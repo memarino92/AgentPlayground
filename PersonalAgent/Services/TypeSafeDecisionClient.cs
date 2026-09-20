@@ -29,7 +29,7 @@ internal sealed class TypeSafeDecisionClient(HttpClient Client, ILogger<TypeSafe
         if (!await _capacity.WaitAsync(0, Token)) return new(null, Reason: "capacity");
         using var Span = AiTelemetry.Start("decision.choose", "LLM", Snapshot.Settings.Model);
         Span?.SetTag("llm.system", "typesafe");
-        Span?.SetTag("decision.policy", "pre-chat-v1");
+        Span?.SetTag("decision.policy", JevToolRoutingCatalog.Policy);
         using var Deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
         Deadline.CancelAfter(Snapshot.Settings.TimeoutMilliseconds);
         try

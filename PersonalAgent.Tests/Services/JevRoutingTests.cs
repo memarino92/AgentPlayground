@@ -101,13 +101,33 @@ public sealed class JevRoutingTests
     }
 
     [Fact]
-    public async Task CandidatesExcludeMcpAndUnknownToolCannotBeInvoked()
+    public async Task CandidatesExcludeUnreviewedMcpAndUnknownToolCannotBeInvoked()
     {
         var DecisionValue = new Decision(new("forged", 1, 1));
         var Result = await new JevRequestRouter(new Settings(Snapshot()), DecisionValue).RouteAsync("time",
             [Tool(() => "time"), Tool(() => throw new Exception(), "private_remote") with { Source = "TavilyMcp" }], default);
         DecisionValue.Request!.Choices.Keys.Should().BeEquivalentTo(Clock, "main_chat");
         Result.Reason.Should().Be("abstained");
+    }
+
+    [Fact]
+    public async Task ReviewedMcp_UsesStaticDescription_AndUnavailableToolsAreExcluded()
+    {
+        var Remote = Tool(() => throw new Exception("Must not execute"), "tavily_search") with { Source = "TavilyMcp" };
+        Remote = Remote with { Descriptor = Remote.Descriptor with { Key = AgentToolKeys.Tavily("tavily_search"), Description = "private-remote-description" } };
+        var Unavailable = Tool(() => throw new Exception(), "unavailable");
+        Unavailable = Unavailable with { Descriptor = Unavailable.Descriptor with { IsAvailable = false } };
+        var Decisions = new Decision(new("tavily_search", 1, 1));
+        var Logger = new Moq.Mock<ILogger<JevRequestRouter>>();
+        var Result = await new JevRequestRouter(new Settings(Snapshot()), Decisions, Logger.Object)
+            .RouteAsync("private-message", [Remote, Unavailable], default);
+        Result.SuggestedTool.Should().Be("tavily_search");
+        Decisions.Request!.Choices.Keys.Should().BeEquivalentTo("tavily_search", "main_chat");
+        Decisions.Request.Choices["tavily_search"].Should().Contain("public web").And.NotContain("private-remote-description");
+        var Log = Logger.Invocations.Single(Call => Call.Method.Name == "Log");
+        ((EventId)Log.Arguments[1]).Id.Should().Be(2604);
+        Log.Arguments[2].ToString().Should().Contain("outcome=suggest").And.Contain("tool=tavily_search")
+            .And.NotContain("private-message").And.NotContain("private-remote-description").And.NotContain(Secret);
     }
 
     [Fact]
@@ -145,7 +165,7 @@ public sealed class JevRoutingTests
         Span.GetTagItem("llm.token_count.prompt").Should().Be(12L);
         Span.SetTag("input.value", "private-marker");
         new TelemetryPrivacyProcessor().OnEnd(Span);
-        Span.GetTagItem("decision.policy").Should().Be("pre-chat-v1");
+        Span.GetTagItem("decision.policy").Should().Be("pre-chat-v2");
         string.Join(" ", Span.TagObjects).Should().NotContain("private-marker").And.NotContain(Secret);
     }
 
