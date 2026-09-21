@@ -4,6 +4,9 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 
 ## Start here
 
+- [Personal assistant vision](plans/personal-assistant-vision.md): continuous chat, household usefulness, mobile direction, evaluated learning and cloud experiments.
+- [Continuous conversation](runbooks/continuous-conversation.md): one default chat, scoped automatic context, fresh starts and persistent interactive cards.
+
 - [Architecture](architecture.md): current responsibilities and boundaries.
 - [Roadmap](plans/roadmap.md): work themes, evidence, and acceptance criteria; includes a [selectable backlog](plans/roadmap.md#selectable-backlog) of unprioritized ideas.
 - [Jev implementation plan](plans/jev-integration.md): first pre-chat routing slice implemented; delegation, judging, simulated home automation and reranking remain proposed.
@@ -56,6 +59,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0026: Structured decision provider](decisions/0026-structured-decision-provider.md) | First pre-chat routing slice accepted and implemented; broader experiments proposed | Jev tool suggestions and clock fast path; evaluate delegation, judging and reranking separately |
 | [0027: Full tool routing](decisions/0027-full-tool-routing.md) | Accepted; implemented | Jev selection and opt-in direct dispatch across local and Tavily tools, with routing outcome logs |
 | [0028: Journal file checkpoints](decisions/0028-journal-file-checkpoints.md) | Accepted; implemented | Skip downloads and model parsing for unchanged Git blobs; checkpoint successful files atomically with entry writes |
+| [0029: Continuous conversation](decisions/0029-continuous-conversation.md) | Accepted; first slice implemented | One default chat, bounded contextual recall and trusted interactive cards |
 
 ## Working agreement
 
