@@ -1,4 +1,4 @@
-.evidence-drawer { position: fixed; inset: 0 0 0 auto; width: min(44rem, 100vw); z-index: 1400; background: var(--mud-palette-surface, white); color: var(--mud-palette-text-primary, #222); box-shadow: -5px 0 24px #0004; padding: 1.5rem; overflow-y: auto; }
+.evidence-drawer { position: fixed; inset: 0 0 0 auto; width: min(44rem, 100vw); z-index: 1400; background: var(--mud-palette-surface, var(--surface-color)); color: var(--mud-palette-text-primary, #222); box-shadow: -5px 0 24px #0004; padding: 1.5rem; overflow-y: auto; }
 header, .player-actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; }
 audio { width: 100%; }
 button, select { font: inherit; padding: .4rem .65rem; border: 1px solid currentColor; border-radius: .3rem; cursor: pointer; background: transparent; color: inherit; }

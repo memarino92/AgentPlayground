@@ -1,0 +1,55 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<MudThemeProvider Theme="Theme" IsDarkMode="IsDark" ObserveSystemThemeChange="false" />
+<label class="theme-picker">
+    <span>Theme</span>
+    <select aria-label="Color theme" value="@Preference" @onchange="ChangeAsync" disabled="@(Interop is null)">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+    </select>
+</label>
+
+@code {
+    private static readonly MudTheme Theme = new()
+    {
+        PaletteLight = new() { Primary = "#0f766e" },
+        PaletteDark = new()
+        {
+            Primary = "#5eead4", PrimaryContrastText = "#102820", Background = "#101a20", Surface = "#18262e",
+            TextPrimary = "#e6edf3", TextSecondary = "#afc0ca"
+        }
+    };
+    private string Preference = "system";
+    private bool IsDark;
+    private ThemeInterop? Interop;
+    private DotNetObjectReference<ThemePicker>? Reference;
+
+    protected override async Task OnAfterRenderAsync(bool FirstRender)
+    {
+        if (!FirstRender) return;
+        Reference = DotNetObjectReference.Create(this);
+        Interop = new(JS);
+        await Interop.InitializeAsync(Reference);
+    }
+
+    private async Task ChangeAsync(ChangeEventArgs Args)
+    {
+        if (Interop is not null) await Interop.SetAsync(Args.Value?.ToString() ?? "system");
+    }
+
+    [JSInvokable]
+    public Task OnThemeChanged(string Value, bool Dark) => InvokeAsync(() =>
+    {
+        Preference = Value;
+        IsDark = Dark;
+        StateHasChanged();
+    });
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interop is not null) await Interop.DisposeAsync();
+        Reference?.Dispose();
+    }
+}
