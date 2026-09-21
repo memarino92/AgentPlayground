@@ -17,6 +17,7 @@ public class LayoutTests : TestContext
     public LayoutTests()
     {
         JSInterop.SetupModule("./Components/Layout.razor.js").SetupVoid("initialize", _ => true);
+        JSInterop.SetupModule("./Components/ThemePicker.razor.js").SetupModule("initialize", _ => true);
         Services.AddMudServices();
         Services.AddAuthorizationCore(options =>
         {
@@ -25,6 +26,22 @@ public class LayoutTests : TestContext
         });
         JSInterop.Setup<int>("mudpopoverHelper.countProviders").SetResult(1);
         JSInterop.SetupVoid("watchDarkThemeMedia", _ => true);
+    }
+
+    [Fact]
+    public async Task ThemePicker_SynchronizesSelectionAndMudPalette()
+    {
+        var cut = RenderComponent<ThemePicker>();
+
+        await cut.InvokeAsync(() => cut.Instance.OnThemeChanged("dark", true));
+
+        cut.Find("select").GetAttribute("value").Should().Be("dark");
+        cut.FindComponent<MudBlazor.MudThemeProvider>().Instance.IsDarkMode.Should().BeTrue();
+
+        await cut.InvokeAsync(() => cut.Instance.OnThemeChanged("system", false));
+
+        cut.Find("select").GetAttribute("value").Should().Be("system");
+        cut.FindComponent<MudBlazor.MudThemeProvider>().Instance.IsDarkMode.Should().BeFalse();
     }
 
     [Fact]

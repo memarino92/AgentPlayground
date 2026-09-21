@@ -31,3 +31,11 @@ Automated tests supplement browser checks for unavailable model IDs, other-owner
 Verified 2026-09-13: 53 Web tests and 218 API tests passed. The API suite requires Docker and Windows event-log access in this Windows environment. The synthetic browser verified single-Back job/filter restoration through the result conversation, chat/list retention, recording Back, outside-menu dismissal, timestamp/active-row agreement, Settings integration content, and coach playback with no owner controls. No production deployment or speech-alignment check was performed.
 
 Verified 2026-09-21: continuous conversation, persistent interactive cards, history search with the selected profile, and same-conversation source highlighting passed synthetic browser checks. The older chat creation checks above describe the September 13 implementation only. Current test counts and scope are recorded in [the chat runbook](continuous-conversation.md).
+
+## Color theme
+
+Use **Theme** in the site header to choose **System**, **Light**, or **Dark**. System follows the operating system and updates while the page is open. The choice is saved per browser and synchronized across tabs; it is available before sign-in. If browser storage is blocked, switching still works for the current page.
+
+Custom styles and MudBlazor controls use the same resolved theme. During prerendering, custom styles follow the operating system; the saved override and MudBlazor palette apply when the interactive connection starts. Theme-aware CSS uses `light-dark()` and requires a modern browser.
+
+Verify preference handling with `node --test scripts/tests/theme.test.mjs` and the layout integration with `dotnet test PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj`.

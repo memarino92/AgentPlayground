@@ -3,12 +3,12 @@
 .utterance-meta { display: flex; flex-direction: column; font-size: .75rem; }
 .utterance-meta button { border: 0; padding: 0; text-align: left; font-size: inherit; }
 .utterance p { margin: 0; font-size: .9rem; line-height: 1.45; }
-.utterance[data-role=coach] strong { color: #167447; }
-.utterance[data-role=athlete] strong { color: #175ca0; }
-.utterance[data-active=true] { background: #6750a418; border-left: 3px solid #6750a4; }
+.utterance[data-role=coach] strong { color: var(--success-color); }
+.utterance[data-role=athlete] strong { color: var(--info-color); }
+.utterance[data-active=true] { background: #6750a418; border-left: 3px solid light-dark(#6750a4, #c4b5fd); }
 @media (max-width: 600px) { .utterance { grid-template-columns: 6rem minmax(0, 1fr); } }
 
 .utterance { border-bottom: 1px solid #8885; }
-.utterance[data-cited=true] { border-left: 4px solid var(--mud-palette-primary, #6750a4); background: #8881; }
+.utterance[data-cited=true] { border-left: 4px solid var(--mud-palette-primary, light-dark(#6750a4, #c4b5fd)); background: #8881; }
 .utterance p { white-space: pre-wrap; }
 .utterance-meta button { font: inherit; background: transparent; color: inherit; cursor: pointer; }
