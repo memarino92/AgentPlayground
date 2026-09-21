@@ -21,6 +21,36 @@ namespace PersonalAgent.Web.Tests.Components;
 public sealed class ChatModelDiscoveryTests : TestContext
 {
     [Fact]
+    public async Task SourceLinkToCurrentConversation_OpensReadonlyHistoryAtTheMessage()
+    {
+        using var Handler = new CatalogHandler { Conversation = [new("user", "Find this exchange") { Sequence = 3 }] };
+        Configure(Handler);
+        var Navigation = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        Navigation.NavigateTo("/chat?drawer=1");
+        var Cut = RenderComponent<Chat>();
+        Cut.WaitForAssertion(() => Cut.FindComponent<ChatHistorySearch>().Instance.ProfileId.Should().Be("owner"));
+        await Cut.InvokeAsync(() => Navigation.NavigateTo($"/chat?sessionId={Handler.ConversationId}&profileId=owner&message=3"));
+        Cut.WaitForAssertion(() => Cut.FindAll("textarea").Should().BeEmpty());
+        Cut.Find(".message-list__item--highlight").TextContent.Should().Contain("Find this exchange");
+        Navigation.Uri.Should().Contain("message=3");
+    }
+
+    [Fact]
+    public void ContinuousChat_RestoresByDefault_AndClearUsesServerBoundary()
+    {
+        using var Handler = new CatalogHandler { Conversation = [new("user", "Saved thought")] };
+        Configure(Handler);
+        var Cut = RenderComponent<Chat>();
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Saved thought"));
+        Cut.Markup.Should().NotContain("New chat");
+        Cut.Find("textarea").Input("/clear");
+        Cut.FindAll("button").Single(Value => Value.TextContent == "Send").Click();
+        Cut.WaitForAssertion(() => Handler.ClearCount.Should().Be(1));
+        Cut.Markup.Should().NotContain("Saved thought").And.Contain("Fresh start");
+        Handler.OpenCount.Should().Be(1);
+    }
+
+    [Fact]
     public void FailedFirstSend_ReusesEmptyChatInsteadOfCreatingAnother()
     {
         using var Handler = new CatalogHandler { FailMessage = true };
@@ -29,12 +59,12 @@ public sealed class ChatModelDiscoveryTests : TestContext
         Cut.WaitForElement("textarea").Input("First attempt");
         Cut.FindAll("button").Single(Value => Value.TextContent == "Send").Click();
         Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Failed to send message"));
-        Cut.FindAll("button").Single(Value => Value.TextContent == "New chat").Click();
+        Cut.Find("textarea").GetAttribute("value").Should().Be("First attempt");
         Handler.FailMessage = false;
         Cut.Find("textarea").Input("Retry");
         Cut.FindAll("button").Single(Value => Value.TextContent == "Send").Click();
         Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic reply"));
-        Handler.SelectedModels.Should().ContainSingle();
+        Handler.OpenCount.Should().Be(1);
     }
 
     [Fact]
@@ -60,11 +90,11 @@ public sealed class ChatModelDiscoveryTests : TestContext
         Cut.WaitForAssertion(() => Cut.FindAll("select.composer__model option").Select(Value => Value.GetAttribute("value"))
             .Should().Equal("provider-default", "newly-available-model"));
         Cut.Find("select.composer__model").Change("newly-available-model");
-        Cut.FindAll("button").First(Value => Value.TextContent == "New chat").Click();
-        Handler.SelectedModels.Should().BeEmpty("blank chats are local drafts");
+        Cut.WaitForAssertion(() => Handler.ChangedModel.Should().Be("newly-available-model"));
         Cut.Find("textarea").Input("First message");
         Cut.FindAll("button").Single(Value => Value.TextContent == "Send").Click();
-        Cut.WaitForAssertion(() => Handler.SelectedModels.Should().Equal("newly-available-model"));
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic reply"));
+        Handler.OpenCount.Should().Be(1);
     }
 
     [Fact]
@@ -81,11 +111,12 @@ public sealed class ChatModelDiscoveryTests : TestContext
         First.Should().Contain($"sessionId={Handler.FirstId}").And.Contain("drawer=1");
         Cut.FindAll(".session-panel__entry").Last().Click();
         Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Second saved message"));
-        Cut.Find("select.composer__model").GetAttribute("value").Should().Be("newly-available-model");
+        Cut.FindAll("textarea").Should().BeEmpty("history is read-only");
         Cut.FindComponent<ChatSessionPanel>().Should().NotBeNull();
         await Cut.InvokeAsync(() => Navigation.NavigateTo(First));
         Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("First saved message"));
-        Cut.Find("select.composer__model").GetAttribute("value").Should().Be("provider-default");
+        Cut.FindAll("button").Single(Value => Value.TextContent == "Back to conversation").Click();
+        Cut.WaitForElement("select.composer__model");
         Cut.Find("select.composer__model").Change("newly-available-model");
         Cut.WaitForAssertion(() => Handler.ChangedModel.Should().Be("newly-available-model"));
         await Cut.InvokeAsync(() => Navigation.NavigateTo("/jobs"));
@@ -113,6 +144,10 @@ public sealed class ChatModelDiscoveryTests : TestContext
         public string? ChangedModel;
         public bool FailMessage;
         public int CatalogReads { get; private set; }
+        public int OpenCount { get; private set; }
+        public int ClearCount { get; private set; }
+        public Guid ConversationId = Guid.NewGuid();
+        public List<ConversationMessage> Conversation = [];
         public List<string> SelectedModels { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken CancellationToken)
@@ -133,6 +168,17 @@ public sealed class ChatModelDiscoveryTests : TestContext
                 SelectedModels.Add(ModelId);
                 return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { sessionId = Guid.NewGuid().ToString(), modelId = ModelId }) };
             }
+            if (Request.RequestUri.AbsolutePath == "/api/conversation/open")
+            {
+                OpenCount++;
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new HistoryResponse(ConversationId.ToString(), ChangedModel ?? "provider-default", Conversation)) };
+            }
+            if (Request.RequestUri.AbsolutePath.EndsWith("/clear"))
+            {
+                ClearCount++;
+                Conversation.Clear();
+                return new(HttpStatusCode.NoContent);
+            }
             if (Request.Method == HttpMethod.Put)
             {
                 ChangedModel = (await Request.Content!.ReadFromJsonAsync<JsonElement>(CancellationToken)).GetProperty("modelId").GetString();
@@ -140,14 +186,21 @@ public sealed class ChatModelDiscoveryTests : TestContext
             }
             if (Request.Method == HttpMethod.Get && Request.RequestUri.AbsolutePath.EndsWith("/messages"))
             {
+                if (Request.RequestUri.AbsolutePath.Contains(ConversationId.ToString()))
+                    return new(HttpStatusCode.OK) { Content = JsonContent.Create(new HistoryResponse(ConversationId.ToString(), "provider-default", Conversation)) };
                 var First = Request.RequestUri.AbsolutePath.Contains(FirstId.ToString());
                 return new(HttpStatusCode.OK) { Content = JsonContent.Create(new HistoryResponse(
                     (First ? FirstId : SecondId).ToString(), First ? "provider-default" : "newly-available-model",
                     [new("user", First ? "First saved message" : "Second saved message")])) };
             }
             if (Request.Method == HttpMethod.Post && Request.RequestUri.AbsolutePath.EndsWith("/messages"))
-                return FailMessage ? new(HttpStatusCode.InternalServerError)
-                    : new(HttpStatusCode.OK) { Content = JsonContent.Create(new { response = "Synthetic reply" }) };
+            {
+                if (FailMessage) return new(HttpStatusCode.InternalServerError);
+                var Payload = await Request.Content!.ReadFromJsonAsync<JsonElement>(CancellationToken);
+                Conversation.Add(new("user", Payload.GetProperty("message").GetString()!));
+                Conversation.Add(new("assistant", "Synthetic reply"));
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new HistoryResponse(ConversationId.ToString(), ChangedModel ?? "provider-default", Conversation)) };
+            }
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { sessions = new[] {
                 new SessionListItem(FirstId.ToString(), "First chat", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
                 new SessionListItem(SecondId.ToString(), "Second chat", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow) }, hasMore = false }) };

@@ -7,8 +7,8 @@
 <div class="message-list" id="@ContainerId" @ref="Root">
     @foreach (var msg in Messages)
     {
-        <div class="message-list__item message-list__item--@msg.Role" data-role="@msg.Role">
-            <strong>@(msg.Role == "user" ? "You" : msg.Role)</strong>
+        <div class="message-list__item message-list__item--@msg.Role @(msg.Sequence == HighlightSequence ? "message-list__item--highlight" : null)" data-role="@msg.Role" data-sequence="@msg.Sequence">
+            <strong>@(msg.Role == "user" ? "You" : "Garden")</strong>
             @if (msg.Role == "assistant")
             {
                 <div class="message-list__content">
@@ -16,6 +16,20 @@
                     @foreach (var Citation in EvidenceCitation.Parse(msg.Content, ProfileId))
                     {
                         <button type="button" data-evidence-url="@Citation.Url" @onclick="() => SelectedEvidence = Citation">Open call evidence @(Citation.StartMs is int Start ? TimeSpan.FromMilliseconds(Start).ToString(@"hh\:mm\:ss") : "(timing unavailable)")</button>
+                    }
+                    @if (msg.Presentation is { } Presentation)
+                    {
+                        <ChatResponseCards Cards="Presentation.Cards" Sequence="msg.Sequence" Disabled="@(IsSendingMessage || IsReadOnly || IsUpdatingCard)" OnAction="OnCardAction" />
+                        @if (Presentation.Sources.Count > 0)
+                        {
+                            <details class="chat-context">
+                                <summary>Earlier context considered · @Presentation.Sources.Count</summary>
+                                @foreach (var Source in Presentation.Sources)
+                                {
+                                    <a href="@($"/chat?sessionId={Source.SessionId}&profileId={Uri.EscapeDataString(ProfileId ?? string.Empty)}&message={Source.Sequence}")">@Source.CreatedAt.ToLocalTime().ToString("MMM d") · @Source.Excerpt</a>
+                                }
+                            </details>
+                        }
                     }
                 </div>
             }
@@ -29,8 +43,8 @@
     @if (IsSendingMessage)
     {
         <div class="message-list__item message-list__item--assistant" data-role="assistant">
-            <strong>assistant</strong>
-            <p><em>Thinking...</em></p>
+            <strong>Garden</strong>
+            <p class="chat-thinking" role="status">Putting a response together…</p>
         </div>
     }
 </div>
@@ -51,6 +65,11 @@
     [Parameter] public required bool IsSendingMessage { get; set; }
     [Parameter] public required string ContainerId { get; set; }
     [Parameter] public string? ProfileId { get; set; }
+    [Parameter] public bool IsReadOnly { get; set; }
+    [Parameter] public bool IsUpdatingCard { get; set; }
+    [Parameter] public EventCallback<ChatCardInteraction> OnCardAction { get; set; }
+    [Parameter] public long? HighlightSequence { get; set; }
+    private long? LastHighlight;
 
     private string RenderMarkdown(string Content)
     {
@@ -65,9 +84,16 @@
 
     protected override async Task OnAfterRenderAsync(bool FirstRender)
     {
-        if (!FirstRender) return;
-        EvidenceLinks = new(JS);
-        await EvidenceLinks.InitializeAsync(Root);
+        if (FirstRender)
+        {
+            EvidenceLinks = new(JS);
+            await EvidenceLinks.InitializeAsync(Root);
+        }
+        if (HighlightSequence is { } Sequence && LastHighlight != Sequence && Messages.Any(Message => Message.Sequence == Sequence) && EvidenceLinks is not null)
+        {
+            await EvidenceLinks.RevealMessageAsync(Sequence);
+            LastHighlight = Sequence;
+        }
     }
 
     public async ValueTask DisposeAsync()

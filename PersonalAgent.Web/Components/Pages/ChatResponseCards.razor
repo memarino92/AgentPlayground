@@ -1,0 +1,23 @@
+@using AgentPlayground.Contracts
+@foreach (var Card in Cards)
+{
+    @switch (Card.Kind)
+    {
+        case "commitment":
+            <ChatCommitmentCard @key="Card.Id" Card="Card" Disabled="Disabled" OnAction="Action => Act(Card, Action)" />
+            break;
+        case "checklist":
+            <ChatChecklist @key="Card.Id" Card="Card" Disabled="Disabled" OnAction="Action => Act(Card, Action)" />
+            break;
+        case "clarification":
+            <ChatClarificationForm @key="Card.Id" Card="Card" Disabled="Disabled" OnAction="Action => Act(Card, Action)" />
+            break;
+    }
+}
+@code {
+    [Parameter] public IReadOnlyList<ChatCard> Cards { get; set; } = [];
+    [Parameter] public long Sequence { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<ChatCardInteraction> OnAction { get; set; }
+    private Task Act(ChatCard Card, ChatCardAction Action) => OnAction.InvokeAsync(new(Sequence, Card.Id, Action));
+}

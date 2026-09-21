@@ -1,12 +1,16 @@
 <div class="composer">
     <textarea class="composer__input"
-              value="@CurrentMessage"
-              @oninput="HandleInput"
+              @bind="Draft"
+              @bind:after="HandleInput"
+              @bind:event="oninput"
               @onkeydown="OnKeyDown"
               data-send-on-enter="true"
               disabled="@IsBusy"
-              rows="3"
-              placeholder="Type a message. Enter to send, Shift+Enter for newline."></textarea>
+              rows="2"
+              aria-label="Message Garden"
+              placeholder="What's on your mind?"></textarea>
+    <details class="composer__settings">
+    <summary>Model</summary>
     <select class="composer__model"
             value="@SelectedModelId"
             @onchange="HandleModelChanged"
@@ -16,10 +20,13 @@
             <option value="@model.Id">@model.DisplayName</option>
         }
     </select>
+    </details>
     <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="composer__send" OnClick="OnSendMessage" Disabled="@(IsBusy || Models.Count == 0 || string.IsNullOrWhiteSpace(CurrentMessage))">Send</MudButton>
 </div>
 
 @code {
+    private string Draft = string.Empty;
+    protected override void OnParametersSet() => Draft = CurrentMessage;
     [Parameter] public required string CurrentMessage { get; set; }
     [Parameter] public required string SelectedModelId { get; set; }
     [Parameter] public required List<AvailableChatModelResponse> Models { get; set; }
@@ -29,8 +36,7 @@
     [Parameter] public required EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
     [Parameter] public required EventCallback OnSendMessage { get; set; }
 
-    private Task HandleInput(ChangeEventArgs e) =>
-        CurrentMessageChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty);
+    private Task HandleInput() => CurrentMessageChanged.InvokeAsync(Draft);
 
     private Task HandleModelChanged(ChangeEventArgs e) => SelectedModelIdChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty);
 }

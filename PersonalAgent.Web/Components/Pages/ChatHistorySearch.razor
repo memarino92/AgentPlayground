@@ -1,0 +1,20 @@
+@using AgentPlayground.Contracts
+<div class="history-search">
+    <label>Find something you discussed<input maxlength="500" @bind="Query" @bind:event="oninput" placeholder="Search your words…" /></label>
+    <button type="button" disabled="@(Busy || string.IsNullOrWhiteSpace(Query))" @onclick="() => OnSearch.InvokeAsync(Query)">Search history</button>
+    @if (Results is not null)
+    {
+        @if (Results.Count == 0) { <p>No matching earlier messages.</p> }
+        @foreach (var Source in Results)
+        {
+            <a href="@($"/chat?sessionId={Source.SessionId}&profileId={Uri.EscapeDataString(ProfileId ?? string.Empty)}&message={Source.Sequence}")">@Source.CreatedAt.ToLocalTime().ToString("MMM d") · @Source.Excerpt</a>
+        }
+    }
+</div>
+@code {
+    private string Query = string.Empty;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? ProfileId { get; set; }
+    [Parameter] public IReadOnlyList<ChatContextSource>? Results { get; set; }
+    [Parameter] public EventCallback<string> OnSearch { get; set; }
+}

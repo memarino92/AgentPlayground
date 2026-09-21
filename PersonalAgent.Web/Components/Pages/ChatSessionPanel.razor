@@ -1,9 +1,10 @@
 <MudPaper Class="pa-3 session-panel" Elevation="1" id="chat-drawer">
     <MudStack Spacing="2">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-            <MudText Typo="Typo.h6">Previous chats</MudText>
+            <MudText Typo="Typo.h6">History</MudText>
             <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="OnCloseDrawer">Close</MudButton>
         </MudStack>
+        @ChildContent
 
         @if (IsLoadingSessions)
         {
@@ -41,6 +42,7 @@
 </MudPaper>
 
 @code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public required List<SessionListItem> Sessions { get; set; }
     [Parameter] public required bool IsLoadingSessions { get; set; }
     [Parameter] public required bool IsBusy { get; set; }

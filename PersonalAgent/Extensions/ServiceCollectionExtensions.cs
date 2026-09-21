@@ -106,6 +106,8 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<DatabaseChatModelPolicy>();
         services.AddSingleton<IChatModelPolicySource>(sp => sp.GetRequiredService<DatabaseChatModelPolicy>());
         services.AddSingleton<IAgentSessionStore, PostgresAgentSessionStore>();
+        services.AddSingleton<IConversationContextStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
+        services.AddSingleton<ConversationContextBuilder>();
         services.AddSingleton<IAgentSemanticMemoryStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         services.AddSingleton<IAgentApprovalStore>(sp => (PostgresAgentSessionStore)sp.GetRequiredService<IAgentSessionStore>());
         services.AddSingleton<IAgentEmbeddingService, OpenAiAgentEmbeddingService>();

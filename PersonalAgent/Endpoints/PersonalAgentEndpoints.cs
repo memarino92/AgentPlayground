@@ -9,7 +9,7 @@ using System.Text;
 
 namespace PersonalAgent.Endpoints;
 
-internal static class PersonalAgentEndpoints
+internal static partial class PersonalAgentEndpoints
 {
     public static WebApplication MapPersonalAgentEndpoints(this WebApplication app)
     {
@@ -27,6 +27,7 @@ internal static class PersonalAgentEndpoints
         apiGroup.MapIntegrationSettings(securityOptions, app.Configuration);
         apiGroup.MapCoachEvidence(securityOptions);
         apiGroup.MapScheduledJobs(securityOptions);
+        MapConversationEndpoints(apiGroup, securityOptions);
 
         apiGroup.MapGet("/models", async (IChatModelCatalog chatModelCatalog, CancellationToken cancellationToken) =>
         {
