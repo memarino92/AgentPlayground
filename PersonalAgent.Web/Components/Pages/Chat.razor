@@ -9,7 +9,7 @@
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JsRuntime
 
-<PageTitle>Garden - Conversation</PageTitle>
+<PageTitle>Chat - PersonalAgent</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.False" Class="chat-page">
     <div class="chat-shell @(isSessionDrawerOpen ? "chat-shell--drawer-open" : "chat-shell--drawer-closed")">
@@ -29,8 +29,7 @@
 
         <MudPaper Class="chat-panel" Elevation="1">
             <MudStack Spacing="2" Class="chat-panel__header">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
-                    <div><span class="chat-eyebrow">Your digital garden</span><MudText Typo="Typo.h6">What's on your mind?</MudText></div>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Wrap="Wrap.Wrap">
                     <MudStack Row="true" Spacing="1" Class="chat-panel__actions">
                         <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="ToggleSessionDrawer">@(isSessionDrawerOpen ? "Hide history" : "History")</MudButton>
                         @if (isContinuous)
@@ -57,7 +56,7 @@
                 @if (isLoadingHistory || !hasInitialized) { <MudProgressLinear Indeterminate="true" /> }
                 @if (hasInitialized && messages.Count == 0 && !isLoadingHistory)
                 {
-                    <div class="chat-empty"><h2>A little space to think out loud.</h2><p>Pick up an idea, make a plan, or just start talking. I'll bring in relevant earlier context when I find it.</p></div>
+                    <div class="chat-empty"><h2>What's on your mind</h2></div>
                 }
                 <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" ContainerId="@MessageListContainerId" ProfileId="@profileId"
                                  IsReadOnly="isReadOnly" IsUpdatingCard="isUpdatingCard" OnCardAction="HandleCardActionAsync" HighlightSequence="RequestedMessage" />
