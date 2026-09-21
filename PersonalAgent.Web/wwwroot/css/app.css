@@ -471,3 +471,54 @@ body {
 .navbar-menu > button { font: inherit; cursor: pointer; background: transparent; border: 0; padding: .5rem; }
 .navbar-menu__items[popover] { margin: 0; inset: 3.5rem auto auto 1rem; }
 .navbar-menu__items[popover]:not(:popover-open) { display: none; }
+
+/* Continuous conversation and trusted, data-only response components. */
+.chat-page { max-width: 1320px; margin: 0 auto; }
+.chat-panel { padding: clamp(1rem, 3vw, 2rem); background: #fcfdfb; }
+.chat-eyebrow, .garden-card__eyebrow { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: #527267; font-weight: 700; }
+.chat-panel__footer, .chat-notice { font-size: .8rem; color: #586860; }
+.chat-empty { max-width: 35rem; margin: 3rem auto 0; text-align: center; color: #435b51; }
+.chat-empty h2 { font-family: Georgia, serif; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 400; }
+.chat-empty p { line-height: 1.7; margin-top: 1rem; }
+.chat-empty + .message-list { min-height: 2rem; }
+.message-list { min-height: 12rem; gap: 1.35rem; max-height: calc(100dvh - 23rem); }
+.message-list__item { overflow-wrap: anywhere; line-height: 1.65; }
+.message-list__item--assistant { border: 0; background: transparent; width: min(100%, 52rem); }
+.message-list__item--user { background: #eef3e9; border-color: #dfe8d8; }
+.message-list__item > strong { color: #607166; font-size: .75rem; letter-spacing: .04em; }
+.composer { grid-template-columns: minmax(0, 1fr) auto auto; position: relative; }
+.composer__input { min-height: 4rem; font-size: 1rem; background: white; }
+.composer__settings { align-self: center; font-size: .8rem; }
+.composer__settings summary { cursor: pointer; color: #586860; padding: .5rem; }
+.composer__settings[open] select { position: absolute; bottom: 100%; right: 0; width: min(22rem, 100%); background: white; z-index: 2; }
+.garden-card { margin: 1rem 0; padding: 1.2rem; border: 1px solid #dce6dc; border-radius: 1rem; background: white; box-shadow: 0 3px 12px #23402b06; }
+.garden-card h3 { font-size: 1.05rem; line-height: 1.4; margin: .4rem 0 .7rem; color: #203c30; }
+.garden-card p { margin-bottom: .85rem; }
+.garden-card small { display: block; color: #64756c; margin-top: .85rem; line-height: 1.5; }
+.garden-card button { border: 1px solid #b9cdc0; border-radius: .6rem; background: #f0f6ef; color: #244c38; padding: .6rem .9rem; min-height: 44px; font: inherit; font-size: .85rem; cursor: pointer; }
+.garden-card button:disabled { opacity: .55; cursor: default; }
+.garden-card button[aria-pressed="true"] { background: #dcebdc; border-color: #427353; }
+.garden-card__check { display: flex; gap: .75rem; align-items: start; padding: .6rem 0; cursor: pointer; }
+.garden-card__check input { margin-top: .3rem; width: 1.2rem; height: 1.2rem; accent-color: #356d4b; }
+.garden-card__done { text-decoration: line-through; color: #708076; }
+.garden-card__choices { display: flex; gap: .5rem; flex-wrap: wrap; }
+.garden-card__field { display: grid; gap: .35rem; font-size: .85rem; margin: .85rem 0; }
+.garden-card__field input { font: inherit; font-size: 1rem; border: 1px solid #c7d6cc; padding: .6rem; border-radius: .5rem; min-width: 0; width: 100%; }
+.chat-context { font-size: .8rem; color: #65766c; margin-top: .8rem; }
+.chat-context summary { cursor: pointer; }
+.chat-context a { display: block; margin: .6rem 0; }
+.message-list__item--highlight { outline: 2px solid #6d9875; outline-offset: 2px; }
+.history-search { display: grid; gap: .6rem; font-size: .85rem; }
+.history-search label { display: grid; gap: .4rem; }
+.history-search input { width: 100%; min-width: 0; font: inherit; font-size: 1rem; border: 1px solid #c7d6cc; border-radius: .5rem; padding: .6rem; }
+.history-search button { border: 1px solid #b9cdc0; background: #f0f6ef; border-radius: .5rem; padding: .6rem; cursor: pointer; }
+.history-search a { padding: .6rem 0; border-bottom: 1px solid #dfe8d8; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .chat-panel { min-height: calc(100dvh - 8rem); padding: .9rem; }
+  .message-list { max-height: calc(100dvh - 23rem); padding: 0; }
+  .composer { grid-template-columns: 1fr auto; gap: .5rem; padding-bottom: env(safe-area-inset-bottom); }
+  .composer__input { grid-column: 1 / -1; }
+  .composer__settings { grid-column: 1; }
+  .composer__send { grid-column: 2; }
+  .garden-card { padding: .9rem; }
+}

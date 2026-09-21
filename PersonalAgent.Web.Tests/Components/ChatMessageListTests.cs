@@ -24,7 +24,7 @@ public class ChatMessageListTests : TestContext
 
         cut.FindAll(".message-list__item").Should().HaveCount(2);
         cut.Find("[data-role='user'] strong").TextContent.Should().Be("You");
-        cut.Find("[data-role='assistant'] strong").TextContent.Should().Be("assistant");
+        cut.Find("[data-role='assistant'] strong").TextContent.Should().Be("Garden");
         cut.Find(".message-list__item").ClassList.Should().NotContain("border");
     }
 
@@ -35,7 +35,7 @@ public class ChatMessageListTests : TestContext
             .Add(component => component.Messages, [])
             .Add(component => component.IsSendingMessage, true));
 
-        cut.Markup.Should().Contain("Thinking...");
+        cut.Markup.Should().Contain("Putting a response together");
         cut.Find("[data-role='assistant']").Should().NotBeNull();
     }
 }

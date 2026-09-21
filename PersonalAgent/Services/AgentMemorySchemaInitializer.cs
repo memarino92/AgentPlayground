@@ -128,6 +128,7 @@ internal class AgentMemorySchemaInitializer(IOptions<AgentMemoryOptions> options
             );
 
             CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.TranscriptMessagesTableName}_session_created_at")} ON {transcriptMessagesTable} (session_id, created_at);
+            CREATE INDEX IF NOT EXISTS {QuoteIdentifier($"ix_{_options.TranscriptMessagesTableName}_search")} ON {transcriptMessagesTable} USING gin (to_tsvector('english', content));
 
             CREATE TABLE IF NOT EXISTS {memoryRecordsTable}
             (

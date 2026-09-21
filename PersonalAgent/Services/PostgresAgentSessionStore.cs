@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace PersonalAgent.Services;
 
-internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, ILogger<PostgresAgentSessionStore> logger) : IAgentSessionStore, IAgentSemanticMemoryStore, IAgentApprovalStore
+internal partial class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, ILogger<PostgresAgentSessionStore> logger) : IAgentSessionStore, IAgentSemanticMemoryStore, IAgentApprovalStore, IConversationContextStore
 {
     private const int SessionStateVersion = 1;
     private readonly AgentMemoryOptions _options = options.Value;
@@ -102,7 +102,13 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
             reader.GetString(5));
     }
 
-    public async Task<IReadOnlyList<PersistedAgentSessionSummary>> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<PersistedAgentSessionSummary>> GetScopedSessionsAsync(AgentAccessContext Access, DateTimeOffset? Before, Guid? BeforeId, int Limit, CancellationToken Token) =>
+        GetSessionsCoreAsync(Access.ActorId, Before, BeforeId, Limit, Access.SubjectProfileId, Access.Role, Token);
+
+    public Task<IReadOnlyList<PersistedAgentSessionSummary>> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize, CancellationToken cancellationToken = default) =>
+        GetSessionsCoreAsync(profileId, beforeActivityAt, beforeSessionId, pageSize, null, null, cancellationToken);
+
+    private async Task<IReadOnlyList<PersistedAgentSessionSummary>> GetSessionsCoreAsync(string profileId, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, int pageSize, string? Subject, string? Role, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -122,6 +128,8 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
                 LIMIT 1
             ) AS first_user_message ON TRUE
             WHERE s.actor_id = @profileId
+              AND (@subject IS NULL OR lower(s.profile_id) = lower(@subject))
+              AND (@role IS NULL OR lower(s.role_name) = lower(@role))
               AND (
                     @beforeActivityAt IS NULL
                  OR @beforeSessionId IS NULL
@@ -132,6 +140,8 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
             LIMIT @limit;
             """;
         command.Parameters.AddWithValue("profileId", profileId);
+        command.Parameters.Add(new NpgsqlParameter("subject", NpgsqlDbType.Text) { Value = Subject ?? (object)DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("role", NpgsqlDbType.Text) { Value = Role ?? (object)DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("beforeActivityAt", NpgsqlDbType.TimestampTz)
         {
             Value = beforeActivityAt ?? (object)DBNull.Value
@@ -159,7 +169,10 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
         return await command.ExecuteScalarAsync(cancellationToken) is not null;
     }
 
-    public async Task<bool> SaveInteractionAsync(Guid sessionId, string userMessage, string assistantMessage, string sessionStateJson, CancellationToken cancellationToken = default)
+    public Task<bool> SaveInteractionAsync(Guid sessionId, string userMessage, string assistantMessage, string sessionStateJson, CancellationToken cancellationToken = default)
+        => SaveInteractionCoreAsync(sessionId, userMessage, assistantMessage, sessionStateJson, null, cancellationToken);
+
+    private async Task<bool> SaveInteractionCoreAsync(Guid sessionId, string userMessage, string assistantMessage, string sessionStateJson, AgentPlayground.Contracts.ChatPresentation? Presentation, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -187,6 +200,17 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
 
         await InsertMessageAsync(connection, transaction, sessionId, nextSequence, "user", userMessage, now, cancellationToken);
         await InsertMessageAsync(connection, transaction, sessionId, nextSequence + 1, "assistant", assistantMessage, now, cancellationToken);
+
+        if (Presentation is not null)
+        {
+            await using var Metadata = connection.CreateCommand();
+            Metadata.Transaction = transaction;
+            Metadata.CommandText = $"UPDATE {TranscriptMessagesTable} SET metadata = @metadata::jsonb WHERE session_id = @id AND message_seq = @seq";
+            Metadata.Parameters.AddWithValue("metadata", System.Text.Json.JsonSerializer.Serialize(Presentation));
+            Metadata.Parameters.AddWithValue("id", sessionId);
+            Metadata.Parameters.AddWithValue("seq", nextSequence + 1);
+            await Metadata.ExecuteNonQueryAsync(cancellationToken);
+        }
 
         await using var updateCommand = connection.CreateCommand();
         updateCommand.Transaction = transaction;
@@ -217,7 +241,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
 
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT role, content
+            SELECT role, content, message_seq, created_at, metadata
             FROM {TranscriptMessagesTable}
             WHERE session_id = @sessionId
             ORDER BY message_seq ASC;
@@ -227,7 +251,7 @@ internal class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> options, I
         var messages = new List<ConversationMessage>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            messages.Add(new ConversationMessage(reader.GetString(0), reader.GetString(1)));
+            messages.Add(ReadConversationMessage(reader));
 
         if (messages.Count > 0) return messages;
 

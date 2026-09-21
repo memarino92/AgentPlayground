@@ -1,0 +1,29 @@
+@using AgentPlayground.Contracts
+<article class="garden-card garden-card--clarification">
+    <span class="garden-card__eyebrow">A quick clarification</span>
+    <h3>@Card.Title</h3>
+    @if (!string.IsNullOrWhiteSpace(Card.Detail)) { <p>@Card.Detail</p> }
+    @if (Card.Answer is not null)
+    {
+        <p class="garden-card__answer">Your answer: @Card.Answer</p>
+    }
+    else
+    {
+        <div class="garden-card__choices">
+            @foreach (var Option in Card.Options)
+            {
+                <button type="button" @key="Option" disabled="@Disabled" aria-pressed="@(Answer == Option)" @onclick="() => Answer = Option">@Option</button>
+            }
+        </div>
+        <label class="garden-card__field">Your answer
+            <input type="text" @bind="Answer" @bind:event="oninput" maxlength="1000" disabled="@Disabled" placeholder="Choose above or write your own…" />
+        </label>
+        <button type="button" disabled="@(Disabled || string.IsNullOrWhiteSpace(Answer))" @onclick='() => OnAction.InvokeAsync(new(Card.Revision, "answer", Answer))'>Send answer</button>
+    }
+</article>
+@code {
+    private string Answer = string.Empty;
+    [Parameter, EditorRequired] public ChatCard Card { get; set; } = default!;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<ChatCardAction> OnAction { get; set; }
+}

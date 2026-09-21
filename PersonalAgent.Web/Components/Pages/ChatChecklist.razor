@@ -1,0 +1,18 @@
+@using AgentPlayground.Contracts
+<article class="garden-card garden-card--checklist">
+    <span class="garden-card__eyebrow">Checklist · @Card.Items.Count(Item => Item.Done) / @Card.Items.Count</span>
+    <h3>@Card.Title</h3>
+    @if (!string.IsNullOrWhiteSpace(Card.Detail)) { <p>@Card.Detail</p> }
+    @foreach (var Item in Card.Items)
+    {
+        <label class="garden-card__check" @key="Item.Id">
+            <input type="checkbox" checked="@Item.Done" disabled="@Disabled" @onchange='() => OnAction.InvokeAsync(new(Card.Revision, "toggle", Item.Id))' />
+            <span class="@(Item.Done ? "garden-card__done" : null)">@Item.Text</span>
+        </label>
+    }
+</article>
+@code {
+    [Parameter, EditorRequired] public ChatCard Card { get; set; } = default!;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<ChatCardAction> OnAction { get; set; }
+}

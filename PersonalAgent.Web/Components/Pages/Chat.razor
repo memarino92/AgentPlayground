@@ -9,7 +9,7 @@
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JsRuntime
 
-<PageTitle>PersonalAgent - Chat</PageTitle>
+<PageTitle>Garden - Conversation</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.False" Class="chat-page">
     <div class="chat-shell @(isSessionDrawerOpen ? "chat-shell--drawer-open" : "chat-shell--drawer-closed")">
@@ -22,16 +22,25 @@
                               SelectedSessionOption="@GetSelectedSessionOption()"
                               OnSessionSelectionChanged="HandleSessionSelectionChanged"
                               OnLoadMoreSessions="LoadMoreSessionsAsync"
-                              OnCloseDrawer="CloseSessionDrawer" />
+                              OnCloseDrawer="CloseSessionDrawer">
+                <ChatHistorySearch ProfileId="@profileId" Busy="@(isBusy || isSearchingHistory)" Results="historyResults" OnSearch="SearchHistoryAsync" />
+            </ChatSessionPanel>
         }
 
         <MudPaper Class="chat-panel" Elevation="1">
             <MudStack Spacing="2" Class="chat-panel__header">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
-                    <MudText Typo="Typo.h6">Agent chat</MudText>
+                    <div><span class="chat-eyebrow">Your digital garden</span><MudText Typo="Typo.h6">What's on your mind?</MudText></div>
                     <MudStack Row="true" Spacing="1" Class="chat-panel__actions">
-                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ToggleSessionDrawer">@(isSessionDrawerOpen ? "Hide chats" : "Show chats")</MudButton>
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateSession" Disabled="@(isBusy || string.IsNullOrWhiteSpace(selectedModelId))">New chat</MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="ToggleSessionDrawer">@(isSessionDrawerOpen ? "Hide history" : "History")</MudButton>
+                        @if (isContinuous)
+                        {
+                            <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CreateSession" Disabled="@isBusy">Start fresh</MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Outlined" OnClick="ReturnToConversationAsync" Disabled="@isBusy">Back to conversation</MudButton>
+                        }
                     </MudStack>
                 </MudStack>
 
@@ -39,16 +48,23 @@
                 {
                     <MudAlert Severity="Severity.Error" Dense="true">@errorMessage</MudAlert>
                 }
+                @if (notice is not null) { <p class="chat-notice" role="status">@notice</p> }
 
             </MudStack>
 
             @if (hasAttemptedRestore)
             {
-                <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" ContainerId="@MessageListContainerId" ProfileId="@profileId" />
+                @if (isLoadingHistory || !hasInitialized) { <MudProgressLinear Indeterminate="true" /> }
+                @if (hasInitialized && messages.Count == 0 && !isLoadingHistory)
+                {
+                    <div class="chat-empty"><h2>A little space to think out loud.</h2><p>Pick up an idea, make a plan, or just start talking. I'll bring in relevant earlier context when I find it.</p></div>
+                }
+                <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" ContainerId="@MessageListContainerId" ProfileId="@profileId"
+                                 IsReadOnly="isReadOnly" IsUpdatingCard="isUpdatingCard" OnCardAction="HandleCardActionAsync" HighlightSequence="RequestedMessage" />
 
                 @if (isReadOnly)
                 {
-                    <MudText Typo="Typo.body2">This conversation is the saved record of a scheduled job. Start a new chat for follow-up work.</MudText>
+                    <MudText Typo="Typo.body2">You're viewing saved history. Return to your conversation to continue.</MudText>
                 }
                 else
                 {
@@ -63,12 +79,7 @@
                 }
 
                 <div class="chat-panel__footer">
-                    <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small">Chat: @(sessionId ?? "New chat")</MudChip>
-                    @if (!string.IsNullOrWhiteSpace(activeModelDisplayName))
-                    {
-                        <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small">Model: @activeModelDisplayName</MudChip>
-                    }
-                    <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="ResetSelectionAsync" Disabled="@isBusy">Clear</MudButton>
+                    <span>@(isContinuous ? "One conversation. Your history stays yours." : "Saved history")</span>
                 </div>
             }
         </MudPaper>

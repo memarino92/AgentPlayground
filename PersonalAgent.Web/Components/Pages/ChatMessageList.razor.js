@@ -1,5 +1,11 @@
 const handlers = new WeakMap();
 
+export function revealMessage(root, sequence) {
+    const message = Array.from(root.querySelectorAll('[data-sequence]'))
+        .find(element => element.dataset.sequence === String(sequence));
+    message?.scrollIntoView({ block: 'center', behavior: 'instant' });
+}
+
 export function initialize(root) {
     dispose(root);
     const handler = event => {

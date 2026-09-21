@@ -8,6 +8,12 @@ internal sealed class EvidenceLinksInterop(IJSRuntime JS) : IAsyncDisposable
     private IJSObjectReference? Module;
     private ElementReference Root;
 
+    public async ValueTask RevealMessageAsync(long Sequence)
+    {
+        try { if (Module is not null) await Module.InvokeVoidAsync("revealMessage", Root, Sequence); }
+        catch (JSDisconnectedException) { }
+    }
+
     public async ValueTask InitializeAsync(ElementReference Element)
     {
         Root = Element;

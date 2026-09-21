@@ -12,6 +12,8 @@ namespace PersonalAgent.Web.Components.Pages;
 public partial class Chat
 {
     [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+    private long? RequestedMessage => QueryHelpers.ParseQuery(NavigationManager.ToAbsoluteUri(NavigationManager.Uri).Query)
+        .TryGetValue("message", out var Value) && long.TryParse(Value, out var Sequence) ? Sequence : null;
 
     private const string MessageListContainerId = "chat-message-list";
     private const int SessionPageSize = 20;
@@ -38,9 +40,12 @@ public partial class Chat
     private bool hasMoreSessions;
     private bool shouldScrollToBottom;
     private bool isReadOnly;
+    private bool isContinuous;
+    private bool isUpdatingCard;
+    private bool hasInitialized;
+    private string? notice;
 
-    private bool isBusy => isLoadingHistory || isSendingMessage || isCreatingSession || isChangingModel;
-    private string? activeModelDisplayName => availableModels.FirstOrDefault(model => model.Id == activeModelId)?.DisplayName ?? activeModelId;
+    private bool isBusy => !hasInitialized || isLoadingHistory || isSendingMessage || isCreatingSession || isChangingModel || isUpdatingCard;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -53,7 +58,7 @@ public partial class Chat
             return;
         }
 
-        if (!shouldScrollToBottom) return;
+        if (!shouldScrollToBottom || RequestedMessage is not null) return;
         shouldScrollToBottom = false;
         try { await JsRuntime.InvokeVoidAsync("scrollToChatBottom", MessageListContainerId); }
         catch (JSDisconnectedException) { }
@@ -76,12 +81,14 @@ public partial class Chat
             var query = QueryHelpers.ParseQuery(NavigationManager.ToAbsoluteUri(NavigationManager.Uri).Query);
             if (query.TryGetValue("sessionId", out var requested) && Guid.TryParse(requested, out var requestedId))
                 await SelectSessionAsync(requestedId.ToString());
+            else await OpenConversationAsync();
 
         }
         catch (Exception ex)
         {
             errorMessage = ex.Message;
         }
+        finally { hasInitialized = true; }
     }
 
     private Task HandleQueryActionsAsync()
@@ -92,46 +99,16 @@ public partial class Chat
         return Task.CompletedTask;
     }
 
-    private async Task CreateSavedSessionAsync()
-    {
-        isCreatingSession = true;
-        errorMessage = null;
-        try
-        {
-            var resolvedProfileId = await ResolveAccessAsync();
-            if (string.IsNullOrWhiteSpace(resolvedProfileId))
-            {
-                errorMessage = role == "Coach"
-                    ? "No athlete profile is assigned to this coach account."
-                    : "Unable to determine your profile id for chat memory.";
-                return;
-            }
-
-            profileId = resolvedProfileId;
-
-            var response = await ApiClient.CreateSessionAsync(resolvedProfileId, selectedModelId, actorId, role);
-            if (response != null)
-            {
-                activeModelId = response.ModelId;
-                selectedModelId = response.ModelId;
-                await SelectSessionAsync(response.SessionId, []);
-                await LoadSessionsAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-        }
-        finally
-        {
-            isCreatingSession = false;
-        }
-    }
-
     private async Task SendMessage()
     {
         if (isBusy || string.IsNullOrWhiteSpace(currentMessage) || profileId == null || selectedModelId is null) return;
-        if (sessionId is null) await CreateSavedSessionAsync();
+        if (currentMessage.Trim().Equals("/clear", StringComparison.OrdinalIgnoreCase)) { await CreateSession(); return; }
+        if (!isContinuous || isReadOnly) return;
+        if (sessionId is null)
+        {
+            try { await OpenConversationAsync(); }
+            catch (Exception Error) { errorMessage = Error.Message; return; }
+        }
         if (sessionId is null) return;
 
         errorMessage = null;
@@ -146,10 +123,10 @@ public partial class Chat
 
         try
         {
-            var response = await ApiClient.SendMessageAsync(sendingSessionId, sendingProfileId, userMessage, actorId, role);
-            if (response != null && sessionId == sendingSessionId)
+            var response = await ApiClient.SendConversationMessageAsync(sendingSessionId, sendingProfileId, userMessage);
+            if (sessionId == sendingSessionId)
             {
-                messages.Add(new ConversationMessage("assistant", response.Response));
+                messages = [.. response.Messages];
                 UpdateSessionSummary(sessionId, userMessage, DateTimeOffset.UtcNow);
                 shouldScrollToBottom = true;
             }
@@ -186,7 +163,8 @@ public partial class Chat
         if (profileId is null) return;
 
         sessionId = selectedSessionId;
-        isReadOnly = false;
+        isReadOnly = true;
+        isContinuous = false;
         errorMessage = null;
         SaveChatQuery();
 
@@ -232,7 +210,7 @@ public partial class Chat
 
             if (sessionId != selectedSessionId) return;
             sessionId = history.SessionId;
-            isReadOnly = history.IsReadOnly;
+            isReadOnly = true;
             activeModelId = history.ModelId;
             selectedModelId = history.ModelId;
             messages = [.. history.Messages];
@@ -290,24 +268,27 @@ public partial class Chat
     private async Task CreateSession()
     {
         if (isBusy) return;
-        if (sessionId is not null && messages.Count == 0 && !isReadOnly)
+        isCreatingSession = true;
+        try
         {
+            if (!isContinuous || sessionId is null) await OpenConversationAsync();
+            if (sessionId is null || profileId is null) return;
+            await ApiClient.ClearConversationAsync(sessionId, profileId);
+            messages.Clear();
             currentMessage = string.Empty;
             errorMessage = null;
-            return;
+            notice = "Fresh start. Earlier conversation won't be included automatically. History and saved cards are kept.";
         }
-        await ResetSelectionAsync();
-        var stored = await ModelStorage.GetAsync<string>(ModelStorageKey);
-        selectedModelId = stored.Success && availableModels.Any(model => model.Id == stored.Value) ? stored.Value
-            : availableModels.Any(model => model.Id == selectedModelId) ? selectedModelId
-            : availableModels.FirstOrDefault(model => model.IsDefault)?.Id ?? availableModels.FirstOrDefault()?.Id;
+        catch (Exception ex) { errorMessage = ex.Message; }
+        finally { isCreatingSession = false; }
     }
 
     private void SaveChatQuery()
     {
         var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
-            ["sessionId"] = sessionId, ["profileId"] = profileId, ["drawer"] = isSessionDrawerOpen ? "1" : null
+            ["sessionId"] = isContinuous ? null : sessionId, ["profileId"] = profileId, ["drawer"] = isSessionDrawerOpen ? "1" : null,
+            ["message"] = isContinuous ? null : RequestedMessage
         });
         if (uri != NavigationManager.Uri) NavigationManager.NavigateTo(uri);
     }
@@ -325,11 +306,11 @@ public partial class Chat
                 await HandleQueryActionsAsync();
                 var query = QueryHelpers.ParseQuery(NavigationManager.ToAbsoluteUri(e.Location).Query);
                 var requested = query.TryGetValue("sessionId", out var value) && Guid.TryParse(value, out var id) ? id.ToString() : null;
-                if (requested != sessionId)
+                if ((requested != sessionId || (requested is not null && isContinuous)) && !(requested is null && isContinuous))
                 {
                     currentMessage = string.Empty;
                     profileId = await ResolveAccessAsync();
-                    if (requested is null) await ResetSelectionAsync();
+                    if (requested is null) await OpenConversationAsync();
                     else await SelectSessionAsync(requested);
                 }
                 StateHasChanged();

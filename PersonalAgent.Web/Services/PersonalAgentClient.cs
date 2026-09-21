@@ -41,6 +41,40 @@ internal class PersonalAgentClient : IDisposable
     public void Dispose() => authenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     private const int DefaultPageSize = 20;
 
+    public async Task<List<AgentPlayground.Contracts.ChatContextSource>> SearchConversationHistoryAsync(string ProfileId, string Query)
+    {
+        using var Response = await SendAsync(HttpMethod.Get, $"/api/conversation/history?profileId={Uri.EscapeDataString(ProfileId)}&query={Uri.EscapeDataString(Query)}");
+        if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("search history", Response);
+        return await Response.Content.ReadFromJsonAsync<List<AgentPlayground.Contracts.ChatContextSource>>() ?? [];
+    }
+
+    public async Task<HistoryResponse> OpenConversationAsync(string ProfileId, string? ModelId)
+    {
+        using var Response = await SendJsonAsync(HttpMethod.Post, "/api/conversation/open", new { ProfileId, ModelId });
+        if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("open conversation", Response);
+        return (await Response.Content.ReadFromJsonAsync<HistoryResponse>())!;
+    }
+
+    public async Task ClearConversationAsync(string Id, string ProfileId)
+    {
+        using var Response = await SendJsonAsync(HttpMethod.Post, $"/api/conversation/{Id}/clear", new { ProfileId });
+        if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("start fresh", Response);
+    }
+
+    public async Task<HistoryResponse> SendConversationMessageAsync(string Id, string ProfileId, string Message)
+    {
+        using var Response = await SendJsonAsync(HttpMethod.Post, $"/api/conversation/{Id}/messages", new { ProfileId, Message });
+        if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("send message", Response);
+        return (await Response.Content.ReadFromJsonAsync<HistoryResponse>())!;
+    }
+
+    public async Task<AgentPlayground.Contracts.ChatCard> UpdateChatCardAsync(string Id, string ProfileId, long Sequence, string CardId, AgentPlayground.Contracts.ChatCardAction Action)
+    {
+        using var Response = await SendJsonAsync(HttpMethod.Post, $"/api/conversation/{Id}/cards/{Sequence}/{Uri.EscapeDataString(CardId)}", new { ProfileId, Action });
+        if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("update card", Response);
+        return (await Response.Content.ReadFromJsonAsync<AgentPlayground.Contracts.ChatCard>())!;
+    }
+
     public async Task<IReadOnlyList<ScheduledJobResponse>> GetJobsAsync(string ProfileId, string? Status, DateTimeOffset? Before, CancellationToken Token)
     {
         var Uri = $"/api/jobs/?profileId={System.Uri.EscapeDataString(ProfileId)}";
@@ -405,7 +439,12 @@ public record MessageResponse(string SessionId, string Response);
 public record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages, bool IsReadOnly = false);
 public record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
 public record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
-public record ConversationMessage(string Role, string Content);
+public record ConversationMessage(string Role, string Content)
+{
+    public long Sequence { get; init; }
+    public DateTimeOffset? CreatedAt { get; init; }
+    public AgentPlayground.Contracts.ChatPresentation? Presentation { get; init; }
+}
 public record AvailableChatModelResponse(string Id, string DisplayName, bool IsDefault);
 public record CoachCheckinUploadResponse(Guid UploadId, Guid CorrelationId, string Status, DateTimeOffset CreatedAtUtc, bool IsDuplicate);
 public record CoachCheckinStatusResponse(Guid UploadId, Guid SessionId, string ProfileId, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
