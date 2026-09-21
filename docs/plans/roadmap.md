@@ -1,5 +1,15 @@
 # Roadmap
 
+## Continuous assistant — first slice delivered 2026-09-21
+
+Delivery order: one default conversation with automatic bounded context, then chat polish with commitment cards, checklists and clarification forms. See [vision](personal-assistant-vision.md) and [decision 0029](../decisions/0029-continuous-conversation.md). Future slices add episode/classifier evaluation, confirmed memory, household sharing, durable follow-through, iPhone web push/offline capture and isolated cloud improvement experiments.
+
+Delivered: server-owned default conversation, bounded recent context and hybrid lexical/semantic historical retrieval, actor/role/subject isolation, `/clear` recall boundaries, searchable legacy history, source links and persistent commitment/checklist/clarification cards. Cards track intent and user interactions; they do not implement a reminder or autonomous goal engine. Mobile layout, model disclosure and fast-input binding are improved.
+
+Validation: 318 API tests in the full run plus an 8-case context follow-up after the final test additions; 61 Web and 31 Contracts tests; healthy API/Web Release containers; 35 synthetic smoke checks. Browser checks cover default continuity, all three card interactions, reload persistence and a 390x844 viewport. See [runbook and limits](../runbooks/continuous-conversation.md). Physical iPhone/Safari and live-model quality remain outstanding. No production deployment is claimed.
+
+Next acceptance: held-out abrupt-topic/week-later/ambiguous-reference/correction cases establish recall precision and supported coverage; classifier/episode changes must beat this baseline. Confirmed memories and household sharing require explicit lifecycle/authorization. Durable commitments need completion evidence and resumable follow-through, with notification feedback. Streaming/cancellation, persistent offline drafts, iOS web push and hosted experiments remain separate slices.
+
 Recorded 2026-09-07; reconciled 2026-09-13 against `b7157f7`. The numbered themes retain the original suggested sequence; the [selection table](#selectable-backlog) records delivered slices and remaining acceptance work. The catalog is unprioritized. Dated validation counts are historical evidence, not results from this documentation review. Estimates remain deferred until slices expose their integration work.
 
 ## Journal sync efficiency — delivered 2026-09-20

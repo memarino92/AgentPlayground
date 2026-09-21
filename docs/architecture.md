@@ -1,6 +1,6 @@
 # Architecture
 
-Reviewed 2026-09-13 against `b7157f7`, including the September 10–13 deliveries. This page describes current behavior; the decision register distinguishes future changes. Validation and remaining acceptance criteria live in the [roadmap](plans/roadmap.md).
+Reviewed 2026-09-13 against `b7157f7`, with the continuous-conversation sections updated 2026-09-21. This page describes current behavior; the decision register distinguishes future changes. Validation and remaining acceptance criteria live in the [roadmap](plans/roadmap.md).
 
 ```mermaid
 flowchart LR
@@ -36,7 +36,7 @@ The intended AI gateway boundary is stronger than today's implementation: all AI
 
 - `PostgresConfigurationSource` loads encrypted configuration at startup; bootstrap credentials remain external.
 - Sentry and OpenTelemetry use separate encrypted revision/pointer settings with versioned migration and per-instance acknowledgements. Existing database rows are editable in Settings. OpenAI/AssemblyAI API credentials reload for new requests; chat model policy is read from active database settings on each catalog request. Other consumers retain explicit restart requirements. See [integration operations](runbooks/integration-settings.md) and [provider credential limits](decisions/0012-live-provider-credentials.md).
-- `PostgresAgentSessionStore` persists sessions/messages. Chat recreates the framework session per request and replays user/assistant history; it does not persist full framework tool/workflow state.
+- `PostgresAgentSessionStore` persists sessions/messages. The default UI opens one continuous conversation per actor/role/subject. Chat recreates the framework session per request with bounded recent context and authorized lexical/semantic historical evidence; it does not persist full framework tool/workflow state. Fresh-start boundaries survive restart. PostgreSQL advisory locks serialize chat mutations across instances. Typed cards and source references persist transactionally in transcript metadata. See [0029](decisions/0029-continuous-conversation.md).
 - `AgentMemorySchemaInitializer` creates and alters tables at startup. Worker also creates journal tables. There is no explicit versioned migration history in these paths.
 - Journal vectors currently use a hard-coded `vector(1536)` in `SyncWorkJournalConsumer`; embedding compatibility must be addressed in the gateway design.
 - Audio is stored as database bytes and retained after successful processing. API owns persisted transcription-provider jobs; Worker receives neutral segments, persists utterances, and waits for speaker attribution when required. Domain writes and outgoing messages commit through the coaching outbox. Owners can attach/replace audio on completed calls or delete terminal-call audio; transcripts remain readable. Backup deletion reconciliation and recording-inclusive recovery remain open. See [transcription operations](runbooks/transcription-gateway.md).
@@ -46,7 +46,7 @@ The intended AI gateway boundary is stronger than today's implementation: all AI
 
 ## Current user experience
 
-The shared recording view and evidence drawer provide timestamp seeking and optional playback following. Chat drafts create a saved session on first send; explicit model changes persist server-side, and new drafts prefer the last available browser choice. Jobs, chats, recordings and Settings retain selection in query parameters. Scheduled result conversations stay read-only. See [navigation and playback](runbooks/navigation.md).
+The shared recording view and evidence drawer provide timestamp seeking and optional playback following. Chat opens a stable default conversation, with model selection under a disclosure and optional searchable history. Start fresh suppresses earlier automatic context without deleting records. Commitment cards, checklists and clarification forms persist user interactions; they are not autonomous workflows. History/job views are read-only. Jobs, history, recordings and Settings retain selection in query parameters. See [continuous conversation](runbooks/continuous-conversation.md) and [navigation and playback](runbooks/navigation.md).
 
 Coaching retrieval uses filename-derived recording dates, latest-call scope, recency preference and utterance evidence, with lexical recovery for missing exercise tags. Synthetic regressions and an opt-in live-model comparison runner exist; held-out quality evaluation and the Learning Lab proposal/promotion UI remain future work. See [evaluation evidence](runbooks/coach-retrieval-evaluation.md).
 
