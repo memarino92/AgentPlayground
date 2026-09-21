@@ -51,6 +51,20 @@ public sealed class ChatModelDiscoveryTests : TestContext
     }
 
     [Fact]
+    public void ChatPage_DefaultsToClosedHistoryAndShowsConcisePrompt()
+    {
+        using var Handler = new CatalogHandler();
+        Configure(Handler);
+        var Cut = RenderComponent<Chat>();
+
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("What's on your mind"));
+        Cut.FindAll(".session-panel").Should().BeEmpty();
+        Cut.Markup.Should().NotContain("Your digital garden")
+            .And.NotContain("A little space to think out loud")
+            .And.NotContain("Pick up an idea");
+    }
+
+    [Fact]
     public void FailedFirstSend_ReusesEmptyChatInsteadOfCreatingAnother()
     {
         using var Handler = new CatalogHandler { FailMessage = true };

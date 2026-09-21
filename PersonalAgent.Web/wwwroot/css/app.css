@@ -486,11 +486,10 @@ body {
 /* Continuous conversation and trusted, data-only response components. */
 .chat-page { max-width: 1320px; margin: 0 auto; }
 .chat-panel { padding: clamp(1rem, 3vw, 2rem); background: var(--surface-color); }
-.chat-eyebrow, .garden-card__eyebrow { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--text-secondary); font-weight: 700; }
+.garden-card__eyebrow { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--text-secondary); font-weight: 700; }
 .chat-panel__footer, .chat-notice { font-size: .8rem; color: var(--text-secondary); }
 .chat-empty { max-width: 35rem; margin: 3rem auto 0; text-align: center; color: var(--text-secondary); }
 .chat-empty h2 { font-family: Georgia, serif; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 400; }
-.chat-empty p { line-height: 1.7; margin-top: 1rem; }
 .chat-empty + .message-list { min-height: 2rem; }
 .message-list { min-height: 12rem; gap: 1.35rem; max-height: calc(100dvh - 23rem); }
 .message-list__item { overflow-wrap: anywhere; line-height: 1.65; }
