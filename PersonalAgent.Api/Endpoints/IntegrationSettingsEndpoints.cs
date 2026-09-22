@@ -28,12 +28,13 @@ internal static class IntegrationSettingsEndpoints
             }))
             .WithName("SaveDatabaseSettings").WithSummary("Save existing settings atomically; affected services require restart");
         settings.MapPut("/providers/openrouter", (SaveProviderCredentialRequest Request,
-            [Microsoft.AspNetCore.Mvc.FromServices] DatabaseSettingsStore Store, CancellationToken CancellationToken) =>
+            [Microsoft.AspNetCore.Mvc.FromServices] DatabaseSettingsStore Store,
+            [Microsoft.AspNetCore.Mvc.FromServices] ILogger<DatabaseSettingsStore> Logger, CancellationToken CancellationToken) =>
             ExecuteAsync(async () =>
             {
                 await Store.SaveLiveCredentialAsync("Api", "OpenRouter:ApiKey", Request, CancellationToken);
                 return TypedResults.NoContent();
-            }))
+            }, Logger, "save OpenRouter credential"))
             .WithName("SaveOpenRouterCredential").WithSummary("Create or replace the encrypted OpenRouter API credential");
 
         var otel = Api.MapGroup("/admin/integrations/otel")
@@ -69,12 +70,15 @@ internal static class IntegrationSettingsEndpoints
             .WithName("TestSentrySettings").WithSummary("Queue a synthetic event using the requested active API revision");
     }
 
-    private static async Task<IResult> ExecuteAsync(Func<Task<IResult>> Operation)
+    private static async Task<IResult> ExecuteAsync(Func<Task<IResult>> Operation, ILogger? Logger = null, string OperationName = "integration settings operation")
     {
         try { return await Operation(); }
         catch (IntegrationValidationException Exception) { return Results.ValidationProblem(Exception.Errors); }
         catch (IntegrationConflictException) { return Results.Problem(statusCode: 409, title: "Settings changed. Refresh before saving or applying."); }
         catch (Exception Exception) when (Exception is Npgsql.NpgsqlException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
-        { return Results.Problem(statusCode: 503, title: "Integration settings are unavailable. Check database bootstrap and service status."); }
+        {
+            Logger?.LogError(Exception, "Failed to {OperationName}", OperationName);
+            return Results.Problem(statusCode: 503, title: "Integration settings are unavailable. Check database bootstrap and service status.");
+        }
     }
 }

@@ -1,42 +1,73 @@
 @using System.ComponentModel.DataAnnotations
 
 <div class="provider-settings">
-    <h2>AI providers</h2>
-    <p>Configure provider credentials used by the API. Secrets are encrypted before storage and are never returned to this page.</p>
-    @if (Error is not null) { <p role="alert">@Error</p> }
-    @if (Notice is not null) { <p role="status">@Notice</p> }
+    <header class="provider-settings__header">
+        <div>
+            <p class="eyebrow">Model access</p>
+            <h2>AI providers</h2>
+            <p>Connect model providers without exposing stored credentials to the browser.</p>
+        </div>
+        <span class="security-note">Encrypted at rest</span>
+    </header>
+    @if (Error is not null)
+    {
+        <div role="alert" class="message message--error"><strong>@ErrorTitle</strong><span>@Error</span></div>
+    }
+    @if (Notice is not null)
+    {
+        <div role="status" class="message message--success"><strong>Saved</strong><span>@Notice</span></div>
+    }
     @if (!Loaded)
     {
-        <p>@(Busy ? "Loading provider settings…" : "Provider settings could not be loaded.")</p>
-        <button disabled="@Busy" @onclick="RefreshAsync">Retry</button>
+        <section class="loading-card">
+            <p>@(Busy ? "Loading provider settings…" : "Provider settings could not be loaded.")</p>
+            <button class="button button--secondary" disabled="@Busy" @onclick="RefreshAsync">Retry</button>
+        </section>
     }
     else
     {
         <section class="settings-card">
-            <h3>OpenRouter</h3>
-            <p>Use OpenRouter models, including the optional Auto Router, through the existing agent and model catalog.</p>
-            <p><strong>Status:</strong> @(OpenRouterSetting is null ? "Not configured" : OpenRouterSetting.IsActive ? "Configured" : "Stored but inactive")</p>
+            <div class="settings-card__heading">
+                <div class="provider-mark" aria-hidden="true">OR</div>
+                <div>
+                    <h3>OpenRouter</h3>
+                    <p>Access reviewed OpenRouter models and the optional Auto Router through the existing model catalog.</p>
+                </div>
+                <span class="status-badge @StatusClass"><span></span>@StatusLabel</span>
+            </div>
             <EditForm Model="Model" OnValidSubmit="SaveOpenRouterAsync" FormName="openrouter-settings">
                 <DataAnnotationsValidator />
-                <ValidationSummary />
+                <ValidationSummary class="validation-summary" />
                 <fieldset disabled="@Busy">
-                    <label for="openrouter-api-key">@(OpenRouterSetting is null ? "OpenRouter API key" : "Replacement OpenRouter API key")</label>
-                    <InputText id="openrouter-api-key" type="password" autocomplete="new-password" maxlength="4096" @bind-Value="Model.ApiKey" />
+                    <div class="field">
+                        <div class="field__label">
+                            <label for="openrouter-api-key">@(OpenRouterSetting is null ? "API key" : "Replacement API key")</label>
+                            <span>Required</span>
+                        </div>
+                        <InputText id="openrouter-api-key" type="password" autocomplete="new-password" maxlength="4096"
+                            placeholder="sk-or-v1-…" spellcheck="false" @bind-Value="Model.ApiKey" />
+                        <small>Paste the key from your OpenRouter account. The saved value is never displayed again.</small>
+                    </div>
                     <ValidationMessage For="() => Model.ApiKey" />
-                    <p>The key applies to new discovery and chat requests after the API reload check. OpenAI remains configured separately for embeddings and other direct capabilities.</p>
-                    <button type="submit">@(Busy ? "Saving…" : OpenRouterSetting is null ? "Save OpenRouter key" : "Replace OpenRouter key")</button>
+                    <div class="lifecycle-note"><strong>What happens next</strong><span>The API reloads the credential immediately for new discovery and chat requests. OpenAI remains separate for embeddings and direct capabilities.</span></div>
+                    <div class="actions">
+                        <button class="button button--primary" type="submit">@(Busy ? "Saving securely…" : OpenRouterSetting is null ? "Connect OpenRouter" : "Replace API key")</button>
+                        <button class="button button--secondary" type="button" disabled="@Busy" @onclick="RefreshAsync">Discard changes</button>
+                    </div>
                 </fieldset>
             </EditForm>
             @if (OpenRouterSetting is not null)
             {
-                <p>Use <a href="/admin/settings?section=database">Database settings</a> to deactivate this credential.</p>
+                <p class="settings-card__footer">Need to stop using this credential? <a href="/admin/settings?section=database">Deactivate it in Database settings</a>.</p>
             }
         </section>
-        <button disabled="@Busy" @onclick="RefreshAsync">Refresh / discard entered key</button>
     }
 </div>
 
 @code {
+    private string StatusLabel => OpenRouterSetting is null ? "Not connected" : OpenRouterSetting.IsActive ? "Connected" : "Inactive";
+    private string StatusClass => OpenRouterSetting is null ? "status-badge--missing" : OpenRouterSetting.IsActive ? "status-badge--active" : "status-badge--inactive";
+
     private sealed class OpenRouterFormModel
     {
         [Required(ErrorMessage = "Enter an OpenRouter API key.")]

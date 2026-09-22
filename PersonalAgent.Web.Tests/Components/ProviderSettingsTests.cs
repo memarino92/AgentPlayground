@@ -23,7 +23,7 @@ public sealed class ProviderSettingsTests : TestContext
         var http = new HttpClient(handler) { BaseAddress = new("http://localhost") };
         Services.AddSingleton(new PersonalAgentClient(http, new AnonymousAuthentication(), Options.Create(new PersonalAgentApiOptions())));
         var cut = RenderComponent<ProviderSettings>();
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Not configured"));
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Not connected"));
 
         cut.Find("input[type=password]").Change("private-openrouter-key");
         cut.Find("form").Submit();
@@ -31,7 +31,7 @@ public sealed class ProviderSettingsTests : TestContext
         cut.WaitForAssertion(() => cut.Find("[role=status]").TextContent.Should().Contain("OpenRouter key saved"));
         handler.Saved.Should().Be(new SaveProviderCredentialRequest(null, "private-openrouter-key"));
         handler.Reloaded.Should().BeTrue();
-        cut.Markup.Should().Contain("Configured").And.NotContain("private-openrouter-key");
+        cut.Markup.Should().Contain("Connected").And.NotContain("private-openrouter-key");
         cut.Find("input[type=password]").GetAttribute("value").Should().BeNullOrEmpty();
     }
 
@@ -51,6 +51,22 @@ public sealed class ProviderSettingsTests : TestContext
         handler.Saved.Should().BeNull();
     }
 
+    [Fact]
+    public void OldApiVersion_IsReportedAsDeploymentMismatch()
+    {
+        using var handler = new ProviderSettingsHandler { SaveStatus = HttpStatusCode.NotFound };
+        var http = new HttpClient(handler) { BaseAddress = new("http://localhost") };
+        Services.AddSingleton(new PersonalAgentClient(http, new AnonymousAuthentication(), Options.Create(new PersonalAgentApiOptions())));
+        var cut = RenderComponent<ProviderSettings>();
+        cut.WaitForAssertion(() => cut.Find("input[type=password]").Should().NotBeNull());
+
+        cut.Find("input[type=password]").Change("private-openrouter-key");
+        cut.Find("form").Submit();
+
+        cut.WaitForAssertion(() => cut.Find("[role=alert]").TextContent.Should().Contain("older release"));
+        handler.Reloaded.Should().BeFalse();
+    }
+
     private sealed class AnonymousAuthentication : AuthenticationStateProvider
     {
         public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
@@ -61,6 +77,7 @@ public sealed class ProviderSettingsTests : TestContext
     {
         public SaveProviderCredentialRequest? Saved;
         public bool Reloaded;
+        public HttpStatusCode SaveStatus { get; init; } = HttpStatusCode.NoContent;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken CancellationToken)
         {
@@ -73,7 +90,7 @@ public sealed class ProviderSettingsTests : TestContext
             if (Request.Method == HttpMethod.Put)
             {
                 Saved = await Request.Content!.ReadFromJsonAsync<SaveProviderCredentialRequest>(CancellationToken);
-                return new(HttpStatusCode.NoContent);
+                return new(SaveStatus) { Content = JsonContent.Create(new { title = "API route unavailable" }) };
             }
             Reloaded = true;
             return new(HttpStatusCode.OK)

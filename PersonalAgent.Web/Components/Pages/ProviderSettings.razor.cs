@@ -14,6 +14,7 @@ public partial class ProviderSettings : IAsyncDisposable
     private bool Busy;
     private bool Loaded;
     private string? Error;
+    private string ErrorTitle = "Provider settings unavailable";
     private string? Notice;
 
     protected override Task OnInitializedAsync() => RefreshAsync();
@@ -25,7 +26,7 @@ public partial class ProviderSettings : IAsyncDisposable
             && string.Equals(Setting.Key, "OpenRouter:ApiKey", StringComparison.OrdinalIgnoreCase));
         Model = new();
         Loaded = true;
-    });
+    }, "Couldn’t load provider settings");
 
     private Task SaveOpenRouterAsync() => RunAsync(async () =>
     {
@@ -38,9 +39,9 @@ public partial class ProviderSettings : IAsyncDisposable
         var overrideNotice = status.Overrides.Contains("OPENROUTER_API_KEY", StringComparer.OrdinalIgnoreCase)
             ? " The OPENROUTER_API_KEY deployment override remains effective." : "";
         Notice = $"OpenRouter key saved. {status.Status}.{overrideNotice}";
-    });
+    }, "Couldn’t save OpenRouter");
 
-    private async Task RunAsync(Func<Task> Action)
+    private async Task RunAsync(Func<Task> Action, string FailureTitle)
     {
         if (Busy) return;
         Busy = true;
@@ -49,15 +50,18 @@ public partial class ProviderSettings : IAsyncDisposable
         catch (OperationCanceledException) when (Lifetime.IsCancellationRequested) { }
         catch (HttpRequestException Exception)
         {
+            ErrorTitle = FailureTitle;
             Error = Exception.StatusCode switch
             {
                 HttpStatusCode.Forbidden => "Deployment administrator access is required. Configure INTEGRATION_SETTINGS_ADMINISTRATORS on the API host.",
+                HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed => "The API is running an older release that does not support provider setup yet. Deploy the current API revision, then retry.",
                 HttpStatusCode.Conflict => "The OpenRouter setting changed in another session. Refresh before replacing it.",
                 HttpStatusCode.BadRequest => "The OpenRouter key must be a nonempty printable token of at most 4096 characters.",
-                _ => "OpenRouter settings could not be saved. Check database bootstrap and API status, then retry."
+                HttpStatusCode.ServiceUnavailable => "The API could not access encrypted settings storage. Check the API logs and its database/encryption bootstrap, then retry.",
+                _ => $"OpenRouter settings could not be saved (API returned {(int?)Exception.StatusCode ?? 0}). Retry after checking API status."
             };
         }
-        catch (Exception) { Error = "OpenRouter settings could not be loaded or saved. Retry shortly."; }
+        catch (Exception) { ErrorTitle = FailureTitle; Error = "OpenRouter settings could not be loaded or saved. Retry shortly."; }
         finally { Busy = false; }
     }
 

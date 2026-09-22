@@ -8,13 +8,13 @@
 <div class="settings-hub">
     <h1>Settings</h1>
     <nav aria-label="Settings sections">
-        <a href="/admin/settings?section=sentry">Sentry</a>
-        <a href="/admin/settings?section=telemetry">OpenTelemetry</a>
-        <a href="/admin/settings?section=providers">AI providers</a>
-        <a href="/admin/settings?section=database">Database settings</a>
-        <a href="/admin/settings?section=integrations">Integrations and coach access</a>
+        <a class="@(CurrentSection == "sentry" ? "active" : null)" href="/admin/settings?section=sentry">Sentry</a>
+        <a class="@(CurrentSection == "telemetry" ? "active" : null)" href="/admin/settings?section=telemetry">OpenTelemetry</a>
+        <a class="@(CurrentSection == "providers" ? "active" : null)" href="/admin/settings?section=providers">AI providers</a>
+        <a class="@(CurrentSection == "database" ? "active" : null)" href="/admin/settings?section=database">Database settings</a>
+        <a class="@(CurrentSection == "integrations" ? "active" : null)" href="/admin/settings?section=integrations">Integrations and coach access</a>
     </nav>
-    @switch (Section ?? (Navigation.Uri.Contains("/admin/integrations") ? "integrations" : "database"))
+    @switch (CurrentSection)
     {
         case "sentry": <IntegrationSettings /> break;
         case "telemetry": <IntegrationSettings OpenTelemetry="true" /> break;
@@ -26,4 +26,5 @@
 
 @code {
     [SupplyParameterFromQuery(Name = "section")] public string? Section { get; set; }
+    private string CurrentSection => Section ?? (Navigation.Uri.Contains("/admin/integrations") ? "integrations" : "database");
 }
