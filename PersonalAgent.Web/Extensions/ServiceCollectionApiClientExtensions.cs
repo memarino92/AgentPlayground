@@ -1,4 +1,4 @@
-using AgentPlayground.Contracts.Configuration;
+using PersonalAgent.Contracts.Configuration;
 using PersonalAgent.Web.Configuration;
 using PersonalAgent.Web.Services;
 using Microsoft.Extensions.Options;

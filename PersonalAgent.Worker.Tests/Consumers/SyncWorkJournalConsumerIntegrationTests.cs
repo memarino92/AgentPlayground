@@ -2,9 +2,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 
-using AgentPlayground.Contracts.Commands;
-using AgentPlayground.Contracts.Messaging.Requests;
-using AgentPlayground.Contracts.Messaging.Responses;
+using PersonalAgent.Contracts.Messaging.Commands;
+using PersonalAgent.Contracts.Messaging.Requests;
+using PersonalAgent.Contracts.Messaging.Responses;
 using FluentAssertions;
 using MassTransit;
 using Microsoft.Extensions.Logging.Abstractions;

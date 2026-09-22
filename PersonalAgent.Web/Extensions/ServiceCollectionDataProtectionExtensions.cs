@@ -1,4 +1,4 @@
-using AgentPlayground.Contracts.Messaging;
+using PersonalAgent.Contracts.Messaging;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Options;

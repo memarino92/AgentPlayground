@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
-using AgentPlayground.Contracts.Events;
+using PersonalAgent.Contracts.Messaging.Events;
 
 namespace PersonalAgent.Web.Services;
 

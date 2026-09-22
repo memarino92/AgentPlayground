@@ -1,5 +1,5 @@
 using System.Net;
-using AgentPlayground.Integrations;
+using PersonalAgent.Integrations;
 using Microsoft.AspNetCore.Components;
 using PersonalAgent.Web.Services;
 

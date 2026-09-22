@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
-using AgentPlayground.Contracts.Events;
+using PersonalAgent.Contracts.Messaging.Events;
 using Bunit;
 using Bunit.TestDoubles;
 using FluentAssertions;

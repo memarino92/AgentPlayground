@@ -1,4 +1,4 @@
-using AgentPlayground.Contracts.Events;
+using PersonalAgent.Contracts.Messaging.Events;
 using MassTransit;
 using PersonalAgent.Web.Services;
 

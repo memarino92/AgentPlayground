@@ -3,7 +3,7 @@
 - Status: Accepted, retrospective
 - Recorded: 2026-09-07
 - Decision date: Not reconstructed; implementation commit `34d65e2`
-- Evidence: `AgentPlayground.Contracts/Configuration/`, `scripts/seed-configuration.ps1`, service startup files
+- Evidence: `PersonalAgent.Contracts/Configuration/`, `scripts/seed-configuration.ps1`, service startup files
 
 ## Context and decision
 

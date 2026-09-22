@@ -45,7 +45,7 @@ Release identity uses the entry assembly's informational version. Build releases
 
 ## Persistence and recovery
 
-`AgentPlayground.Integrations` owns an additive version-1 migration under a PostgreSQL advisory transaction lock, recorded in `app.integration_schema_versions`. All hosts may invoke it safely; the version is recorded only after transactional success. This establishes migration ownership for these tables, not for the rest of the repository.
+`PersonalAgent.Integrations` owns an additive version-1 migration under a PostgreSQL advisory transaction lock, recorded in `app.integration_schema_versions`. All hosts may invoke it safely; the version is recorded only after transactional success. This establishes migration ownership for these tables, not for the rest of the repository.
 
 - `app.integration_revisions`: encrypted configuration snapshots with author and creation time.
 - `app.integration_heads`: saved and active pointers.
@@ -70,4 +70,4 @@ The integration smoke suite saves a fake DSN with reporting disabled, verifies a
 
 API tests also exercise encryption, concurrent migration, SDK envelope redaction/queueing, enable/replace/disable/re-enable, stale revisions, and service authorization. Web component tests verify secret keep/clear behavior, invalid form submission, secret clearing after save, and stale instance presentation. The maintainer confirmed deployed test-event receipt after PR #40. Each new destination still needs a manual ingestion check with its configured DSN.
 
-For direct HTTP examples, see `PersonalAgent/IntegrationSettings.http`. The internal key and signed actor headers are required: sign the UTF-8 payload `actor + "\nOwner\n\n" + unixTimestamp` with HMAC-SHA256 using the server actor signing key and encode as uppercase hexadecimal. Refresh the timestamp/signature within five minutes; keep real values out of committed files. The synthetic smoke script demonstrates this with public fixture credentials.
+For direct HTTP examples, see `PersonalAgent.Api/IntegrationSettings.http`. The internal key and signed actor headers are required: sign the UTF-8 payload `actor + "\nOwner\n\n" + unixTimestamp` with HMAC-SHA256 using the server actor signing key and encode as uppercase hexadecimal. Refresh the timestamp/signature within five minutes; keep real values out of committed files. The synthetic smoke script demonstrates this with public fixture credentials.

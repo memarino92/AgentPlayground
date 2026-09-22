@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 using Npgsql;
-using AgentPlayground.Contracts.Messaging;
+using PersonalAgent.Contracts.Messaging;
 
 namespace PersonalAgent.Web.Services;
 

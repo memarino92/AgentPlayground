@@ -1,12 +1,12 @@
 <Solution>
-  <Project Path="AgentPlayground.Integrations/AgentPlayground.Integrations.csproj" />
-  <Project Path="AgentPlayground.Contracts/AgentPlayground.Contracts.csproj" />
-  <Project Path="AgentPlayground.Contracts.Tests/AgentPlayground.Contracts.Tests.csproj" />
+  <Project Path="PersonalAgent.Integrations/PersonalAgent.Integrations.csproj" />
+  <Project Path="PersonalAgent.Contracts/PersonalAgent.Contracts.csproj" />
+  <Project Path="PersonalAgent.Contracts.Tests/PersonalAgent.Contracts.Tests.csproj" />
   <Project Path="PersonalAgent.Mobile/PersonalAgent.Mobile.csproj" />
   <Project Path="PersonalAgent.Web/PersonalAgent.Web.csproj" />
   <Project Path="PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj" />
   <Project Path="PersonalAgent.Worker/PersonalAgent.Worker.csproj" />
   <Project Path="PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj" />
-  <Project Path="PersonalAgent/PersonalAgent.csproj" />
-  <Project Path="PersonalAgent.Tests/PersonalAgent.Tests.csproj" />
+  <Project Path="PersonalAgent.Api/PersonalAgent.Api.csproj" />
+  <Project Path="PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj" />
 </Solution>

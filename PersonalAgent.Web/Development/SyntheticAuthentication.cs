@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using AgentPlayground.Contracts.Hosting;
+using PersonalAgent.Contracts.Hosting;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;

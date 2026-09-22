@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using PersonalAgent.Web.Components;
 using PersonalAgent.Web.Endpoints;
-using AgentPlayground.Contracts.Hosting;
+using PersonalAgent.Contracts.Hosting;
 using PersonalAgent.Web.Development;
 
 namespace PersonalAgent.Web.Extensions;

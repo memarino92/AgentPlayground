@@ -1,4 +1,4 @@
-using AgentPlayground.Contracts.Commands;
+using PersonalAgent.Contracts.Messaging.Commands;
 using MassTransit;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

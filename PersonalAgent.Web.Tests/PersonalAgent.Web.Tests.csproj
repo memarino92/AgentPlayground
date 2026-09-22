@@ -27,7 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PersonalAgent.Web\PersonalAgent.Web.csproj" />
-    <ProjectReference Include="..\AgentPlayground.Contracts\AgentPlayground.Contracts.csproj" />
+    <ProjectReference Include="..\PersonalAgent.Contracts\PersonalAgent.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
-using AgentPlayground.Contracts.Messaging.Commands;
+using PersonalAgent.Contracts.Messaging.Commands;
 using FluentAssertions;
 using Moq;
 using PersonalAgent.Worker.Services;

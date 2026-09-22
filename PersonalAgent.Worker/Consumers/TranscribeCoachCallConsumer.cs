@@ -1,6 +1,6 @@
-using AgentPlayground.Contracts.Commands;
-using AgentPlayground.Contracts.Events;
-using AgentPlayground.Contracts.Messaging;
+using PersonalAgent.Contracts.Messaging.Commands;
+using PersonalAgent.Contracts.Messaging.Events;
+using PersonalAgent.Contracts.Messaging;
 using MassTransit;
 using Microsoft.Extensions.Options;
 using Npgsql;

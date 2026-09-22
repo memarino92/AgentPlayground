@@ -27,19 +27,13 @@ services:
         required: false
     environment:
       PORT: "5100"
-      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-dev-internal-api-key}"
-      MESSAGING_CONNECTION_STRING: "Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground"
-      AGENT_MEMORY_CONNECTION_STRING: "${AGENT_MEMORY_CONNECTION_STRING:-Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground}"
-      MESSAGING_SCHEMA: "transport"
-      ALLOWED_ORIGINS: "http://localhost:5000"
-      WEB_ACTOR_SIGNING_KEY: "${WEB_ACTOR_SIGNING_KEY:-dev-actor-signing-key}"
     ports:
       - "5100:5100"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "dotnet", "PersonalAgent.dll", "--healthcheck"]
+      test: ["CMD", "dotnet", "PersonalAgent.Api.dll", "--healthcheck"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -51,12 +45,6 @@ services:
     env_file:
       - path: .env.compose
         required: false
-    environment:
-      MESSAGING_CONNECTION_STRING: "Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground"
-      MESSAGING_SCHEMA: "transport"
-      PERSONAL_AGENT_API_BASE_URL: "http://personalagent-api:5100"
-      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-dev-internal-api-key}"
-      WEB_ACTOR_SIGNING_KEY: "${WEB_ACTOR_SIGNING_KEY:-dev-actor-signing-key}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,11 +63,6 @@ services:
         required: false
     environment:
       PORT: "5000"
-      PERSONAL_AGENT_API_BASE_URL: "http://personalagent-api:5100"
-      MESSAGING_CONNECTION_STRING: "Host=postgres;Port=5432;Database=agentplayground;Username=agentplayground;Password=agentplayground"
-      MESSAGING_SCHEMA: "transport"
-      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-dev-internal-api-key}"
-      WEB_ACTOR_SIGNING_KEY: "${WEB_ACTOR_SIGNING_KEY:-dev-actor-signing-key}"
     ports:
       - "5000:5000"
     depends_on:

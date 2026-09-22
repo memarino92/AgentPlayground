@@ -4,9 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Moq;
 using Npgsql;
-using PersonalAgent.Configuration;
-using PersonalAgent.Models;
-using PersonalAgent.Services;
+using PersonalAgent.Api.Configuration;
+using PersonalAgent.Api.Models;
+using PersonalAgent.Api.Services;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -25,7 +25,7 @@ var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 if (string.IsNullOrWhiteSpace(key))
 {
     using var secret = JsonDocument.Parse(Environment.GetEnvironmentVariable("COACH_EVAL_SECRET_ROW") ?? throw new InvalidOperationException("Set OPENAI_API_KEY or an encrypted configuration row."));
-    key = AgentPlayground.Contracts.Configuration.PostgresConfigurationCrypto.Decrypt(secret.RootElement.GetProperty("value").GetString()!,
+    key = PersonalAgent.Contracts.Configuration.PostgresConfigurationCrypto.Decrypt(secret.RootElement.GetProperty("value").GetString()!,
         secret.RootElement.GetProperty("scope").GetString()!, "OpenAI:ApiKey", Environment.GetEnvironmentVariable("COACH_EVAL_CONFIG_KEY")!);
 }
 var models = (Environment.GetEnvironmentVariable("COACH_EVAL_MODELS") ?? "gpt-4o-mini").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -39,7 +39,7 @@ if (dataset.Version is not (1 or 2) || dataset.Cases.Length == 0 || dataset.Case
     throw new InvalidOperationException("Invalid dataset version, empty cases, or duplicate case IDs.");
 var root = Path.GetFullPath(Path.Combine(".artifacts", "coach-evals", DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ") + "-" + Guid.NewGuid().ToString("N")[..8]));
 Directory.CreateDirectory(root);
-var sources = Directory.GetFiles("PersonalAgent", "*.cs", SearchOption.AllDirectories)
+var sources = Directory.GetFiles("PersonalAgent.Api", "*.cs", SearchOption.AllDirectories)
     .Where(p => !p.Split(Path.DirectorySeparatorChar).Any(part => part is "bin" or "obj"))
     .Concat(Directory.GetFiles("scripts/CoachRetrievalEvaluation", "*.cs"))
     .Append("Directory.Packages.props").Append("scripts/CoachRetrievalEvaluation/CoachRetrievalEvaluation.csproj")

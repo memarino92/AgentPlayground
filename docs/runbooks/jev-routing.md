@@ -68,7 +68,7 @@ Before enabling live routing, verify provider access and the pinned model with s
 ## Key-free verification
 
 ```powershell
-dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj --filter "FullyQualifiedName~Jev&FullyQualifiedName!~JevRuntimeDatabaseTests"
+dotnet test PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj --filter "FullyQualifiedName~Jev&FullyQualifiedName!~JevRuntimeDatabaseTests"
 ```
 
 The synthetic Compose environment replaces the decision provider with `SyntheticToolDecisionClient`. It never contacts TypeSafe, even if a key is stored. Set mode to `DirectReadOnly` in its database settings and wait for reload, then ask “What time is it?” in a new or existing chat. The response comes from the authorized clock tool. The fake recognizes only three exact examples (clock, work-journal search and coaching-note search); all other messages select normal chat. Its choices test wiring, not model quality. Synthetic routing does not require a key or user-content consent because it is entirely local; mode still defaults Off.

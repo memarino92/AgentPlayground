@@ -1,4 +1,4 @@
-using AgentPlayground.Integrations;
+using PersonalAgent.Integrations;
 using Bunit;
 using FluentAssertions;
 using PersonalAgent.Web.Components.Integrations;

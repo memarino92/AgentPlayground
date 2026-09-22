@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using AgentPlayground.Contracts.Configuration;
+using PersonalAgent.Contracts.Configuration;
 
 namespace PersonalAgent.Worker.Configuration;
 

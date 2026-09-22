@@ -37,7 +37,7 @@ These publication checks are distinct from readiness to distribute the Android c
 - Android build: blocked by missing Android SDK API 36 (`android-36/android.jar`, XA5207). No claim of mobile runtime/release validation.
 - Production snapshot/restore, full Compose startup, provider-switch integration, and Android device flows were not executed.
 
-Existing uncommitted `AgentPlayground.Contracts.Tests.csproj` edits were preserved, and tests include those changes. Pre-existing `.opencode/package.json` and `.opencode/package-lock.json` changes were preserved in the user tooling backup and migrated dependency configuration. See [personal tooling](personal-tooling.md).
+Existing uncommitted `PersonalAgent.Contracts.Tests.csproj` edits were preserved, and tests include those changes. Pre-existing `.opencode/package.json` and `.opencode/package-lock.json` changes were preserved in the user tooling backup and migrated dependency configuration. See [personal tooling](personal-tooling.md).
 
 Reusable tooling was also removed from the repo: 95 skills now live in the shared user skills directory; OpenCode agents/plugins/Roslyn settings live in global OpenCode configuration. Original files and prior global config were archived, and 278 copied files were hash-verified. No interactive tool discovery claim is made until a fresh session loads them.
 
