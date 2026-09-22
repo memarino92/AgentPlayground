@@ -13,6 +13,10 @@ internal interface IChatModelPolicySource
 
 internal sealed class DatabaseChatModelPolicy(IntegrationDatabase Database) : IChatModelPolicySource
 {
+    private const string OpenRouterAutoId = "openrouter:openrouter/auto";
+    private const string OpenRouterAutoDisplayName = "OpenRouter Auto";
+    private const string OpenRouterDefaultMarker = "ChatModels:OpenRouterAutoDefaultInitialized";
+
     public async Task InitializeAsync(CancellationToken CancellationToken)
     {
         await using var Connection = await Database.OpenAsync(CancellationToken);
@@ -65,7 +69,59 @@ internal sealed class DatabaseChatModelPolicy(IntegrationDatabase Database) : IC
             Command.Parameters.AddWithValue("value", Value);
             await Command.ExecuteNonQueryAsync(CancellationToken);
         }
+        await PromoteOpenRouterAutoAsync(Connection, Transaction, HasTimestamp, CancellationToken);
         await Transaction.CommitAsync(CancellationToken);
+    }
+
+    private static async Task PromoteOpenRouterAutoAsync(NpgsqlConnection Connection, NpgsqlTransaction Transaction,
+        bool HasTimestamp, CancellationToken CancellationToken)
+    {
+        await using var Command = new NpgsqlCommand("""
+            SELECT EXISTS(SELECT 1 FROM app.configuration_settings
+                WHERE scope IN ('Shared', 'Api') AND lower(key) = lower(@marker))
+            """, Connection, Transaction);
+        Command.Parameters.AddWithValue("marker", OpenRouterDefaultMarker);
+        if ((bool)(await Command.ExecuteScalarAsync(CancellationToken))!) return;
+
+        Command.CommandText = """
+            SELECT key, value, is_active FROM app.configuration_settings
+            WHERE scope IN ('Shared', 'Api') AND key ~* '^ChatModels:Models:[0-9]+:Id$'
+            ORDER BY CASE WHEN scope = 'Shared' THEN 0 ELSE 1 END
+            """;
+        Command.Parameters.Clear();
+        var Models = new Dictionary<int, string>();
+        var ActiveModels = new Dictionary<int, string>();
+        await using (var Reader = await Command.ExecuteReaderAsync(CancellationToken))
+            while (await Reader.ReadAsync(CancellationToken))
+            {
+                var Segments = Reader.GetString(0).Split(':');
+                if (Segments.Length != 4 || !int.TryParse(Segments[2], out var Index)) continue;
+                Models[Index] = Reader.GetString(1);
+                if (Reader.GetBoolean(2)) ActiveModels[Index] = Reader.GetString(1);
+            }
+
+        var ExistingAuto = Models.FirstOrDefault(Model =>
+            string.Equals(Model.Value, OpenRouterAutoId, StringComparison.OrdinalIgnoreCase));
+        var AutoIndex = ExistingAuto.Value is null ? Models.Count is 0 ? 0 : Models.Keys.Max() + 1 : ExistingAuto.Key;
+        foreach (var Index in ActiveModels.Keys.Where(Index => Index != AutoIndex))
+            await UpsertAsync(Connection, Transaction, $"ChatModels:Models:{Index}:IsDefault", "false", HasTimestamp, CancellationToken);
+        await UpsertAsync(Connection, Transaction, $"ChatModels:Models:{AutoIndex}:Id", OpenRouterAutoId, HasTimestamp, CancellationToken);
+        await UpsertAsync(Connection, Transaction, $"ChatModels:Models:{AutoIndex}:DisplayName", OpenRouterAutoDisplayName, HasTimestamp, CancellationToken);
+        await UpsertAsync(Connection, Transaction, $"ChatModels:Models:{AutoIndex}:IsDefault", "true", HasTimestamp, CancellationToken);
+        await UpsertAsync(Connection, Transaction, OpenRouterDefaultMarker, "true", HasTimestamp, CancellationToken);
+    }
+
+    private static async Task UpsertAsync(NpgsqlConnection Connection, NpgsqlTransaction Transaction, string Key, string Value,
+        bool HasTimestamp, CancellationToken CancellationToken)
+    {
+        await using var Command = new NpgsqlCommand($"""
+            INSERT INTO app.configuration_settings(scope, key, value, is_secret, is_active{(HasTimestamp ? ", updated_at" : "")})
+            VALUES ('Api', @key, @value, false, true{(HasTimestamp ? ", now()" : "")})
+            ON CONFLICT (scope, key) DO UPDATE SET value = EXCLUDED.value, is_secret = false, is_active = true{(HasTimestamp ? ", updated_at = now()" : "")}
+            """, Connection, Transaction);
+        Command.Parameters.AddWithValue("key", Key);
+        Command.Parameters.AddWithValue("value", Value);
+        await Command.ExecuteNonQueryAsync(CancellationToken);
     }
 
     public async Task<ChatModelCatalogOptions> ReadAsync(CancellationToken CancellationToken)

@@ -1,6 +1,6 @@
 # 0032: Add OpenRouter and adopt provider-managed auto model routing first
 
-- Status: Accepted; first slice implemented
+- Status: Accepted; implemented
 - Recorded: 2026-09-22
 - Decision date: 2026-09-22, maintainer requested OpenRouter support in the API and an auto-model router, with Jev as a candidate
 - Evidence: `CompositeChatModelDiscovery`, `OpenRouterClientProvider`, `OpenAiAgentChatClientFactory`, and [runtime operations](../runbooks/runtime-chat-models.md)
@@ -16,7 +16,7 @@ OpenRouter exposes an OpenAI-compatible endpoint and the `openrouter/auto` model
 
 Add OpenRouter as a second provider behind the existing Microsoft.Extensions.AI and Agent Framework boundary. Qualify its public catalog IDs with `openrouter:` and strip that prefix only inside the provider factory. Discover configured providers independently, merge their inventories, and retain healthy provider results when another provider fails. Keep database model policy authoritative.
 
-Adopt `openrouter:openrouter/auto` as the first optional automatic router entry. Do not make it the default in existing databases or silently append it to administrator-owned policies. Continue using Jev for structured tool routing; defer Jev-assisted or application-owned model selection until a routing dataset can compare complete-turn quality, latency, privacy and cost.
+Adopt `openrouter:openrouter/auto` as the automatic router and default for new chats. Apply a one-time, idempotent database-policy migration that appends or reuses the qualified Auto entry, demotes earlier defaults, and records completion. The marker prevents later API restarts from overwriting a deliberate administrator choice. Provider discovery remains authoritative: when OpenRouter Auto is unavailable, the catalog selects the first available reviewed model instead. Continue using Jev for structured tool routing; defer Jev-assisted or application-owned model selection until a routing dataset can compare complete-turn quality, latency, privacy and cost.
 
 ## Alternatives
 
@@ -29,8 +29,8 @@ Adopt `openrouter:openrouter/auto` as the first optional automatic router entry.
 
 The API gains one optional credential and another external dependency. Auto routing improves operational flexibility but weakens version pinning: its downstream pool and economics can change independently of this repository. A provider inventory entry does not prove tool compatibility. Provider discovery is partially tolerant, while inference failures remain visible and do not silently switch the saved catalog selection to another provider.
 
-OpenRouter accepts prompts, history, tool schemas and tool outputs, so its data-processing and retention settings must be reviewed before private use. Cost-tier, allowed-model constraints, explicit session IDs, routed-model UI disclosure, usage accounting and live quality evaluation remain follow-ups.
+OpenRouter accepts prompts, history, tool schemas and tool outputs, so its data-processing and retention settings must be reviewed before private use. Existing conversations retain their persisted model; the new default applies to newly created conversations. Cost-tier, allowed-model constraints, explicit session IDs, routed-model UI disclosure, usage accounting and live quality evaluation remain follow-ups.
 
 ## Delivery and verification
 
-The first slice includes live-reloadable encrypted credentials, OpenAI-compatible client dispatch, qualified discovery, merged partial-failure behavior, the Auto seed for fresh policies, deployment seeding support, unit tests, and operations documentation. The follow-up Settings slice adds authenticated first-time key creation and replacement, encrypted persistence with optimistic concurrency, immediate reload feedback, and masked browser behavior. No paid live request, privacy review, downstream-model disclosure, or model-quality/cost comparison is claimed. See [runtime chat models](../runbooks/runtime-chat-models.md).
+The delivered slices include live-reloadable encrypted credentials, OpenAI-compatible client dispatch, qualified discovery, merged partial-failure behavior, authenticated Settings setup, and a one-time Auto-default policy migration for fresh and existing databases. Tests cover migration idempotence, administrator overrides, provider availability, credential persistence, and browser behavior. No paid live request, privacy review, downstream-model disclosure, or model-quality/cost comparison is claimed. See [runtime chat models](../runbooks/runtime-chat-models.md).
