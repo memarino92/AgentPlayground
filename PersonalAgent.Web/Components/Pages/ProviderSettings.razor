@@ -49,7 +49,7 @@
                         <small>Paste the key from your OpenRouter account. The saved value is never displayed again.</small>
                     </div>
                     <ValidationMessage For="() => Model.ApiKey" />
-                    <div class="lifecycle-note"><strong>What happens next</strong><span>The API reloads the credential immediately for new discovery and chat requests. OpenAI remains separate for embeddings and direct capabilities.</span></div>
+                    <div class="lifecycle-note"><strong>What happens next</strong><span>The API reloads the credential immediately. OpenRouter Auto becomes the default for new chats when provider discovery reports it available; existing chats keep their saved model. OpenAI remains separate for embeddings and direct capabilities.</span></div>
                     <div class="actions">
                         <button class="button button--primary" type="submit">@(Busy ? "Saving securely…" : OpenRouterSetting is null ? "Connect OpenRouter" : "Replace API key")</button>
                         <button class="button button--secondary" type="button" disabled="@Busy" @onclick="RefreshAsync">Discard changes</button>

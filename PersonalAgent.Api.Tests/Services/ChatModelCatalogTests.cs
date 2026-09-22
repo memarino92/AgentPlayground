@@ -25,7 +25,7 @@ public class ChatModelCatalogTests
         Clock.Advance(300);
         var Models = await Catalog.GetModelsAsync();
         Models.Select(Value => Value.Id).Should().BeEquivalentTo(["gpt-4o-mini", .. NewModels]);
-        Models.Should().ContainSingle(Value => Value.IsDefault).Which.Id.Should().Be("gpt-4o-mini");
+        Models.Should().ContainSingle(Value => Value.IsDefault).Which.Id.Should().Be("openrouter:openrouter/auto");
         (await Catalog.FindModelAsync("gpt-6-astra"))!.Id.Should().Be("gpt-6-astra");
         Source.Verify(Value => Value.GetModelIdsAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }

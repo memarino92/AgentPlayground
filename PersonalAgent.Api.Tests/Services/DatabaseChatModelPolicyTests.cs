@@ -15,13 +15,14 @@ public sealed class DatabaseChatModelPolicyTests(PostgresVectorFixture Fixture) 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Seed_IsInsertOnly_AndDoesNotRestoreDeletedModels(bool HasTimestamp)
+    public async Task SeedAndDefaultMigration_AreInsertOnly_AndDoNotRestoreDeletedModels(bool HasTimestamp)
     {
         var Database = await ResetAsync(HasTimestamp);
         var Policy = new DatabaseChatModelPolicy(Database);
         await Policy.InitializeAsync(default);
-        (await Policy.ReadAsync(default)).Models.Select(Model => Model.Id)
-            .Should().Contain(["gpt-6-astra", "openrouter:openrouter/auto"]);
+        var Initial = await Policy.ReadAsync(default);
+        Initial.Models.Select(Model => Model.Id).Should().Contain(["gpt-6-astra", "openrouter:openrouter/auto"]);
+        Initial.Models.Should().ContainSingle(Model => Model.IsDefault).Which.Id.Should().Be("openrouter:openrouter/auto");
         var Store = new DatabaseSettingsStore(Database);
         var Row = (await Store.ReadAsync(default)).Single(Value => Value.Key == "ChatModels:Models:0:Id");
         await Store.SaveAsync(new([new(Row.Scope, Row.Key, Row.Version, "owner-selected", true)]), default);
@@ -33,7 +34,7 @@ public sealed class DatabaseChatModelPolicyTests(PostgresVectorFixture Fixture) 
     }
 
     [Fact]
-    public async Task ExistingPolicy_PreservesScopePrecedence_AndInactiveRowsPreventReseeding()
+    public async Task ExistingPolicy_PreservesScopePrecedence_AndReceivesOpenRouterAutoDefault()
     {
         var Database = await ResetAsync(false);
         await ExecuteAsync("""
@@ -47,11 +48,40 @@ public sealed class DatabaseChatModelPolicyTests(PostgresVectorFixture Fixture) 
         var Policy = new DatabaseChatModelPolicy(Database);
         await Policy.InitializeAsync(default);
         var Options = await Policy.ReadAsync(default);
-        Options.Models.Should().ContainSingle().Which.Id.Should().Be("api-model");
+        Options.Models.Select(Model => Model.Id).Should().BeEquivalentTo(["api-model", "openrouter:openrouter/auto"]);
+        Options.Models.Should().ContainSingle(Model => Model.IsDefault).Which.Id.Should().Be("openrouter:openrouter/auto");
         Options.RefreshIntervalSeconds.Should().Be(42);
         await ExecuteAsync("UPDATE app.configuration_settings SET is_active = false WHERE scope IN ('Shared','Api') AND key LIKE 'ChatModels:Models:%'");
         await new DatabaseChatModelPolicy(Database).InitializeAsync(default);
         (await Policy.ReadAsync(default)).Models.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OpenRouterDefaultMigration_RunsOnce_AndPreservesLaterAdministratorChoice()
+    {
+        var Database = await ResetAsync(true);
+        await ExecuteAsync("""
+            INSERT INTO app.configuration_settings(scope,key,value,is_secret,is_active,updated_at) VALUES
+                ('Api','ChatModels:Models:0:Id','explicit-model',false,true,now()),
+                ('Api','ChatModels:Models:0:DisplayName','Explicit model',false,true,now()),
+                ('Api','ChatModels:Models:0:IsDefault','true',false,true,now());
+            """);
+        var Policy = new DatabaseChatModelPolicy(Database);
+
+        await Policy.InitializeAsync(default);
+
+        var Migrated = await Policy.ReadAsync(default);
+        Migrated.Models.Should().ContainSingle(Model => Model.IsDefault).Which.Id.Should().Be("openrouter:openrouter/auto");
+        await ExecuteAsync("""
+            UPDATE app.configuration_settings SET value = 'true'
+                WHERE scope = 'Api' AND key = 'ChatModels:Models:0:IsDefault';
+            UPDATE app.configuration_settings SET value = 'false'
+                WHERE scope = 'Api' AND value = 'true' AND key LIKE 'ChatModels:Models:%:IsDefault' AND key <> 'ChatModels:Models:0:IsDefault';
+            """);
+
+        await new DatabaseChatModelPolicy(Database).InitializeAsync(default);
+
+        (await Policy.ReadAsync(default)).Models.Should().ContainSingle(Model => Model.IsDefault).Which.Id.Should().Be("explicit-model");
     }
 
     [Fact]
@@ -76,12 +106,13 @@ public sealed class DatabaseChatModelPolicyTests(PostgresVectorFixture Fixture) 
         var Store = new DatabaseSettingsStore(Database);
         var Row = (await Store.ReadAsync(default)).Single(Value => Value.Key == "ChatModels:Models:0:Id");
         await Store.SaveAsync(new([new(Row.Scope, Row.Key, Row.Version, "new-model", true)]), default);
-        (await Catalog.GetModelsAsync()).Should().ContainSingle().Which.Id.Should().Be("new-model");
+        (await Catalog.GetModelsAsync()).Select(Model => Model.Id)
+            .Should().BeEquivalentTo(["new-model", "openrouter:openrouter/auto"]);
         Discovery.Verify(Value => Value.GetModelIdsAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
         Row = (await Store.ReadAsync(default)).Single(Value => Value.Key == "ChatModels:Models:0:Id");
         await Store.SaveAsync(new([new(Row.Scope, Row.Key, Row.Version, null, false)]), default);
-        (await Catalog.GetModelsAsync()).Should().BeEmpty();
-        await Catalog.Invoking(Value => Value.GetDefaultModelAsync()).Should().ThrowAsync<InvalidOperationException>();
+        (await Catalog.GetModelsAsync()).Should().ContainSingle().Which.Id.Should().Be("openrouter:openrouter/auto");
+        (await Catalog.GetDefaultModelAsync()).Id.Should().Be("openrouter:openrouter/auto");
     }
 
     [Theory]
