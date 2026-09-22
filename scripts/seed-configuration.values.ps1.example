@@ -11,6 +11,7 @@ $ActorSigningKey = '<shared actor signing key>'
 $PersonalAgentApiBaseUrl = '<Railway private API URL, for example http://personalagent.railway.internal:8080>'
 
 $OpenAiApiKey = '<OpenAI API key>'
+$OpenRouterApiKey = '' # Optional; enables provider-qualified OpenRouter models such as openrouter:openrouter/auto.
 $GitHubClientId = '<GitHub OAuth client id>'
 $GitHubClientSecret = '<GitHub OAuth client secret>'
 $GitHubAllowedUsers = '<comma-separated GitHub owner logins>'

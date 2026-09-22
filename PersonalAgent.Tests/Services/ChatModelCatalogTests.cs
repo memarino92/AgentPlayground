@@ -16,7 +16,7 @@ public class ChatModelCatalogTests
         var Policy = DatabaseChatModelPolicy.LoadSeed();
         var Clock = new TestClock();
         var Source = new Mock<IChatModelDiscovery>();
-        string[] NewModels = ["gpt-5.5", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-6-astra"];
+        string[] NewModels = ["gpt-5.5", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-6-astra", "openrouter:openrouter/auto"];
         Source.SetupSequence(Value => Value.GetModelIdsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(["gpt-4o-mini"])
             .ReturnsAsync(["gpt-4o-mini", .. NewModels, "text-embedding-3-small", "gpt-realtime", "unknown-model"]);

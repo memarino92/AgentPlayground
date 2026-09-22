@@ -1,24 +1,21 @@
 using AgentPlayground.Contracts.Messaging.Responses;
-using Microsoft.Extensions.Options;
-using OpenAI;
-using OpenAI.Chat;
-using PersonalAgent.Configuration;
+using Microsoft.Extensions.AI;
 using System.Text.Json;
 
 namespace PersonalAgent.Services;
 
 internal class WorkJournalParsingService : IWorkJournalParsingService
 {
-    private readonly OpenAiClientProvider _clients;
+    private readonly IAgentChatClientFactory _chatClients;
     private readonly IChatModelCatalog _chatModelCatalog;
     private readonly ILogger<WorkJournalParsingService> _logger;
 
     public WorkJournalParsingService(
-        IOptions<ApiKeyOptions> apiKeyOptions,
+        IAgentChatClientFactory chatClients,
         IChatModelCatalog chatModelCatalog,
         ILogger<WorkJournalParsingService> logger)
     {
-        _clients = new(apiKeyOptions);
+        _chatClients = chatClients;
         _chatModelCatalog = chatModelCatalog;
         _logger = logger;
     }
@@ -55,16 +52,15 @@ internal class WorkJournalParsingService : IWorkJournalParsingService
         _logger.LogInformation("Parsing work journal with model {ModelId}", model.Id);
         var response = await AgentPlayground.Integrations.AiTelemetry.RunAsync("journal.parse", "LLM", async () =>
         {
-            var completion = await _clients.Current.GetChatClient(model.Id).CompleteChatAsync(
-                [new UserChatMessage(prompt)],
-                new ChatCompletionOptions { ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() },
-                cancellationToken);
+            var completion = await _chatClients.Create(model.Id).GetResponseAsync(
+                [new ChatMessage(ChatRole.User, prompt)],
+                new ChatOptions { ResponseFormat = ChatResponseFormat.Json }, cancellationToken);
             AgentPlayground.Integrations.AiTelemetry.SetUsage(System.Diagnostics.Activity.Current,
-                completion.Value.Usage?.InputTokenCount, completion.Value.Usage?.OutputTokenCount, completion.Value.Usage?.TotalTokenCount);
+                completion.Usage?.InputTokenCount, completion.Usage?.OutputTokenCount, completion.Usage?.TotalTokenCount);
             return completion;
         }, model.Id);
 
-        var json = response.Value.Content[0].Text;
+        var json = response.Text;
         using var document = JsonDocument.Parse(json);
         var entries = new List<ParsedWorkJournalEntry>();
 

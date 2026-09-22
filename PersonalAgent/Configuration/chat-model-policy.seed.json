@@ -36,6 +36,10 @@
     {
       "Id": "gpt-6-astra",
       "DisplayName": "GPT-6 Astra"
+    },
+    {
+      "Id": "openrouter:openrouter/auto",
+      "DisplayName": "OpenRouter Auto"
     }
   ]
 }
