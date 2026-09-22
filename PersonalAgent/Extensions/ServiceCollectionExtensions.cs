@@ -118,6 +118,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<WorkJournalParsingService>();
         services.AddSingleton<IWorkJournalParsingService>(sp => sp.GetRequiredService<WorkJournalParsingService>());
         services.AddSingleton<IAgentChatClientFactory, OpenAiAgentChatClientFactory>();
+        services.AddSingleton(sp => PersonalAgentSkills.Create(sp.GetRequiredService<ILoggerFactory>()));
         services.AddSingleton<WorkJournalService>();
         services.AddSingleton<CoachCheckinService>();
         services.AddSingleton<ICoachEvidenceService, CoachEvidenceService>();

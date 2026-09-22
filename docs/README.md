@@ -15,6 +15,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Synthetic demo](runbooks/synthetic-demo.md): start API/Web/Worker without private data or provider accounts.
 - [Snapshot commands](runbooks/snapshot-commands.md): implemented export and guarded local restore.
 - [Adding agent tools](runbooks/adding-agent-tools.md): register a capability with shared metadata, binding, and authorization.
+- [Runtime agent skills](runbooks/agent-skills.md): package conditional domain guidance without bypassing authorized tools.
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
 - [Navigation and playback](runbooks/navigation.md): query state, draft chats, saved models and shared recording views.
 - [Scheduled jobs](runbooks/scheduled-jobs.md): authorization, dashboard, cancellation and conservative recovery.
@@ -61,6 +62,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0028: Journal file checkpoints](decisions/0028-journal-file-checkpoints.md) | Accepted; implemented | Skip downloads and model parsing for unchanged Git blobs; checkpoint successful files atomically with entry writes |
 | [0029: Continuous conversation](decisions/0029-continuous-conversation.md) | Accepted; first slice implemented | One default chat, bounded contextual recall and trusted interactive cards |
 | [0030: Streaming chat and agent-managed scheduled jobs](decisions/0030-streaming-chat-and-agent-job-management.md) | Accepted; implemented | Stream provider responses to Web and let the authorized agent inspect, update and cancel durable jobs |
+| [0031: Runtime Agent Framework skills](decisions/0031-runtime-agent-skills.md) | Accepted; first skill implemented | Progressively disclose coaching-answer guidance while retaining tool authorization |
 
 ## Working agreement
 

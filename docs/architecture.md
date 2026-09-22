@@ -50,6 +50,8 @@ The shared recording view and evidence drawer provide timestamp seeking and opti
 
 Coaching retrieval uses filename-derived recording dates, latest-call scope, recency preference and utterance evidence, with lexical recovery for missing exercise tags. Synthetic regressions and an opt-in live-model comparison runner exist; held-out quality evaluation and the Learning Lab proposal/promotion UI remain future work. See [evaluation evidence](runbooks/coach-retrieval-evaluation.md).
 
+The API packages trusted, instruction-only Agent Framework skills for conditional domain procedures. `coach-answer-grounding` is advertised by name and description on each run and loaded on demand for coaching questions. Skills guide use of the existing server-scoped tools; they do not define executable business operations or alter authorization. No skill script runner is configured. See [decision 0031](decisions/0031-runtime-agent-skills.md) and [skill operations](runbooks/agent-skills.md).
+
 Do not rename every project or move all infrastructure in one pass. Root Dockerfiles are actively used by Compose/Railway scripts. Keep the small shared PostgreSQL deployment until operational evidence calls for more infrastructure.
 
 ## Areas to improve deliberately

@@ -23,6 +23,7 @@ internal partial class AgentChatService
     private readonly IAgentRequestRouter? _requestRouter;
     private readonly IConversationContextStore? _conversationStore;
     private readonly ConversationContextBuilder? _contextBuilder;
+    private readonly AgentSkillsProvider? _skillsProvider;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
 
     public AgentChatService(
@@ -37,7 +38,8 @@ internal partial class AgentChatService
         IAgentChatClientFactory? chatClients = null,
         IAgentRequestRouter? requestRouter = null,
         IConversationContextStore? conversationStore = null,
-        ConversationContextBuilder? contextBuilder = null)
+        ConversationContextBuilder? contextBuilder = null,
+        AgentSkillsProvider? skillsProvider = null)
     {
         _chatClients = chatClients ?? new OpenAiAgentChatClientFactory(apiKeyOptions);
         _chatModelCatalog = chatModelCatalog;
@@ -50,6 +52,7 @@ internal partial class AgentChatService
         _requestRouter = requestRouter;
         _conversationStore = conversationStore;
         _contextBuilder = contextBuilder;
+        _skillsProvider = skillsProvider;
     }
 
     public async Task<(string SessionId, string ModelId)> CreateSessionAsync(string profileId, string modelId)
@@ -325,9 +328,6 @@ internal partial class AgentChatService
             When asked about past work, past events, or anything related to the user's work journal, use the search_work_journal tool to find relevant information.
             If the user asks to sync, update, or fetch their journal, you MUST call the sync_work_journal tool.
 
-            When the user asks about strongman coaching calls, cues by exercise, or prior check-in guidance, use search_coach_checkins. Athlete scope is applied by the server.
-            For most recent, latest, or last call questions, set recency=latest; do not silently substitute older calls. For general advice use recency=recent; for historical comparisons use recency=relevance. Answer the specific coaching question with a concise paraphrase. Cite the coach utterance that actually states the cue, not an athlete acknowledgement or a neighboring turn. Do not add exercise-phase details that the cited utterance does not support. Cite exact Call evidence links in the first answer. Copy the supplied /evidence/... relative URL verbatim; never invent an evidence hostname or convert the path to a domain. Use recording dates, not upload dates. A chunk can cross exercise transitions: only attribute a cue when its utterance and context support that exercise.
-            Use a focused exercise/cue query. If the user supplies a recording filename, search again with that exact fileName and the exercise/cue query. A failed search is not proof the coach never gave the advice; explain the retrieval limit without speculating that the recording was not captured. Only attribute advice supported by the returned excerpts.
             """);
 
         if (webToolCount > 0)
@@ -352,16 +352,22 @@ internal partial class AgentChatService
             Keep titles under 200 characters, details under 1500, lists to 20 items and choices to 6. Do not use cards for ordinary conversational answers.
             """);
 
+        var options = new ChatClientAgentOptions
+        {
+            Name = "PersonalAgent",
+            Description = "Personal agent that can publish follow-up messages to the shared event bus and query the user's work journal.",
+            ChatOptions = new ChatOptions
+            {
+                Instructions = instructions.ToString(),
+                Tools = [.. tools.Select(Tool => Tool.Function)]
+            },
+            AIContextProviders = _skillsProvider is null ? [] : [_skillsProvider]
+        };
+
         return _chatClients.Create(modelId)
             .AsBuilder()
             .UseFunctionInvocation()
-            .BuildAIAgent(
-                instructions: instructions.ToString(),
-                name: "PersonalAgent",
-                description: "Personal agent that can publish follow-up messages to the shared event bus and query the user's work journal.",
-                tools: [.. tools.Select(Tool => Tool.Function)],
-                loggerFactory: _loggerFactory,
-                services: _serviceProvider);
+            .BuildAIAgent(options, _loggerFactory, _serviceProvider);
     }
 
     private static void ValidateAccess(AgentAccessContext access)
