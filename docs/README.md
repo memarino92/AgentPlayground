@@ -60,6 +60,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0027: Full tool routing](decisions/0027-full-tool-routing.md) | Accepted; implemented | Jev selection and opt-in direct dispatch across local and Tavily tools, with routing outcome logs |
 | [0028: Journal file checkpoints](decisions/0028-journal-file-checkpoints.md) | Accepted; implemented | Skip downloads and model parsing for unchanged Git blobs; checkpoint successful files atomically with entry writes |
 | [0029: Continuous conversation](decisions/0029-continuous-conversation.md) | Accepted; first slice implemented | One default chat, bounded contextual recall and trusted interactive cards |
+| [0030: Streaming chat and agent-managed scheduled jobs](decisions/0030-streaming-chat-and-agent-job-management.md) | Accepted; implemented | Stream provider responses to Web and let the authorized agent inspect, update and cancel durable jobs |
 
 ## Working agreement
 

@@ -73,8 +73,10 @@
                               SelectedModelIdChanged="HandleSelectedModelChanged"
                               Models="availableModels"
                               IsBusy="isBusy"
+                              IsSending="isSendingMessage"
                               OnKeyDown="HandleKeyDown"
-                              OnSendMessage="SendMessage" />
+                              OnSendMessage="SendMessage"
+                              OnStop="StopResponse" />
                 }
 
                 <div class="chat-panel__footer">

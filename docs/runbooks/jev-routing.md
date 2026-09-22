@@ -6,7 +6,7 @@ Implemented 2026-09-19: an API-owned Choice adapter and pre-chat routing seam. M
 
 After session ownership validation, the API binds the current authorized tools and routes the latest user message before creating the chat client or retrieving semantic memory. Scheduled tasks retain their existing path. Only local catalog descriptions, application-owned descriptions for known Tavily tools, their function names and the current message go to TypeSafe; no stored transcript, remembered content, source records, subject identifiers or remote MCP descriptions/schemas are included. A current message can itself contain private information.
 
-Selection covers all 12 currently registered tools when enabled for the actor: mobile push, work-journal sync/search, coaching search, notification scheduling, agent-task scheduling, clock, and Tavily search/extract/crawl/map/research. Unknown remote tools remain available to chat but require reviewed routing metadata in `JevToolRoutingCatalog` before inclusion in Jev choices. Infrastructure integrations such as Sentry, telemetry and transcription do not expose new administrative chat tools.
+Selection covers all 16 currently registered tools when enabled for the actor: mobile push, work-journal sync/search, coaching search, notification scheduling, agent-task scheduling, scheduled-job list/inspect/update/cancel, clock, and Tavily search/extract/crawl/map/research. Unknown remote tools remain available to chat but require reviewed routing metadata in `JevToolRoutingCatalog` before inclusion in Jev choices. Infrastructure integrations such as Sentry, telemetry and transcription do not expose new administrative chat tools.
 
 | Mode | Behavior |
 | --- | --- |

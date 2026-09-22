@@ -25,6 +25,10 @@ internal static class AgentToolKeys
     public const string SearchCoachCheckins = "Local:search_coach_checkins";
     public const string ScheduleNotification = "Local:schedule_notification";
     public const string ScheduleAgentTask = "Local:schedule_agent_task";
+    public const string ListScheduledJobs = "Local:list_scheduled_jobs";
+    public const string GetScheduledJob = "Local:get_scheduled_job";
+    public const string UpdateScheduledJob = "Local:update_scheduled_job";
+    public const string CancelScheduledJob = "Local:cancel_scheduled_job";
     public const string GetCurrentDateTime = "Local:get_current_date_time";
 
     public static string Tavily(string name) => $"TavilyMcp:{name}";

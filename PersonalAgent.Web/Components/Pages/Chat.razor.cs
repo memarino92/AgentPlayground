@@ -44,6 +44,7 @@ public partial class Chat
     private bool isUpdatingCard;
     private bool hasInitialized;
     private string? notice;
+    private CancellationTokenSource? sendCancellation;
 
     private bool isBusy => !hasInitialized || isLoadingHistory || isSendingMessage || isCreatingSession || isChangingModel || isUpdatingCard;
 
@@ -117,13 +118,21 @@ public partial class Chat
         var userMessage = currentMessage;
         currentMessage = string.Empty;
         messages.Add(new ConversationMessage("user", userMessage));
+        messages.Add(new ConversationMessage("assistant", string.Empty));
         shouldScrollToBottom = true;
+        sendCancellation = new CancellationTokenSource();
         isSendingMessage = true;
         await InvokeAsync(StateHasChanged);
 
         try
         {
-            var response = await ApiClient.SendConversationMessageAsync(sendingSessionId, sendingProfileId, userMessage);
+            var response = await ApiClient.SendConversationMessageStreamingAsync(sendingSessionId, sendingProfileId, userMessage, async Delta =>
+            {
+                if (sessionId != sendingSessionId || messages.Count == 0 || messages[^1].Role != "assistant") return;
+                messages[^1] = messages[^1] with { Content = messages[^1].Content + Delta };
+                shouldScrollToBottom = true;
+                await InvokeAsync(StateHasChanged);
+            }, sendCancellation.Token);
             if (sessionId == sendingSessionId)
             {
                 messages = [.. response.Messages];
@@ -131,20 +140,31 @@ public partial class Chat
                 shouldScrollToBottom = true;
             }
         }
+        catch (OperationCanceledException) when (sendCancellation?.IsCancellationRequested == true)
+        {
+            if (sessionId == sendingSessionId && messages.Count > 0 && messages[^1].Role == "assistant" && string.IsNullOrEmpty(messages[^1].Content))
+                messages.RemoveAt(messages.Count - 1);
+            notice = "Response stopped.";
+        }
         catch (Exception ex)
         {
             if (sessionId == sendingSessionId)
             {
-                if (messages.Count > 0) messages.RemoveAt(messages.Count - 1);
+                if (messages.Count > 0 && messages[^1].Role == "assistant") messages.RemoveAt(messages.Count - 1);
+                if (messages.Count > 0 && messages[^1].Role == "user") messages.RemoveAt(messages.Count - 1);
                 currentMessage = userMessage;
                 errorMessage = ex.Message;
             }
         }
         finally
         {
+            sendCancellation?.Dispose();
+            sendCancellation = null;
             isSendingMessage = false;
         }
     }
+
+    private void StopResponse() => sendCancellation?.Cancel();
 
     private Task ResetSelectionAsync()
     {
@@ -319,7 +339,12 @@ public partial class Chat
         catch (Exception ex) { await DispatchExceptionAsync(ex); }
     }
 
-    public void Dispose() => NavigationManager.LocationChanged -= HandleLocationChanged;
+    public void Dispose()
+    {
+        sendCancellation?.Cancel();
+        sendCancellation?.Dispose();
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+    }
 
     private async Task LoadSessionsAsync(bool append = false)
     {

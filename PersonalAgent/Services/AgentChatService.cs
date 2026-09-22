@@ -137,9 +137,15 @@ internal partial class AgentChatService
 
     public Task<string?> SendMessageAsync(string sessionId, AgentAccessContext access, string message, CancellationToken cancellationToken = default)
         => AgentPlayground.Integrations.AiTelemetry.RunAsync("agent.run", "AGENT",
-            () => SendMessageCoreAsync(sessionId, access, message, cancellationToken));
+            () => SendMessageCoreAsync(sessionId, access, message, null, cancellationToken));
 
-    private async Task<string?> SendMessageCoreAsync(string sessionId, AgentAccessContext access, string message, CancellationToken cancellationToken)
+    public Task<string?> SendMessageStreamingAsync(string SessionId, AgentAccessContext Access, string Message,
+        Func<string, CancellationToken, ValueTask> OnDelta, CancellationToken CancellationToken = default)
+        => AgentPlayground.Integrations.AiTelemetry.RunAsync("agent.run", "AGENT",
+            () => SendMessageCoreAsync(SessionId, Access, Message, OnDelta, CancellationToken));
+
+    private async Task<string?> SendMessageCoreAsync(string sessionId, AgentAccessContext access, string message,
+        Func<string, CancellationToken, ValueTask>? OnDelta, CancellationToken cancellationToken)
     {
         ValidateAccess(access);
         if (!Guid.TryParse(sessionId, out var parsedSessionId))
@@ -179,6 +185,7 @@ internal partial class AgentChatService
                 ? await _requestRouter.RouteAsync(message, tools, cancellationToken) : new PreChatRoute();
             if (route.Response is { } directResponse)
             {
+                if (OnDelta is not null) await OnDelta(directResponse, cancellationToken);
                 var saved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, directResponse, persistedSession.SessionStateJson, cancellationToken);
                 return saved ? directResponse : null;
             }
@@ -202,10 +209,29 @@ internal partial class AgentChatService
 
             messages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, message));
 
-            var response = await agent.RunAsync(messages, session, options: null, cancellationToken);
-            var responseText = CoachEvidenceLinks.Normalize(response.ToString(), response.Messages
-                .SelectMany(Message => Message.Contents).OfType<FunctionResultContent>()
-                .Select(Result => Result.Result?.ToString() ?? string.Empty));
+            string responseText;
+            if (OnDelta is null)
+            {
+                var response = await agent.RunAsync(messages, session, options: null, cancellationToken);
+                responseText = CoachEvidenceLinks.Normalize(response.ToString(), response.Messages
+                    .SelectMany(Message => Message.Contents).OfType<FunctionResultContent>()
+                    .Select(Result => Result.Result?.ToString() ?? string.Empty));
+            }
+            else
+            {
+                var Builder = new StringBuilder();
+                var Results = new List<string>();
+                await foreach (var Update in agent.RunStreamingAsync(messages, session, options: null, cancellationToken))
+                {
+                    foreach (var Result in Update.Contents.OfType<FunctionResultContent>())
+                        Results.Add(Result.Result?.ToString() ?? string.Empty);
+                    var Delta = Update.ToString();
+                    if (string.IsNullOrEmpty(Delta)) continue;
+                    Builder.Append(Delta);
+                    await OnDelta(Delta, cancellationToken);
+                }
+                responseText = CoachEvidenceLinks.Normalize(Builder.ToString(), Results);
+            }
             var Presentation = new AgentPlayground.Contracts.ChatPresentation { Sources = Context?.Sources ?? [] };
             if (sessionState.IsContinuous)
             {

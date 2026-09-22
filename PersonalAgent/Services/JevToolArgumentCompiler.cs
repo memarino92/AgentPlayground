@@ -59,6 +59,30 @@ internal static class JevToolArgumentCompiler
             Arguments["fileName"] = null;
             Arguments["recency"] = "recent";
         }
+        else if (Key == AgentToolKeys.ListScheduledJobs && Match(Text, @"list my scheduled jobs[.!]?").Success)
+        {
+            Arguments["status"] = null;
+            Arguments["before"] = null;
+        }
+        else if (Key == AgentToolKeys.GetScheduledJob && JobId(Text, @"show scheduled job (?<id>[0-9a-f-]{36})[.!]?", out var GetId))
+            Arguments["jobId"] = GetId;
+        else if (Key == AgentToolKeys.CancelScheduledJob && JobId(Text, @"cancel scheduled job (?<id>[0-9a-f-]{36})[.!]?", out var CancelId))
+            Arguments["jobId"] = CancelId;
+        else if (Key == AgentToolKeys.UpdateScheduledJob)
+        {
+            var Update = Match(Text, @"update scheduled job (?<id>[0-9a-f-]{36}) instruction: (?<value>.+)");
+            if (!Update.Success || !Guid.TryParse(Update.Groups["id"].Value, out var UpdateId)
+                || !Payload(Update.Groups["value"].Value)) return false;
+            Arguments["jobId"] = UpdateId;
+            Arguments["instruction"] = Update.Groups["value"].Value;
+            Arguments["title"] = null;
+            Arguments["body"] = null;
+            Arguments["delay"] = null;
+            Arguments["executeAt"] = null;
+            Arguments["when"] = null;
+            Arguments["timeZoneId"] = null;
+            Arguments["notifyOnCompletion"] = null;
+        }
         else if (Tool.Source == "TavilyMcp" && Key == AgentToolKeys.Tavily(Tool.Function.Name))
         {
             switch (Tool.Function.Name)
@@ -98,6 +122,12 @@ internal static class JevToolArgumentCompiler
     private static bool Payload(string Value) => !string.IsNullOrWhiteSpace(Value) && Value.Length <= 4000
         && !Regex.IsMatch(Value, @"\b(?:and then|then|instead|unless|but first)\b|[\r\n]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 
+    private static bool JobId(string Text, string Pattern, out Guid Id)
+    {
+        var Result = Match(Text, Pattern);
+        return Guid.TryParse(Result.Groups["id"].Value, out Id) && Result.Success;
+    }
+
     private static bool Url(string Text, string Verb, out string Value)
     {
         Value = "";
@@ -134,6 +164,8 @@ internal static class JevToolArgumentCompiler
             var Valid = Property.Name switch
             {
                 "description" or "title" or "default" => true,
+                "format" => Property.Value.GetString() == "uuid" && Value.ValueKind == JsonValueKind.String
+                    && Guid.TryParse(Value.GetString(), out _),
                 "type" => Property.Value.ValueKind == JsonValueKind.Array
                     ? Property.Value.EnumerateArray().Any(Type => IsType(Type.GetString(), Value)) : IsType(Property.Value.GetString(), Value),
                 "enum" => Property.Value.EnumerateArray().Any(Item => JsonElement.DeepEquals(Item, Value)),

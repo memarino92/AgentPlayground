@@ -67,4 +67,25 @@ public class ChatComposerTests : TestContext
         cut.SetParametersAndRender(parameters => parameters.Add(component => component.CurrentMessage, string.Empty));
         cut.Find("textarea").TextContent.Should().BeEmpty();
     }
+
+    [Fact]
+    public void Composer_ShowsStopActionWhileStreaming()
+    {
+        var Stopped = false;
+        var Cut = RenderComponent<ChatComposer>(Parameters => Parameters
+            .Add(Component => Component.CurrentMessage, string.Empty)
+            .Add(Component => Component.SelectedModelId, "model")
+            .Add(Component => Component.Models, new List<AvailableChatModelResponse> { new("model", "Model", true) })
+            .Add(Component => Component.IsBusy, true)
+            .Add(Component => Component.IsSending, true)
+            .Add(Component => Component.CurrentMessageChanged, EventCallback.Factory.Create<string>(this, _ => Task.CompletedTask))
+            .Add(Component => Component.SelectedModelIdChanged, EventCallback.Factory.Create<string>(this, _ => Task.CompletedTask))
+            .Add(Component => Component.OnKeyDown, EventCallback.Factory.Create<KeyboardEventArgs>(this, _ => Task.CompletedTask))
+            .Add(Component => Component.OnSendMessage, EventCallback.Factory.Create(this, () => Task.CompletedTask))
+            .Add(Component => Component.OnStop, EventCallback.Factory.Create(this, () => Stopped = true)));
+
+        Cut.Find("button").TextContent.Should().Be("Stop");
+        Cut.Find("button").Click();
+        Stopped.Should().BeTrue();
+    }
 }

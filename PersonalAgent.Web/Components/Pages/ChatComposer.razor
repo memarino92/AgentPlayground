@@ -21,7 +21,14 @@
         }
     </select>
     </details>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="composer__send" OnClick="OnSendMessage" Disabled="@(IsBusy || Models.Count == 0 || string.IsNullOrWhiteSpace(CurrentMessage))">Send</MudButton>
+    @if (IsSending)
+    {
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" Class="composer__send" OnClick="OnStop">Stop</MudButton>
+    }
+    else
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="composer__send" OnClick="OnSendMessage" Disabled="@(IsBusy || Models.Count == 0 || string.IsNullOrWhiteSpace(CurrentMessage))">Send</MudButton>
+    }
 </div>
 
 @code {
@@ -31,10 +38,12 @@
     [Parameter] public required string SelectedModelId { get; set; }
     [Parameter] public required List<AvailableChatModelResponse> Models { get; set; }
     [Parameter] public required bool IsBusy { get; set; }
+    [Parameter] public bool IsSending { get; set; }
     [Parameter] public required EventCallback<string> CurrentMessageChanged { get; set; }
     [Parameter] public required EventCallback<string> SelectedModelIdChanged { get; set; }
     [Parameter] public required EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
     [Parameter] public required EventCallback OnSendMessage { get; set; }
+    [Parameter] public EventCallback OnStop { get; set; }
 
     private Task HandleInput() => CurrentMessageChanged.InvokeAsync(Draft);
 

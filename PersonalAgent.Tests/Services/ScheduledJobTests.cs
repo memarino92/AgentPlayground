@@ -37,13 +37,41 @@ public class ScheduledJobTests(PostgresVectorFixture Database) : IClassFixture<P
 
     private static ScheduledJobExecutionService Execution(ScheduledJobStore Store, FakeRunner Runner, Mock<IScheduledActorPolicy>? Policy = null)
     {
+        var Auth = Authorization(Policy);
+        return new(Store, Auth, Runner, NullLogger<ScheduledJobExecutionService>.Instance);
+    }
+
+    private static ScheduledJobAuthorization Authorization(Mock<IScheduledActorPolicy>? Policy = null)
+    {
         Policy ??= new Mock<IScheduledActorPolicy>();
         Policy.Setup(P => P.ResolveRoleAsync("owner", null, It.IsAny<CancellationToken>())).ReturnsAsync("Owner");
         var Permissions = new Mock<IToolAccessStore>();
         Permissions.Setup(P => P.GetRolePermissionsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, bool>());
         var Registry = new AgentToolRegistry(Mock.Of<ITavilyMcpToolProvider>(P => P.GetTools() == Array.Empty<Microsoft.Extensions.AI.AIFunction>()));
-        var Auth = new ScheduledJobAuthorization(Policy.Object, Mock.Of<ICoachAssignmentStore>(), new ToolAccessService(Permissions.Object, Registry));
-        return new(Store, Auth, Runner, NullLogger<ScheduledJobExecutionService>.Instance);
+        return new(Policy.Object, Mock.Of<ICoachAssignmentStore>(), new ToolAccessService(Permissions.Object, Registry));
+    }
+
+    [Fact]
+    public async Task AgentManagementTools_ListInspectUpdateAndCancelPendingJob()
+    {
+        var (Store, _) = await SetupAsync();
+        var Original = Job() with { ExecuteAt = DateTimeOffset.UtcNow.AddHours(2) };
+        await Store.CreateAsync(Original, default);
+        var Runner = new FakeRunner();
+        var Service = new ScheduledJobManagementService(Store, Authorization(), Execution(Store, Runner));
+        var Access = new AgentAccessContext("owner", AgentRoles.Owner, "owner");
+
+        (await Service.ListToolAsync(Access, "Scheduled", null, default)).Should().Contain(Original.TaskId.ToString());
+        (await Service.GetToolAsync(Access, Original.TaskId, default)).Should().Contain("Synthetic instruction");
+        (await Service.UpdateToolAsync(Access, Original.TaskId, "Updated instruction", null, null, "PT3H", null, null, null, false, default))
+            .Should().StartWith("Updated scheduled job");
+        var Updated = await Store.GetAsync(Original.TaskId, default);
+        Updated!.Instruction.Should().Be("Updated instruction");
+        Updated.NotifyOnCompletion.Should().BeFalse();
+        Updated.ExecuteAt.Should().BeAfter(DateTimeOffset.UtcNow.AddHours(2.9));
+        (await Service.CancelToolAsync(Access, Original.TaskId, default)).Should().StartWith("Cancelled scheduled job");
+        (await Store.GetAsync(Original.TaskId, default))!.Status.Should().Be("Cancelled");
+        Runner.Runs.Should().Be(0);
     }
 
     [Fact]

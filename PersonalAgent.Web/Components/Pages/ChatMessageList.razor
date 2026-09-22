@@ -12,7 +12,14 @@
             @if (msg.Role == "assistant")
             {
                 <div class="message-list__content">
-                    @((MarkupString)RenderMarkdown(msg.Content))
+                    @if (IsSendingMessage && string.IsNullOrEmpty(msg.Content))
+                    {
+                        <p class="chat-thinking" role="status">Putting a response together…</p>
+                    }
+                    else
+                    {
+                        @((MarkupString)RenderMarkdown(msg.Content))
+                    }
                     @foreach (var Citation in EvidenceCitation.Parse(msg.Content, ProfileId))
                     {
                         <button type="button" data-evidence-url="@Citation.Url" @onclick="() => SelectedEvidence = Citation">Open call evidence @(Citation.StartMs is int Start ? TimeSpan.FromMilliseconds(Start).ToString(@"hh\:mm\:ss") : "(timing unavailable)")</button>
@@ -40,7 +47,7 @@
         </div>
     }
 
-    @if (IsSendingMessage)
+    @if (IsSendingMessage && (Messages.Count == 0 || Messages[^1].Role != "assistant"))
     {
         <div class="message-list__item message-list__item--assistant" data-role="assistant">
             <strong>Garden</strong>

@@ -1,13 +1,15 @@
 using System.Net;
-using AgentPlayground.Integrations;
 using System.Net.Http.Headers;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+using AgentPlayground.Integrations;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Options;
+
 using PersonalAgent.Web.Configuration;
 
 namespace PersonalAgent.Web.Services;
@@ -66,6 +68,26 @@ internal class PersonalAgentClient : IDisposable
         using var Response = await SendJsonAsync(HttpMethod.Post, $"/api/conversation/{Id}/messages", new { ProfileId, Message });
         if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("send message", Response);
         return (await Response.Content.ReadFromJsonAsync<HistoryResponse>())!;
+    }
+
+    public async Task<HistoryResponse> SendConversationMessageStreamingAsync(string Id, string ProfileId, string Message,
+        Func<string, Task> OnDelta, CancellationToken CancellationToken)
+    {
+        using var Response = await SendAsync(HttpMethod.Post, $"/api/conversation/{Id}/messages/stream",
+            JsonContent.Create(new { ProfileId, Message }, options: JsonOptions), CancellationToken, streamResponse: true);
+        if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("send message", Response);
+        await using var Content = await Response.Content.ReadAsStreamAsync(CancellationToken);
+        using var Reader = new StreamReader(Content);
+        while (await Reader.ReadLineAsync(CancellationToken) is { } Line)
+        {
+            if (string.IsNullOrWhiteSpace(Line)) continue;
+            var Event = JsonSerializer.Deserialize<ChatStreamEvent>(Line, JsonOptions)
+                ?? throw new InvalidOperationException("The chat stream returned an invalid event.");
+            if (Event.Type == "delta" && Event.Delta is not null) await OnDelta(Event.Delta);
+            if (Event.Type == "error") throw new InvalidOperationException(Event.Error ?? "The chat stream failed.");
+            if (Event.Type == "completed" && Event.Conversation is not null) return Event.Conversation;
+        }
+        throw new EndOfStreamException("The chat stream ended before completion.");
     }
 
     public async Task<AgentPlayground.Contracts.ChatCard> UpdateChatCardAsync(string Id, string ProfileId, long Sequence, string CardId, AgentPlayground.Contracts.ChatCardAction Action)
@@ -390,7 +412,8 @@ internal class PersonalAgentClient : IDisposable
     public Task<HttpResponseMessage> GetCoachAudioAsync(Guid UploadId, string ProfileId, ClaimsPrincipal User, string? Range, CancellationToken CancellationToken) =>
         SendAsync(HttpMethod.Get, $"/api/coach-checkins/{UploadId}/audio?profileId={Uri.EscapeDataString(ProfileId)}", cancellationToken: CancellationToken, requestUser: User, range: Range);
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string uri, HttpContent? content = null, CancellationToken cancellationToken = default, ClaimsPrincipal? requestUser = null, string? range = null)
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string uri, HttpContent? content = null, CancellationToken cancellationToken = default,
+        ClaimsPrincipal? requestUser = null, string? range = null, bool streamResponse = false)
     {
         using var request = new HttpRequestMessage(method, uri) { Content = content };
         var user = requestUser ?? (await GetAuthenticationStateAsync()).User;
@@ -419,7 +442,8 @@ internal class PersonalAgentClient : IDisposable
                 request.Headers.Add("X-Agent-Signature", signature);
             }
         }
-        return await httpClient.SendAsync(request, requestUser is null ? HttpCompletionOption.ResponseContentRead : HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        return await httpClient.SendAsync(request, streamResponse || requestUser is not null
+            ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead, cancellationToken);
     }
 }
 
@@ -437,6 +461,7 @@ public record SessionResponse(string SessionId, string ModelId, string Message);
 public record ModelCatalogResponse(List<AvailableChatModelResponse> Models);
 public record MessageResponse(string SessionId, string Response);
 public record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages, bool IsReadOnly = false);
+internal sealed record ChatStreamEvent(string Type, string? Delta, HistoryResponse? Conversation, string? Error);
 public record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
 public record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
 public record ConversationMessage(string Role, string Content)

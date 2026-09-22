@@ -128,6 +128,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IScheduledJobRunner, ScheduledJobRunner>();
         services.AddSingleton<IScheduledNotificationSender, ScheduledNotificationSender>();
         services.AddSingleton<ScheduledJobExecutionService>();
+        services.AddSingleton<ScheduledJobManagementService>();
         services.AddHostedService<ScheduledJobReconciler>();
         services.AddSingleton<TavilyMcpToolProvider>();
         services.AddSingleton<ITavilyMcpToolProvider>(sp => sp.GetRequiredService<TavilyMcpToolProvider>());

@@ -2,6 +2,8 @@
 
 Implemented 2026-09-21. See [decision 0029](../decisions/0029-continuous-conversation.md) and [product vision](../plans/personal-assistant-vision.md).
 
+Interactive responses now stream from the provider through an authenticated NDJSON response. The composer changes to **Stop** while a response is active. Stop or a browser disconnect cancels the in-flight model request; partial text can remain visible in the current browser but is not committed as a completed interaction. Reload to return to the last durable conversation state. The completion event replaces provisional text with the normalized persisted response and card/source metadata.
+
 ## Use
 
 Open `/chat` to resume the same default conversation across reloads and devices. Model selection is under the composer's Model disclosure. History remains optional: browse saved conversations or search words from earlier user messages. Search returns up to five matches and links to a highlighted source message. Scheduled job and legacy links remain readable; use Back to conversation to resume talking.
