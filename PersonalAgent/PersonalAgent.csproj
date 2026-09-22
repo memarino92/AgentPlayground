@@ -44,4 +44,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Configuration\chat-model-policy.seed.json" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Skills\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -1,5 +1,9 @@
 # Roadmap
 
+## Runtime Agent Framework skills — first slice delivered 2026-09-21
+
+The API now packages a `coach-answer-grounding` skill and exposes it through Microsoft Agent Framework progressive disclosure. Coaching retrieval, recency, attribution, and citation guidance moved out of the universal prompt; authorized data access remains in `AgentToolRegistry`, and no skill script runner is enabled. A focused test verifies packaged discovery, advertisement, and instruction loading. Model selection/following quality remains covered by the existing coaching evaluation process rather than inferred from provider wiring. See [decision 0031](../decisions/0031-runtime-agent-skills.md) and the [runtime skill runbook](../runbooks/agent-skills.md).
+
 ## Continuous assistant — first slice delivered 2026-09-21
 
 Delivery order: one default conversation with automatic bounded context, then chat polish with commitment cards, checklists and clarification forms. See [vision](personal-assistant-vision.md) and [decision 0029](../decisions/0029-continuous-conversation.md). Future slices add episode/classifier evaluation, confirmed memory, household sharing, durable follow-through, iPhone web push/offline capture and isolated cloud improvement experiments.
