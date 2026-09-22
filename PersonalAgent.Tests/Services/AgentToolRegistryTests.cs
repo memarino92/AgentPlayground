@@ -27,7 +27,7 @@ public class AgentToolRegistryTests
         using var Services = BuildServices(Provider, Store);
         var Binder = Services.GetRequiredService<AgentToolBinder>();
         var Tools = await Binder.BindAsync(new("owner", AgentRoles.Owner, "subject"));
-        Tools.Should().HaveCount(12);
+        Tools.Should().HaveCount(16);
         var DirectMessages = new Dictionary<string, string>
         {
             [AgentToolKeys.PublishMobileNotification] = "notify me: drink water",
@@ -36,6 +36,10 @@ public class AgentToolRegistryTests
             [AgentToolKeys.SearchCoachCheckins] = "search my coaching notes for yoke",
             [AgentToolKeys.ScheduleNotification] = "remind me in 5 minutes to drink water",
             [AgentToolKeys.ScheduleAgentTask] = "schedule a task in 1 hour: check the weather",
+            [AgentToolKeys.ListScheduledJobs] = "list my scheduled jobs",
+            [AgentToolKeys.GetScheduledJob] = "show scheduled job 11111111-1111-1111-1111-111111111111",
+            [AgentToolKeys.UpdateScheduledJob] = "update scheduled job 11111111-1111-1111-1111-111111111111 instruction: check the forecast",
+            [AgentToolKeys.CancelScheduledJob] = "cancel scheduled job 11111111-1111-1111-1111-111111111111",
             [AgentToolKeys.GetCurrentDateTime] = "what time is it?"
         };
         foreach (var Tool in Tools.Where(Tool => Tool.Source == "Local"))
@@ -78,7 +82,7 @@ public class AgentToolRegistryTests
         var tools = await binder.BindAsync(new("owner", AgentRoles.Owner, "owner"));
 
         tools.Select(Tool => Tool.Descriptor.Key).Should().BeEquivalentTo(catalog.Tools.Select(Tool => Tool.Key));
-        tools.Should().HaveCount(7);
+        tools.Should().HaveCount(11);
         foreach (var tool in tools)
         {
             tool.Function.Name.Should().Be(tool.Descriptor.Name);
@@ -87,7 +91,8 @@ public class AgentToolRegistryTests
             argumentNames.Should().NotContain(["profileId", "actorId", "role", "subjectProfileId"]);
         }
         catalog.Tools.Where(Tool => Tool.HasSideEffects).Select(Tool => Tool.Key).Should().BeEquivalentTo(
-            [AgentToolKeys.PublishMobileNotification, AgentToolKeys.SyncWorkJournal, AgentToolKeys.ScheduleNotification, AgentToolKeys.ScheduleAgentTask]);
+            [AgentToolKeys.PublishMobileNotification, AgentToolKeys.SyncWorkJournal, AgentToolKeys.ScheduleNotification, AgentToolKeys.ScheduleAgentTask,
+                AgentToolKeys.UpdateScheduledJob, AgentToolKeys.CancelScheduledJob]);
     }
 
     [Fact]

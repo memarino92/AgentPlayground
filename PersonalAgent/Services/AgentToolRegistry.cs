@@ -37,6 +37,28 @@ internal sealed class AgentToolRegistry(ITavilyMcpToolProvider TavilyProvider) :
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,
             (Services, Access) => (string instruction, string? delay, string? executeAt, string? when, string? timeZoneId, bool notifyOnCompletion, CancellationToken token) =>
                 Services.GetRequiredService<AgentEventService>().ScheduleAgentTaskToolAsync(Access, instruction, delay, executeAt, when, timeZoneId, notifyOnCompletion, token)),
+        Local(AgentToolKeys.ListScheduledJobs, "List scheduled jobs", "Scheduling",
+            "List scheduled agent tasks and notifications for the current subject. Optionally filter by status or return jobs created before an ISO-8601 datetime.",
+            OwnerDefault: true, CoachDefault: false, HasSideEffects: false,
+            (Services, Access) => (string? status, string? before, CancellationToken token) =>
+                Services.GetRequiredService<ScheduledJobManagementService>().ListToolAsync(Access, status, before, token)),
+        Local(AgentToolKeys.GetScheduledJob, "Inspect scheduled job", "Scheduling",
+            "Get one scheduled job, including its current state, outcome, and execution attempts.",
+            OwnerDefault: true, CoachDefault: false, HasSideEffects: false,
+            (Services, Access) => (Guid jobId, CancellationToken token) =>
+                Services.GetRequiredService<ScheduledJobManagementService>().GetToolAsync(Access, jobId, token)),
+        Local(AgentToolKeys.UpdateScheduledJob, "Update scheduled job", "Scheduling",
+            "Update a pending scheduled job. Agent tasks accept instruction and notifyOnCompletion; notifications accept title and body. Optionally change timing using one of delay, executeAt, or when.",
+            OwnerDefault: true, CoachDefault: false, HasSideEffects: true,
+            (Services, Access) => (Guid jobId, string? instruction, string? title, string? body, string? delay, string? executeAt,
+                string? when, string? timeZoneId, bool? notifyOnCompletion, CancellationToken token) =>
+                Services.GetRequiredService<ScheduledJobManagementService>().UpdateToolAsync(Access, jobId, instruction, title, body,
+                    delay, executeAt, when, timeZoneId, notifyOnCompletion, token)),
+        Local(AgentToolKeys.CancelScheduledJob, "Cancel scheduled job", "Scheduling",
+            "Cancel a pending scheduled agent task or notification. Completed or active jobs cannot be cancelled.",
+            OwnerDefault: true, CoachDefault: false, HasSideEffects: true,
+            (Services, Access) => (Guid jobId, CancellationToken token) =>
+                Services.GetRequiredService<ScheduledJobManagementService>().CancelToolAsync(Access, jobId, token)),
         Local(AgentToolKeys.GetCurrentDateTime, "Current date and time", "Core",
             "Get the current date and time, optionally in a specific IANA or Windows timezone (e.g. 'America/Chicago' or 'Central Standard Time'). Call this before scheduling relative times like 'at noon today' or 'next Monday'.",
             OwnerDefault: true, CoachDefault: true, HasSideEffects: false,

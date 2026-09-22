@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using Bunit;
 using Bunit.TestDoubles;
@@ -206,6 +207,18 @@ public sealed class ChatModelDiscoveryTests : TestContext
                 return new(HttpStatusCode.OK) { Content = JsonContent.Create(new HistoryResponse(
                     (First ? FirstId : SecondId).ToString(), First ? "provider-default" : "newly-available-model",
                     [new("user", First ? "First saved message" : "Second saved message")])) };
+            }
+            if (Request.Method == HttpMethod.Post && Request.RequestUri.AbsolutePath.EndsWith("/messages/stream"))
+            {
+                if (FailMessage) return new(HttpStatusCode.InternalServerError);
+                var Payload = await Request.Content!.ReadFromJsonAsync<JsonElement>(CancellationToken);
+                Conversation.Add(new("user", Payload.GetProperty("message").GetString()!));
+                Conversation.Add(new("assistant", "Synthetic reply"));
+                var Completed = new { type = "completed", conversation = new HistoryResponse(
+                    ConversationId.ToString(), ChangedModel ?? "provider-default", Conversation) };
+                var Body = JsonSerializer.Serialize(new { type = "delta", delta = "Synthetic reply" }, JsonSerializerOptions.Web) + "\n"
+                    + JsonSerializer.Serialize(Completed, JsonSerializerOptions.Web) + "\n";
+                return new(HttpStatusCode.OK) { Content = new StringContent(Body, Encoding.UTF8, "application/x-ndjson") };
             }
             if (Request.Method == HttpMethod.Post && Request.RequestUri.AbsolutePath.EndsWith("/messages"))
             {

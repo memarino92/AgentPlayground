@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using AgentPlayground.Contracts;
 using Microsoft.Extensions.Options;
 using PersonalAgent.Configuration;
@@ -49,6 +51,34 @@ internal static partial class PersonalAgentEndpoints
                 return Results.Ok(await Chat.ReadConversationAsync(Id, Access, Token));
             }
             catch (UnauthorizedAccessException) { return Results.StatusCode(403); }
+        });
+        Group.MapPost("/{Id:guid}/messages/stream", async (HttpContext Context, Guid Id, SendMessageRequest Request,
+            AgentChatService Chat, ICoachAssignmentStore Assignments, CancellationToken Token) =>
+        {
+            if (string.IsNullOrWhiteSpace(Request.Message) || Request.Message.Length > PersonalAgentConstants.MaxMessageLength)
+            {
+                Context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+            var Access = await ResolveAccessAsync(Context, Request.ProfileId, Assignments);
+            if (Access is null) { Context.Response.StatusCode = StatusCodes.Status403Forbidden; return; }
+            if (await Chat.ReadConversationAsync(Id, Access, Token) is null) { Context.Response.StatusCode = StatusCodes.Status404NotFound; return; }
+            Context.Response.ContentType = "application/x-ndjson";
+            Context.Response.Headers.CacheControl = "no-store";
+            async ValueTask WriteAsync(object Value, CancellationToken CancellationToken)
+            {
+                await JsonSerializer.SerializeAsync(Context.Response.Body, Value, JsonSerializerOptions.Web, CancellationToken);
+                await Context.Response.WriteAsync("\n", CancellationToken);
+                await Context.Response.Body.FlushAsync(CancellationToken);
+            }
+            try
+            {
+                var Reply = await Chat.SendMessageStreamingAsync(Id.ToString(), Access, Request.Message,
+                    (Delta, CancellationToken) => WriteAsync(new { Type = "delta", Delta }, CancellationToken), Token);
+                if (Reply is null) { await WriteAsync(new { Type = "error", Error = "Conversation was not found." }, Token); return; }
+                await WriteAsync(new { Type = "completed", Conversation = await Chat.ReadConversationAsync(Id, Access, Token) }, Token);
+            }
+            catch (UnauthorizedAccessException) { await WriteAsync(new { Type = "error", Error = "Access was denied." }, Token); }
         });
         Group.MapPost("/{Id:guid}/cards/{Sequence:long}/{CardId}", async (HttpContext Context, Guid Id, long Sequence, string CardId,
             UpdateChatCardRequest Request, AgentChatService Chat, ICoachAssignmentStore Assignments, CancellationToken Token) =>

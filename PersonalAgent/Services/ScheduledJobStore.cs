@@ -173,6 +173,18 @@ internal sealed class ScheduledJobStore(IOptions<AgentMemoryOptions> Options)
         return Items;
     }
 
+    public async Task<bool> UpdatePendingAsync(NpgsqlConnection Connection, ScheduledJob Job, CancellationToken Token)
+    {
+        await using var Command = new NpgsqlCommand($"""
+            UPDATE {Table} SET execute_at = @due, next_dispatch_at = @due, status = 'Scheduled', data = @data::jsonb
+            WHERE task_id = @id AND status IN ('Scheduled', 'Retrying')
+            """, Connection);
+        Command.Parameters.AddWithValue("id", Job.TaskId);
+        Command.Parameters.AddWithValue("due", Job.ExecuteAt);
+        Command.Parameters.AddWithValue("data", JsonSerializer.Serialize(Job));
+        return await Command.ExecuteNonQueryAsync(Token) == 1;
+    }
+
     public async Task ReconcileAsync(CancellationToken Token)
     {
         await using var Connection = await OpenAsync(Token);

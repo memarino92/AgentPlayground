@@ -38,4 +38,15 @@ public class ChatMessageListTests : TestContext
         cut.Markup.Should().Contain("Putting a response together");
         cut.Find("[data-role='assistant']").Should().NotBeNull();
     }
+
+    [Fact]
+    public void MessageList_ReplacesThinkingIndicatorWithStreamedText()
+    {
+        var Cut = RenderComponent<ChatMessageList>(Parameters => Parameters
+            .Add(Component => Component.Messages, [new ConversationMessage("assistant", "First chunk")])
+            .Add(Component => Component.IsSendingMessage, true));
+
+        Cut.Markup.Should().Contain("First chunk").And.NotContain("Putting a response together");
+        Cut.FindAll("[data-role='assistant']").Should().ContainSingle();
+    }
 }

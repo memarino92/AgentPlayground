@@ -2,6 +2,8 @@
 
 Open **Scheduled jobs** from the Web menu (`/jobs`). Ask the assistant in Chat to schedule work for later, or use the signed `POST /api/schedule/agent-tasks` and `POST /api/schedule/notifications` endpoints. The returned ID is the durable application `TaskId`. Chat-created jobs retain the originating conversation.
 
+The assistant can list jobs, inspect one job and its attempts, update a pending job, or cancel it. Agent-task updates accept instruction, timing and completion-notification preference; notification updates accept title, body and timing. Timing uses the same delay, absolute datetime, or natural-time parser as creation. Only Scheduled/Retrying jobs are editable or cancellable. Cancellation retains the record; the assistant has no hard-delete capability.
+
 The page labels each job **Agent task** or **Notification** and shows scheduler, subject, due time in the browser's timezone, status, result and execution attempts. Filter by subject/status and page through older jobs. It refreshes every 15 seconds. Owners see jobs for their own subject, including jobs created by a coach; coaches see only their own jobs for currently assigned subjects. Conversation links appear only for the conversation's actor. Result conversations are read-only.
 
 ## Permissions
@@ -33,7 +35,7 @@ Scheduled **notifications** persist the title, body and optional deep link under
 
 Notifications scheduled before this extension have no application job record or trusted actor. They keep their original delivery path and cannot be listed or cancelled through Scheduled Jobs, including reminders created after decision 0021 but before this extension. Schedule a new reminder to use the dashboard, bearing in mind the old reminder can still arrive. Immediate notification tools and task-completion alerts remain outside the scheduled-job list.
 
-Transcription jobs, recurring schedules, editing, pause/resume, manual retries and human-approval continuations remain separate work.
+Transcription jobs, recurring schedules, pause/resume, manual retries and human-approval continuations remain separate work.
 
 ## Local verification
 

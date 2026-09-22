@@ -94,6 +94,29 @@ public class PersonalAgentClientTests
         result.Models[0].Id.Should().Be("gpt-4o-mini");
     }
 
+    [Fact]
+    public async Task SendConversationMessageStreamingAsync_ForwardsDeltasAndReturnsCompletedHistory()
+    {
+        const string Body = """
+            {"type":"delta","delta":"Hello "}
+            {"type":"delta","delta":"there"}
+            {"type":"completed","conversation":{"sessionId":"session","modelId":"model","messages":[{"role":"user","content":"Hi"},{"role":"assistant","content":"Hello there"}],"isReadOnly":false}}
+            """;
+        using var Handler = new StubHttpMessageHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(Body, Encoding.UTF8, "application/x-ndjson")
+        }));
+        using var Http = new HttpClient(Handler) { BaseAddress = new("http://localhost") };
+        using var Client = CreateClient(Http);
+        var Deltas = new List<string>();
+
+        var Result = await Client.SendConversationMessageStreamingAsync("session", "owner", "Hi",
+            Delta => { Deltas.Add(Delta); return Task.CompletedTask; }, default);
+
+        Deltas.Should().Equal("Hello ", "there");
+        Result.Messages.Last().Content.Should().Be("Hello there");
+    }
+
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>

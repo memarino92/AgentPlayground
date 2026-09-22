@@ -124,6 +124,13 @@ public sealed class ContinuousConversationTests : IClassFixture<PostgresVectorFi
             .AddSingleton(Mock.Of<IToolAccessStore>()).AddSingleton<ToolAccessService>().AddSingleton<AgentToolBinder>().BuildServiceProvider();
         var Client = new Mock<IChatClient>();
         var Seen = new List<string>();
+        async IAsyncEnumerable<ChatResponseUpdate> Stream(IEnumerable<ChatMessage> Messages)
+        {
+            Seen.Add(string.Join("\n", Messages.Select(Message => Message.Text)));
+            yield return new(ChatRole.Assistant, "Fresh ");
+            await Task.Yield();
+            yield return new(ChatRole.Assistant, "answer");
+        }
         Client.Setup(Value => Value.GetResponseAsync(It.IsAny<IEnumerable<ChatMessage>>(), It.IsAny<ChatOptions?>(), It.IsAny<CancellationToken>()))
             .Returns((IEnumerable<ChatMessage> Messages, ChatOptions? _, CancellationToken _) =>
             {
@@ -131,6 +138,8 @@ public sealed class ContinuousConversationTests : IClassFixture<PostgresVectorFi
                 return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
                     "Let's make a plan.\n```garden-card\n{\"kind\":\"commitment\",\"title\":\"Plan the garden\"}\n```")));
             });
+        Client.Setup(Value => Value.GetStreamingResponseAsync(It.IsAny<IEnumerable<ChatMessage>>(), It.IsAny<ChatOptions?>(), It.IsAny<CancellationToken>()))
+            .Returns((IEnumerable<ChatMessage> Messages, ChatOptions? _, CancellationToken _) => Stream(Messages));
         var Factory = new Mock<IAgentChatClientFactory>();
         Factory.Setup(Value => Value.Create("model")).Returns(Client.Object);
         var Options = Microsoft.Extensions.Options.Options.Create(new AgentMemoryOptions());
@@ -151,7 +160,10 @@ public sealed class ContinuousConversationTests : IClassFixture<PostgresVectorFi
         (await Chat.ClearConversationAsync(Id, Access, default)).Should().BeTrue();
         var Recreated = NewChat();
         (await Recreated.ReadConversationAsync(Id, Access, default))!.Messages.Should().BeEmpty();
-        await Recreated.SendMessageAsync(Id.ToString(), Access, "What about cedar?");
+        var Deltas = new List<string>();
+        (await Recreated.SendMessageStreamingAsync(Id.ToString(), Access, "What about cedar?",
+            (Delta, _) => { Deltas.Add(Delta); return ValueTask.CompletedTask; })).Should().Be("Fresh answer");
+        Deltas.Should().Equal("Fresh ", "answer");
         Seen[1].Should().NotContain("The old plan").And.NotContain("Old advice");
         (await Store.GetSessionMessagesAsync(Id))!.Should().HaveCount(6);
     }
