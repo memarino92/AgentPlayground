@@ -34,7 +34,7 @@ public partial class DatabaseSettings : IAsyncDisposable
         // Discard entered credentials immediately, even if the subsequent refresh fails.
         Rows = null;
         CredentialStatus = null;
-        Notice = "Saved to the database. Chat model changes apply on the next catalog request; reload the chat page. Jev settings and supported credentials reload automatically within 15 seconds; other changes require restarting affected services. The API reload check covers OpenAI and AssemblyAI credentials.";
+        Notice = "Saved to the database. Chat model changes apply on the next catalog request; reload the chat page. Jev settings and supported credentials reload automatically within 15 seconds; other changes require restarting affected services. The API reload check covers OpenAI, OpenRouter, and AssemblyAI credentials.";
         await LoadAsync();
     });
 
@@ -60,7 +60,7 @@ public partial class DatabaseSettings : IAsyncDisposable
             {
                 HttpStatusCode.Forbidden => "Deployment administrator access is required. Configure INTEGRATION_SETTINGS_ADMINISTRATORS on the API host.",
                 HttpStatusCode.Conflict => "A setting changed or was removed. Nothing in this batch was saved. Refresh and review before retrying.",
-                HttpStatusCode.BadRequest => "Save rejected. OpenAI and AssemblyAI keys must be nonempty printable tokens (at most 4096 characters). Submit at most 500 changed settings; other values can be at most 262144 characters.",
+                HttpStatusCode.BadRequest => "Save rejected. Supported provider keys must be nonempty printable tokens (at most 4096 characters). Submit at most 500 changed settings; other values can be at most 262144 characters.",
                 _ => "Settings operation could not be confirmed. Refresh to check stored values before retrying."
             };
         }

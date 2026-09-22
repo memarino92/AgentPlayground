@@ -1,0 +1,47 @@
+@using System.ComponentModel.DataAnnotations
+
+<div class="provider-settings">
+    <h2>AI providers</h2>
+    <p>Configure provider credentials used by the API. Secrets are encrypted before storage and are never returned to this page.</p>
+    @if (Error is not null) { <p role="alert">@Error</p> }
+    @if (Notice is not null) { <p role="status">@Notice</p> }
+    @if (!Loaded)
+    {
+        <p>@(Busy ? "Loading provider settings…" : "Provider settings could not be loaded.")</p>
+        <button disabled="@Busy" @onclick="RefreshAsync">Retry</button>
+    }
+    else
+    {
+        <section class="settings-card">
+            <h3>OpenRouter</h3>
+            <p>Use OpenRouter models, including the optional Auto Router, through the existing agent and model catalog.</p>
+            <p><strong>Status:</strong> @(OpenRouterSetting is null ? "Not configured" : OpenRouterSetting.IsActive ? "Configured" : "Stored but inactive")</p>
+            <EditForm Model="Model" OnValidSubmit="SaveOpenRouterAsync" FormName="openrouter-settings">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <fieldset disabled="@Busy">
+                    <label for="openrouter-api-key">@(OpenRouterSetting is null ? "OpenRouter API key" : "Replacement OpenRouter API key")</label>
+                    <InputText id="openrouter-api-key" type="password" autocomplete="new-password" maxlength="4096" @bind-Value="Model.ApiKey" />
+                    <ValidationMessage For="() => Model.ApiKey" />
+                    <p>The key applies to new discovery and chat requests after the API reload check. OpenAI remains configured separately for embeddings and other direct capabilities.</p>
+                    <button type="submit">@(Busy ? "Saving…" : OpenRouterSetting is null ? "Save OpenRouter key" : "Replace OpenRouter key")</button>
+                </fieldset>
+            </EditForm>
+            @if (OpenRouterSetting is not null)
+            {
+                <p>Use <a href="/admin/settings?section=database">Database settings</a> to deactivate this credential.</p>
+            }
+        </section>
+        <button disabled="@Busy" @onclick="RefreshAsync">Refresh / discard entered key</button>
+    }
+</div>
+
+@code {
+    private sealed class OpenRouterFormModel
+    {
+        [Required(ErrorMessage = "Enter an OpenRouter API key.")]
+        [StringLength(4096, MinimumLength = 1)]
+        [RegularExpression(@"^[!-~]+$", ErrorMessage = "Use printable characters without spaces.")]
+        public string ApiKey { get; set; } = "";
+    }
+}

@@ -10,6 +10,7 @@
     <nav aria-label="Settings sections">
         <a href="/admin/settings?section=sentry">Sentry</a>
         <a href="/admin/settings?section=telemetry">OpenTelemetry</a>
+        <a href="/admin/settings?section=providers">AI providers</a>
         <a href="/admin/settings?section=database">Database settings</a>
         <a href="/admin/settings?section=integrations">Integrations and coach access</a>
     </nav>
@@ -17,6 +18,7 @@
     {
         case "sentry": <IntegrationSettings /> break;
         case "telemetry": <IntegrationSettings OpenTelemetry="true" /> break;
+        case "providers": <ProviderSettings /> break;
         case "integrations": <IntegrationsAdmin /> break;
         default: <DatabaseSettings /> break;
     }

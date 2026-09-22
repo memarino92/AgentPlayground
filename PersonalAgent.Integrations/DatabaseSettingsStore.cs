@@ -11,6 +11,7 @@ public sealed record DatabaseSetting(string Scope, string Key, string Version, s
 }
 public sealed record DatabaseSettingEdit(string Scope, string Key, string Version, string? Value, bool IsActive);
 public sealed record SaveDatabaseSettingsRequest(List<DatabaseSettingEdit> Changes);
+public sealed record SaveProviderCredentialRequest(string? ExpectedVersion, string Value);
 
 /// <summary>Edits startup configuration in place. Null values retain existing secrets.</summary>
 public sealed class DatabaseSettingsStore(IntegrationDatabase Database)
@@ -41,7 +42,7 @@ public sealed class DatabaseSettingsStore(IntegrationDatabase Database)
 
         if (Request.Changes.Any(Edit => LiveCredentialPolicy.Supports(Edit.Scope, Edit.Key)
             && Edit.Value is not null && !LiveCredentialPolicy.IsValid(Edit.Value)))
-            throw new IntegrationValidationException(new() { ["Credentials"] = ["OpenAI and AssemblyAI keys must be nonempty printable tokens of at most 4096 characters."] });
+            throw new IntegrationValidationException(new() { ["Credentials"] = ["Supported provider keys must be nonempty printable tokens of at most 4096 characters."] });
 
         await using var connection = await Database.OpenAsync(CancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(CancellationToken);
@@ -75,6 +76,44 @@ public sealed class DatabaseSettingsStore(IntegrationDatabase Database)
             update.Parameters.Add("value", NpgsqlTypes.NpgsqlDbType.Text).Value = (object?)value ?? DBNull.Value;
             await update.ExecuteNonQueryAsync(CancellationToken);
         }
+        await transaction.CommitAsync(CancellationToken);
+    }
+
+    public async Task SaveLiveCredentialAsync(string Scope, string Key, SaveProviderCredentialRequest Request, CancellationToken CancellationToken)
+    {
+        if (!LiveCredentialPolicy.Supports(Scope, Key) || !LiveCredentialPolicy.IsValid(Request.Value))
+            throw new IntegrationValidationException(new() { ["Credential"] = ["Enter a nonempty printable provider key of at most 4096 characters."] });
+
+        await using var connection = await Database.OpenAsync(CancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(CancellationToken);
+        await using var schema = new NpgsqlCommand("""
+            SELECT EXISTS(SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'app' AND table_name = 'configuration_settings' AND column_name = 'updated_at')
+            """, connection, transaction);
+        var hasTimestamp = (bool)(await schema.ExecuteScalarAsync(CancellationToken))!;
+        var encrypted = PostgresConfigurationCrypto.Encrypt(Request.Value, Scope, Key, Database.EncryptionKey);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("scope", Scope);
+        command.Parameters.AddWithValue("key", Key);
+        command.Parameters.AddWithValue("value", encrypted);
+        if (string.IsNullOrWhiteSpace(Request.ExpectedVersion))
+        {
+            command.CommandText = $"""
+                INSERT INTO app.configuration_settings(scope, key, value, is_secret, is_active{(hasTimestamp ? ", updated_at" : "")})
+                VALUES (@scope, @key, @value, true, true{(hasTimestamp ? ", now()" : "")})
+                ON CONFLICT (scope, key) DO NOTHING
+                """;
+        }
+        else
+        {
+            command.Parameters.AddWithValue("version", Request.ExpectedVersion);
+            command.CommandText = $"""
+                UPDATE app.configuration_settings SET value = @value, is_secret = true, is_active = true{(hasTimestamp ? ", updated_at = now()" : "")}
+                WHERE scope = @scope AND key = @key AND xmin::text = @version
+                """;
+        }
+        if (await command.ExecuteNonQueryAsync(CancellationToken) is not 1) throw new IntegrationConflictException();
         await transaction.CommitAsync(CancellationToken);
     }
 }
