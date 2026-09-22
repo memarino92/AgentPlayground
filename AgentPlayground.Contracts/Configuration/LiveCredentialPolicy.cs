@@ -5,6 +5,7 @@ public static class LiveCredentialPolicy
     public static IReadOnlyDictionary<string, string> EnvironmentVariables { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["OpenAI:ApiKey"] = "OPENAI_API_KEY",
+        ["OpenRouter:ApiKey"] = "OPENROUTER_API_KEY",
         ["AssemblyAi:ApiKey"] = "ASSEMBLYAI_API_KEY"
     };
 

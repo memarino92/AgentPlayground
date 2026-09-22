@@ -40,6 +40,8 @@ internal static class ServiceCollectionExtensions
             {
                 opts.OpenAiKey = ConfigurationValueResolver.ResolveString(configuration, "OPENAI_API_KEY", "OpenAI:ApiKey")
                     ?? string.Empty;
+                opts.OpenRouterKey = ConfigurationValueResolver.ResolveString(configuration, "OPENROUTER_API_KEY", "OpenRouter:ApiKey")
+                    ?? string.Empty;
                 opts.InternalApiKey = ConfigurationValueResolver.ResolveString(configuration, "INTERNAL_API_KEY", "Security:InternalApiKey")
                     ?? string.Empty;
                 opts.TavilyApiKey = ConfigurationValueResolver.ResolveString(configuration, "TAVILY_API_KEY", "Tavily:ApiKey")
@@ -101,7 +103,14 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddLiveOptions<ApiKeyOptions>(configuration);
         services.AddSingleton<OpenAiClientProvider>();
-        services.AddSingleton<IChatModelDiscovery>(sp => new OpenAiChatModelDiscovery(() => sp.GetRequiredService<OpenAiClientProvider>().Current.GetOpenAIModelClient()));
+        services.AddSingleton<OpenRouterClientProvider>();
+        services.AddSingleton<IChatModelDiscovery>(sp => new CompositeChatModelDiscovery(
+        [
+            new("OpenAI", () => !string.IsNullOrWhiteSpace(sp.GetRequiredService<IOptions<ApiKeyOptions>>().Value.OpenAiKey),
+                new OpenAiChatModelDiscovery(() => sp.GetRequiredService<OpenAiClientProvider>().Current.GetOpenAIModelClient())),
+            new("OpenRouter", () => !string.IsNullOrWhiteSpace(sp.GetRequiredService<IOptions<ApiKeyOptions>>().Value.OpenRouterKey),
+                new OpenRouterChatModelDiscovery(() => sp.GetRequiredService<OpenRouterClientProvider>().Current.GetOpenAIModelClient()))
+        ], sp.GetRequiredService<ILogger<CompositeChatModelDiscovery>>()));
         services.AddSingleton<IChatModelCatalog, ChatModelCatalog>();
         services.AddSingleton<DatabaseChatModelPolicy>();
         services.AddSingleton<IChatModelPolicySource>(sp => sp.GetRequiredService<DatabaseChatModelPolicy>());

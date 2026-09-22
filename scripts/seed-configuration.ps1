@@ -16,6 +16,7 @@ if (-not (Test-Path -LiteralPath $ValuesPath))
 
 if (-not (Get-Variable -Name CoachName -Scope Script -ErrorAction SilentlyContinue)) { $CoachName = 'Andrew' }
 if (-not (Get-Variable -Name AthleteName -Scope Script -ErrorAction SilentlyContinue)) { $AthleteName = 'Michael' }
+if (-not (Get-Variable -Name OpenRouterApiKey -Scope Script -ErrorAction SilentlyContinue)) { $OpenRouterApiKey = '' }
 
 function Assert-ConfiguredValue([string]$Name, [string]$Value)
 {
@@ -110,6 +111,7 @@ if ($masterKey.Length -ne 32) { throw 'ConfigEncryptionKey must decode to exactl
 
 $settings = @(
     @{ Scope = 'Api'; Key = 'OpenAI:ApiKey'; Value = $OpenAiApiKey; Secret = $true },
+    @{ Scope = 'Api'; Key = 'OpenRouter:ApiKey'; Value = $OpenRouterApiKey; Secret = $true },
     @{ Scope = 'Api'; Key = 'Security:InternalApiKey'; Value = $InternalApiKey; Secret = $true },
     @{ Scope = 'Api'; Key = 'Security:ActorSigningKey'; Value = $ActorSigningKey; Secret = $true },
     @{ Scope = 'Api'; Key = 'Security:AllowedOrigins:0'; Value = $AllowedOrigins; Secret = $false },

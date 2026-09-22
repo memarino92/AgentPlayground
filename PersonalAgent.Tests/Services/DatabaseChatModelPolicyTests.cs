@@ -20,7 +20,8 @@ public sealed class DatabaseChatModelPolicyTests(PostgresVectorFixture Fixture) 
         var Database = await ResetAsync(HasTimestamp);
         var Policy = new DatabaseChatModelPolicy(Database);
         await Policy.InitializeAsync(default);
-        (await Policy.ReadAsync(default)).Models.Select(Model => Model.Id).Should().Contain("gpt-6-astra");
+        (await Policy.ReadAsync(default)).Models.Select(Model => Model.Id)
+            .Should().Contain(["gpt-6-astra", "openrouter:openrouter/auto"]);
         var Store = new DatabaseSettingsStore(Database);
         var Row = (await Store.ReadAsync(default)).Single(Value => Value.Key == "ChatModels:Models:0:Id");
         await Store.SaveAsync(new([new(Row.Scope, Row.Key, Row.Version, "owner-selected", true)]), default);

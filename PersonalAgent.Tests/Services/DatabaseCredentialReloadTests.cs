@@ -25,6 +25,7 @@ public sealed class DatabaseCredentialReloadTests(PostgresVectorFixture Fixture)
             INSERT INTO app.configuration_settings VALUES
                 ('Shared','OpenAI:ApiKey','shared-original',false,true),
                 ('Api','OpenAI:ApiKey',@secret,true,true),
+                ('Api','OpenRouter:ApiKey','router-original',false,true),
                 ('Api','AssemblyAi:ApiKey','assembly-original',false,true),
                 ('Api','Security:InternalApiKey','internal-original',false,true);
             """, connection);
@@ -36,23 +37,29 @@ public sealed class DatabaseCredentialReloadTests(PostgresVectorFixture Fixture)
         services.AddOptions<ApiKeyOptions>().Configure(Options =>
         {
             Options.OpenAiKey = configuration["OpenAI:ApiKey"]!;
+            Options.OpenRouterKey = configuration["OpenRouter:ApiKey"]!;
             Options.InternalApiKey = configuration["Security:InternalApiKey"]!;
         });
         services.AddLiveOptions<ApiKeyOptions>(configuration);
         using var container = services.BuildServiceProvider();
         var options = container.GetRequiredService<IOptions<ApiKeyOptions>>();
         var clients = new OpenAiClientProvider(options);
+        var routerClients = new OpenRouterClientProvider(options);
         var original = clients.Current;
+        var originalRouter = routerClients.Current;
         options.Value.OpenAiKey.Should().Be("api-original");
         await using var change = new NpgsqlCommand("""
             UPDATE app.configuration_settings SET value='api-next',is_secret=false WHERE scope='Api' AND key='OpenAI:ApiKey';
+            UPDATE app.configuration_settings SET value='router-next' WHERE scope='Api' AND key='OpenRouter:ApiKey';
             UPDATE app.configuration_settings SET value='internal-next' WHERE key='Security:InternalApiKey';
             """, connection);
         await change.ExecuteNonQueryAsync();
         (await provider.ReloadCredentialsAsync(default)).Should().BeTrue();
         options.Value.OpenAiKey.Should().Be("api-next");
+        options.Value.OpenRouterKey.Should().Be("router-next");
         options.Value.InternalApiKey.Should().Be("internal-original");
         clients.Current.Should().NotBeSameAs(original);
+        routerClients.Current.Should().NotBeSameAs(originalRouter);
         var next = clients.Current;
         clients.Current.Should().BeSameAs(next);
         (await provider.ReloadCredentialsAsync(default)).Should().BeFalse();
