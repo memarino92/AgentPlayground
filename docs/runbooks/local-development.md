@@ -58,6 +58,8 @@ The .NET 11 RC1 SDK pinned in `global.json` builds the server projects independe
 - `deploy-railway.ps1`: deploy the three server services to an already configured Railway project.
 - Root `Dockerfile.personalagent-api`, `Dockerfile.personalagent-web`, `Dockerfile.personalagent-worker`: canonical service builds.
 
+Railway watch paths are configured per service rather than in this repository. Each server service must watch its `PersonalAgent.Api/**`, `PersonalAgent.Web/**`, or `PersonalAgent.Worker/**` directory plus `PersonalAgent.Contracts/**`, `PersonalAgent.Integrations/**`, the central build/package files, `global.json`, and its Dockerfile. Recheck these paths after project renames. A skipped API deployment can leave a newer Web UI calling administration routes that do not exist in the running API; verify the deployed commit before diagnosing the resulting HTTP 404 as a database failure.
+
 A full database snapshot is not a public demo fixture. The synthetic stack seeds owner/coach assignments, sessions, vector memory, and speaker review to let contributors reproduce the product without private data.
 
 Current transcription ownership and recovery behavior are documented in the [transcription gateway runbook](transcription-gateway.md).
