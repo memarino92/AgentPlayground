@@ -37,7 +37,7 @@ services:
       postgres-demo:
         condition: service_healthy
     healthcheck:
-      test: [CMD, dotnet, PersonalAgent.dll, --healthcheck]
+      test: [CMD, dotnet, PersonalAgent.Api.dll, --healthcheck]
       interval: 5s
       timeout: 5s
       retries: 30

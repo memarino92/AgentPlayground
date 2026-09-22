@@ -1,4 +1,4 @@
-using AgentPlayground.Contracts;
+using PersonalAgent.Contracts;
 
 namespace PersonalAgent.Web.Components.Pages;
 

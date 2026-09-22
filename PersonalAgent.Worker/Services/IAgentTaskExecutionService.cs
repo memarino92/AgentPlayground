@@ -1,4 +1,4 @@
-using AgentPlayground.Contracts.Messaging.Commands;
+using PersonalAgent.Contracts.Messaging.Commands;
 
 namespace PersonalAgent.Worker.Services;
 

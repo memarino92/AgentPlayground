@@ -1,4 +1,4 @@
-using AgentPlayground.Contracts.Messaging;
+using PersonalAgent.Contracts.Messaging;
 using MassTransit;
 using Microsoft.Extensions.Options;
 using PersonalAgent.Worker.Configuration;

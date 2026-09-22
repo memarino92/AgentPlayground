@@ -4,8 +4,8 @@ WORKDIR /src
 COPY ["global.json", "."]
 COPY ["Directory.Build.props", "."]
 COPY ["Directory.Packages.props", "."]
-COPY ["AgentPlayground.Contracts/AgentPlayground.Contracts.csproj", "AgentPlayground.Contracts/"]
-COPY ["AgentPlayground.Integrations/AgentPlayground.Integrations.csproj", "AgentPlayground.Integrations/"]
+COPY ["PersonalAgent.Contracts/PersonalAgent.Contracts.csproj", "PersonalAgent.Contracts/"]
+COPY ["PersonalAgent.Integrations/PersonalAgent.Integrations.csproj", "PersonalAgent.Integrations/"]
 COPY ["PersonalAgent.Web/PersonalAgent.Web.csproj", "PersonalAgent.Web/"]
 
 RUN dotnet restore "PersonalAgent.Web/PersonalAgent.Web.csproj"

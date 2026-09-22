@@ -1,11 +1,11 @@
 # Coaching retrieval baseline
 
-Baseline v1 lives in `PersonalAgent.Tests/Services/CoachRetrievalEvaluationTests.cs`; processing coverage lives in `PersonalAgent.Worker.Tests/Services/CoachTranscriptProcessingServiceTests.cs`. Fixtures are synthetic and contain no private recording names or transcript excerpts. Fourteen retrieval/chat cases cover legacy data and application wiring.
+Baseline v1 lives in `PersonalAgent.Api.Tests/Services/CoachRetrievalEvaluationTests.cs`; processing coverage lives in `PersonalAgent.Worker.Tests/Services/CoachTranscriptProcessingServiceTests.cs`. Fixtures are synthetic and contain no private recording names or transcript excerpts. Fourteen retrieval/chat cases cover legacy data and application wiring.
 
 Run with Docker available:
 
 ```powershell
-dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj --filter FullyQualifiedName~CoachRetrievalEvaluationTests --logger trx
+dotnet test PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj --filter FullyQualifiedName~CoachRetrievalEvaluationTests --logger trx
 dotnet test PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj --filter FullyQualifiedName~CoachTranscriptProcessingServiceTests --logger trx
 ```
 

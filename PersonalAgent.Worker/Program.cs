@@ -1,10 +1,10 @@
-using AgentPlayground.Contracts.Commands;
-using AgentPlayground.Contracts.Hosting;
-using AgentPlayground.Integrations;
-using AgentPlayground.Contracts.Configuration;
-using AgentPlayground.Contracts.Messaging;
-using AgentPlayground.Contracts.Messaging.Events;
-using AgentPlayground.Contracts.Messaging.Requests;
+using PersonalAgent.Contracts.Messaging.Commands;
+using PersonalAgent.Contracts.Hosting;
+using PersonalAgent.Integrations;
+using PersonalAgent.Contracts.Configuration;
+using PersonalAgent.Contracts.Messaging;
+using PersonalAgent.Contracts.Messaging.Events;
+using PersonalAgent.Contracts.Messaging.Requests;
 using MassTransit;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;

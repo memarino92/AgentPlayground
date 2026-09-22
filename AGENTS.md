@@ -110,8 +110,8 @@ using System.Collections.Concurrent;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI.Chat;
-using PersonalAgent.Configuration;
-using PersonalAgent.Models;
+using PersonalAgent.Api.Configuration;
+using PersonalAgent.Api.Models;
 ```
 
 ## Error Handling & Logging
@@ -152,8 +152,8 @@ AgentPlayground/
 ├── AgentPlayground.slnx           # Solution file
 ├── Directory.Build.props           # TreatWarningsAsErrors=true
 ├── Directory.Packages.props        # Central package versioning
-├── AgentPlayground.Contracts/      # Shared event contracts and messaging options
-├── PersonalAgent/                  # Minimal API agent
+├── PersonalAgent.Contracts/       # Shared event contracts and messaging options
+├── PersonalAgent.Api/             # Minimal API agent
 ├── PersonalAgent.Web/              # Blazor Server frontend
 ├── PersonalAgent.Worker/           # Background worker
 └── scripts/                        # Windows PowerShell infra scripts

@@ -1,4 +1,4 @@
-@using AgentPlayground.Contracts
+@using PersonalAgent.Contracts
 <div class="history-search">
     <label>Find something you discussed<input maxlength="500" @bind="Query" @bind:event="oninput" placeholder="Search your words…" /></label>
     <button type="button" disabled="@(Busy || string.IsNullOrWhiteSpace(Query))" @onclick="() => OnSearch.InvokeAsync(Query)">Search history</button>

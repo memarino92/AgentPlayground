@@ -1,4 +1,4 @@
-using AgentPlayground.Contracts.Configuration;
+using PersonalAgent.Contracts.Configuration;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.OAuth;

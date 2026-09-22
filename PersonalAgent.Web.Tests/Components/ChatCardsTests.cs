@@ -1,4 +1,4 @@
-using AgentPlayground.Contracts;
+using PersonalAgent.Contracts;
 using Bunit;
 using FluentAssertions;
 using PersonalAgent.Web.Components.Pages;

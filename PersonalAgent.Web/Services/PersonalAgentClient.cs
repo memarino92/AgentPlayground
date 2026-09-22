@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-using AgentPlayground.Integrations;
+using PersonalAgent.Integrations;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Options;
 
@@ -43,11 +43,11 @@ internal class PersonalAgentClient : IDisposable
     public void Dispose() => authenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     private const int DefaultPageSize = 20;
 
-    public async Task<List<AgentPlayground.Contracts.ChatContextSource>> SearchConversationHistoryAsync(string ProfileId, string Query)
+    public async Task<List<PersonalAgent.Contracts.ChatContextSource>> SearchConversationHistoryAsync(string ProfileId, string Query)
     {
         using var Response = await SendAsync(HttpMethod.Get, $"/api/conversation/history?profileId={Uri.EscapeDataString(ProfileId)}&query={Uri.EscapeDataString(Query)}");
         if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("search history", Response);
-        return await Response.Content.ReadFromJsonAsync<List<AgentPlayground.Contracts.ChatContextSource>>() ?? [];
+        return await Response.Content.ReadFromJsonAsync<List<PersonalAgent.Contracts.ChatContextSource>>() ?? [];
     }
 
     public async Task<HistoryResponse> OpenConversationAsync(string ProfileId, string? ModelId)
@@ -90,11 +90,11 @@ internal class PersonalAgentClient : IDisposable
         throw new EndOfStreamException("The chat stream ended before completion.");
     }
 
-    public async Task<AgentPlayground.Contracts.ChatCard> UpdateChatCardAsync(string Id, string ProfileId, long Sequence, string CardId, AgentPlayground.Contracts.ChatCardAction Action)
+    public async Task<PersonalAgent.Contracts.ChatCard> UpdateChatCardAsync(string Id, string ProfileId, long Sequence, string CardId, PersonalAgent.Contracts.ChatCardAction Action)
     {
         using var Response = await SendJsonAsync(HttpMethod.Post, $"/api/conversation/{Id}/cards/{Sequence}/{Uri.EscapeDataString(CardId)}", new { ProfileId, Action });
         if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("update card", Response);
-        return (await Response.Content.ReadFromJsonAsync<AgentPlayground.Contracts.ChatCard>())!;
+        return (await Response.Content.ReadFromJsonAsync<PersonalAgent.Contracts.ChatCard>())!;
     }
 
     public async Task<IReadOnlyList<ScheduledJobResponse>> GetJobsAsync(string ProfileId, string? Status, DateTimeOffset? Before, CancellationToken Token)
@@ -468,7 +468,7 @@ public record ConversationMessage(string Role, string Content)
 {
     public long Sequence { get; init; }
     public DateTimeOffset? CreatedAt { get; init; }
-    public AgentPlayground.Contracts.ChatPresentation? Presentation { get; init; }
+    public PersonalAgent.Contracts.ChatPresentation? Presentation { get; init; }
 }
 public record AvailableChatModelResponse(string Id, string DisplayName, bool IsDefault);
 public record CoachCheckinUploadResponse(Guid UploadId, Guid CorrelationId, string Status, DateTimeOffset CreatedAtUtc, bool IsDuplicate);

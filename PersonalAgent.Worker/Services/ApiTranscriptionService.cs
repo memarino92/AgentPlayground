@@ -1,5 +1,5 @@
-using AgentPlayground.Contracts.Messaging.Requests;
-using AgentPlayground.Contracts.Messaging.Responses;
+using PersonalAgent.Contracts.Messaging.Requests;
+using PersonalAgent.Contracts.Messaging.Responses;
 using MassTransit;
 using PersonalAgent.Worker.Models;
 

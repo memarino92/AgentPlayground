@@ -1,5 +1,5 @@
 using System.Net.Http.Json;
-using AgentPlayground.Contracts.Messaging.Commands;
+using PersonalAgent.Contracts.Messaging.Commands;
 
 namespace PersonalAgent.Worker.Services;
 

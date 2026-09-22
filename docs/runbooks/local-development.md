@@ -47,19 +47,17 @@ The .NET 11 RC1 SDK pinned in `global.json` builds the server projects independe
 
 6. Sign in as an allowed owner, create a chat session, and configure coach assignments at `/admin/integrations` if needed. Verify a coach can see only assigned data. Remove the populated seed-values and generated SQL files after retaining the local key securely.
 
-## Legacy configuration and Compose
+## Compose with database-backed configuration
 
-If both bootstrap variables are absent, apps retain appsettings/environment bindings and development user secrets. Startup still requires the internal and actor-signing keys, Web OAuth settings/allowlists, and API transcription settings. An OpenAI key and database string alone are not a complete setup after RBAC.
-
-`docker-compose.yml` and `.env.compose.example` describe the manual integration path. They include actor signing and API AssemblyAI settings, make Firebase credentials optional, and wait for API readiness before starting dependents. Real OAuth/provider credentials are still required for that path; it is separate from the verified synthetic stack in `compose.synthetic.yml`.
+`docker-compose.yml` and `.env.compose.example` describe the manual integration path. The environment file contains only `DATABASE_URL` and `CONFIG_ENCRYPTION_KEY`; application, provider, authentication, and service-to-service settings must already exist in the encrypted database. The stack waits for API readiness before starting dependents and is separate from the verified synthetic stack in `compose.synthetic.yml`.
 
 ## Infrastructure helpers
 
 - `start-postgres.ps1` / `stop-postgres.ps1`: local database lifecycle.
 - `seed-configuration.ps1`: encrypted application configuration seed.
-- `setup-railway.ps1`, `deploy-railway.ps1`, `check-railway-env.ps1`: existing hosted operations; audit against current bootstrap configuration before use.
+- `deploy-railway.ps1`: deploy the three server services to an already configured Railway project.
 - Root `Dockerfile.personalagent-api`, `Dockerfile.personalagent-web`, `Dockerfile.personalagent-worker`: canonical service builds.
 
 A full database snapshot is not a public demo fixture. The synthetic stack seeds owner/coach assignments, sessions, vector memory, and speaker review to let contributors reproduce the product without private data.
 
-For existing installations, follow the [transcription configuration rollout](transcription-gateway.md) before starting the refactored API.
+Current transcription ownership and recovery behavior are documented in the [transcription gateway runbook](transcription-gateway.md).

@@ -3,7 +3,7 @@
 - Status: Accepted; first skill implemented
 - Recorded: 2026-09-21
 - Decision date: 2026-09-21
-- Evidence: `PersonalAgent/Skills/coach-answer-grounding/SKILL.md`, `PersonalAgentSkills`, `AgentChatService`, and `AgentSkillsTests`
+- Evidence: `PersonalAgent.Api/Skills/coach-answer-grounding/SKILL.md`, `PersonalAgentSkills`, `AgentChatService`, and `AgentSkillsTests`
 - Supersedes / superseded by: extends [0004](0004-agent-service-boundary.md) and does not change [0006](0006-personal-assistant-tooling.md)
 
 ## Context

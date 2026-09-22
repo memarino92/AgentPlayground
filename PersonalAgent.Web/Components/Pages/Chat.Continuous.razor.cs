@@ -5,7 +5,7 @@ namespace PersonalAgent.Web.Components.Pages;
 public partial class Chat
 {
     private bool isSearchingHistory;
-    private List<AgentPlayground.Contracts.ChatContextSource>? historyResults;
+    private List<PersonalAgent.Contracts.ChatContextSource>? historyResults;
 
     private async Task SearchHistoryAsync(string Query)
     {

@@ -8,8 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AgentPlayground.Contracts\AgentPlayground.Contracts.csproj" />
-    <ProjectReference Include="..\AgentPlayground.Integrations\AgentPlayground.Integrations.csproj" />
+    <ProjectReference Include="..\PersonalAgent.Contracts\PersonalAgent.Contracts.csproj" />
+    <ProjectReference Include="..\PersonalAgent.Integrations\PersonalAgent.Integrations.csproj" />
   </ItemGroup>
 
   <ItemGroup>

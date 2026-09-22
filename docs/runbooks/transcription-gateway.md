@@ -2,34 +2,17 @@
 
 API owns the transcription adapter, provider configuration and the `transcription_jobs` table in the agent-memory schema. Worker requests transcription with an upload ID and subject profile over MassTransit, then owns utterance persistence, speaker review and downstream processing. Audio bytes never enter the bus. API checks the upload/profile pair against server storage before any provider access or cached-result read. This is an internal trusted-bus capability; it does not add a public endpoint or change upload authorization.
 
-## Configuration and rollout
+## Configuration
 
-1. Let old Worker transcription consumers finish before replacing Worker. The old implementation never persisted provider IDs, so interrupting it cannot guarantee recovery without duplicate submission. Pause new uploads during the rollout.
-2. Run `scripts/migrate-assemblyai-configuration.ps1` to preview, then add `-Apply` to migrate. It reads `DATABASE_URL` and `CONFIG_ENCRYPTION_KEY` from the environment, or accepts `-ValuesPath scripts/seed-configuration.values.ps1` to use the existing private bootstrap values. It reads all Worker `AssemblyAi:*` rows directly from PostgreSQL, decrypts secret values and re-encrypts them for Api using the application's crypto implementation. Use `-KeepSource` while the old Worker is still deployed to copy settings into Api without removing Worker settings. It preserves activation flags and writes rows in one transaction, without printing secrets or generating SQL files. An existing matching Api row is retained; a conflicting row aborts the whole migration. Reruns are safe. Changing only the scope column would invalidate encrypted values.
-3. If using environment variables or user secrets, move `ASSEMBLYAI_*` / `AssemblyAi:*` settings to the API process/project. API validates these options on startup. Worker no longer needs provider credentials.
-4. Start API with infrastructure creation enabled to add `transcription_jobs`, then start the new Worker. API agent-memory storage and Worker coach-checkin storage must use the same database and schema, as required by the existing staged-upload pipeline.
-5. Verify a synthetic stereo upload maps channel 1 to coach and channel 2 to athlete and reaches processing without speaker review. Also verify a result without channel metadata pauses for speaker review. No live-provider verification is included in automated tests.
+AssemblyAI settings belong in the encrypted database under `Shared` or `Api`; Worker does not hold provider credentials. API validates the active options on startup. API agent-memory storage and Worker coach-checkin storage must use the same database and schema, as required by the staged-upload pipeline.
+
+After a configuration change, verify a synthetic stereo upload maps channel 1 to coach and channel 2 to athlete and reaches processing without speaker review. Also verify a result without channel metadata pauses for speaker review. Automated tests do not call the live provider.
 
 ### Stereo attribution and transcript names
 
 New AssemblyAI submissions use multichannel transcription instead of speaker diarization. The supported recording contract is a stereo phone recording with the coach on the left channel (provider channel 1) and the athlete on the right channel (provider channel 2). Do not use this path for a recording whose channel layout is unknown or reversed. Missing or unexpected channel metadata pauses at the existing speaker-review step.
 
 `CoachCheckins:CoachName` and `CoachCheckins:AthleteName` are non-secret Api settings shown in **Settings → Database settings**. Their initial values are `Andrew` and `Michael`; edit them there and restart API to apply a change. API transcript JSON and text downloads show the configured name together with `coach` or `athlete`. Persisted utterances and retrieval chunks keep the domain role, so changing a name does not require reprocessing. Startup inserts missing name rows without replacing an existing Shared or Api value. See [decision 0025](../decisions/0025-stereo-coach-attribution.md).
-
-### Migration commands
-
-```powershell
-# Preview using existing private bootstrap values (no database changes).
-./scripts/migrate-assemblyai-configuration.ps1 -ValuesPath ./scripts/seed-configuration.values.ps1
-
-# Prepare Api while retaining configuration needed by the old Worker.
-./scripts/migrate-assemblyai-configuration.ps1 -ValuesPath ./scripts/seed-configuration.values.ps1 -Apply -KeepSource
-
-# Finish the move after draining and replacing the old Worker.
-./scripts/migrate-assemblyai-configuration.ps1 -ValuesPath ./scripts/seed-configuration.values.ps1 -Apply
-```
-
-Omit `-ValuesPath` when the bootstrap environment variables are already set. The helper requires the repository's pinned .NET 11 RC1 SDK and restores its normal repository dependencies; it connects directly to PostgreSQL and does not require Docker or psql. Configuration writers may wait briefly during the transaction; readers remain available. Stop old Worker processes before applying because their startup configuration will no longer be in the Worker scope. Restart API afterward. A network failure during commit can leave the outcome uncertain; rerun the preview to inspect the remaining move count.
 
 ## Recovery semantics
 

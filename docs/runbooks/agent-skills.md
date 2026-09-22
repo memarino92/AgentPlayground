@@ -1,6 +1,6 @@
 # Runtime agent skills
 
-The API uses Microsoft Agent Framework skills for product-domain procedures that are useful only on matching turns. Skills live under `PersonalAgent/Skills/<skill-name>/SKILL.md` and are copied to the API output and publish directories.
+The API uses Microsoft Agent Framework skills for product-domain procedures that are useful only on matching turns. Skills live under `PersonalAgent.Api/Skills/<skill-name>/SKILL.md` and are copied to the API output and publish directories.
 
 ## Current skill
 
@@ -24,7 +24,7 @@ The API uses Microsoft Agent Framework skills for product-domain procedures that
 Run the focused packaging/provider test:
 
 ```powershell
-dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj --filter FullyQualifiedName~AgentSkillsTests
+dotnet test PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj --filter FullyQualifiedName~AgentSkillsTests
 ```
 
 For coaching instruction changes, also run the deterministic coaching retrieval tests and the opt-in model comparison described in [coaching retrieval evaluation](coach-retrieval-evaluation.md). Provider discovery proves that a skill can load; it does not prove that a model selects or follows it reliably.

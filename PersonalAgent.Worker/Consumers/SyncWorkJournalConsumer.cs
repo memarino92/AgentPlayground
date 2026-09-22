@@ -1,7 +1,7 @@
-using AgentPlayground.Contracts.Commands;
-using AgentPlayground.Contracts.Events;
-using AgentPlayground.Contracts.Messaging.Requests;
-using AgentPlayground.Contracts.Messaging.Responses;
+using PersonalAgent.Contracts.Messaging.Commands;
+using PersonalAgent.Contracts.Messaging.Events;
+using PersonalAgent.Contracts.Messaging.Requests;
+using PersonalAgent.Contracts.Messaging.Responses;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

@@ -1,6 +1,6 @@
 # Adding agent tools
 
-The API has one executable tool registry in `PersonalAgent/Services/AgentToolRegistry.cs`. `ToolAccessService` derives the admin catalog from it; `AgentToolBinder` derives the agent's functions. A tool's stable key, name, description, role defaults, availability, side-effect metadata, and handler belong to the same registration.
+The API has one executable tool registry in `PersonalAgent.Api/Services/AgentToolRegistry.cs`. `ToolAccessService` derives the admin catalog from it; `AgentToolBinder` derives the agent's functions. A tool's stable key, name, description, role defaults, availability, side-effect metadata, and handler belong to the same registration.
 
 ## Add a local capability
 
@@ -25,7 +25,7 @@ The registry does not grant broader subject access or repair the remaining sched
 ## Verification
 
 ```powershell
-dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj
+dotnet test PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj
 ```
 
 Tests bind every local tool through the production registry, compare catalog/function identity and descriptions, ensure identity fields are absent from argument schemas, verify separate server-bound subjects despite forged input, and prove revoked permissions/unavailable integrations prevent invocation. All side effects in these tests use fakes.

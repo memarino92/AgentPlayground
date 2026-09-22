@@ -3,7 +3,7 @@
 - Status: Accepted; Sentry first slice implemented
 - Recorded: 2026-09-10
 - Decision date: 2026-09-10; maintainer authorized implementation
-- Evidence: maintainer request; `AgentPlayground.Contracts/Configuration/PostgresConfigurationSource.cs`, `ConfigurationValueResolver.cs`, and `PersonalAgent.Web/Components/Pages/IntegrationsAdmin.razor`
+- Evidence: maintainer request; `PersonalAgent.Contracts/Configuration/PostgresConfigurationSource.cs`, `ConfigurationValueResolver.cs`, and `PersonalAgent.Web/Components/Pages/IntegrationsAdmin.razor`
 - Related: [0001: Database configuration](0001-database-configuration.md); adds a dedicated runtime store while preserving existing startup-only consumers
 
 ## Context
@@ -44,7 +44,7 @@ The integration setup experience becomes reusable and inspectable. It adds lifec
 
 ## Delivery and verification
 
-Implemented: a separate `AgentPlayground.Integrations` host-infrastructure library, encrypted immutable revisions, explicit administrator allowlist, field validation, save/apply/reload/test endpoints and Blazor UI, 15-second durable pointer reconciliation, per-instance status, and replaceable Sentry 6.10.0 clients in API/Web/Worker. Existing AI provider ownership remains unchanged. Error export is limited to metadata through one logging provider; raw exception and log contents are excluded. No global SDK initialization or general configuration reload is used.
+Implemented: a separate `PersonalAgent.Integrations` host-infrastructure library, encrypted immutable revisions, explicit administrator allowlist, field validation, save/apply/reload/test endpoints and Blazor UI, 15-second durable pointer reconciliation, per-instance status, and replaceable Sentry 6.10.0 clients in API/Web/Worker. Existing AI provider ownership remains unchanged. Error export is limited to metadata through one logging provider; raw exception and log contents are excluded. No global SDK initialization or general configuration reload is used.
 
 The additive integration schema has its own versioned transaction under an advisory lock; broader database migration work remains open. Revisions retain encrypted values plus author/time; promotions retain actor/time. Historical encrypted revisions are retained with the database and backups. UI history/revert, field-level audit presentation, additional integrations, self-hosted Sentry, tracing, and alerts remain follow-ups. Validation is performed synchronously on save and apply; no external credential-validity claim is made. The test action reports queue acceptance, not confirmed ingestion.
 

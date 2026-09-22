@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
-using AgentPlayground.Integrations;
+using PersonalAgent.Integrations;
 
 namespace PersonalAgent.Web.Components.Integrations;
 

@@ -4,14 +4,14 @@ WORKDIR /src
 COPY ["global.json", "."]
 COPY ["Directory.Build.props", "."]
 COPY ["Directory.Packages.props", "."]
-COPY ["AgentPlayground.Contracts/AgentPlayground.Contracts.csproj", "AgentPlayground.Contracts/"]
-COPY ["AgentPlayground.Integrations/AgentPlayground.Integrations.csproj", "AgentPlayground.Integrations/"]
-COPY ["PersonalAgent/PersonalAgent.csproj", "PersonalAgent/"]
+COPY ["PersonalAgent.Contracts/PersonalAgent.Contracts.csproj", "PersonalAgent.Contracts/"]
+COPY ["PersonalAgent.Integrations/PersonalAgent.Integrations.csproj", "PersonalAgent.Integrations/"]
+COPY ["PersonalAgent.Api/PersonalAgent.Api.csproj", "PersonalAgent.Api/"]
 
-RUN dotnet restore "PersonalAgent/PersonalAgent.csproj"
+RUN dotnet restore "PersonalAgent.Api/PersonalAgent.Api.csproj"
 
 COPY . .
-RUN dotnet publish "PersonalAgent/PersonalAgent.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "PersonalAgent.Api/PersonalAgent.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:11.0.0-rc.1 AS final
 WORKDIR /app
@@ -19,4 +19,4 @@ ENV ASPNETCORE_ENVIRONMENT=Production
 
 COPY --from=build /app/publish .
 
-ENTRYPOINT ["dotnet", "PersonalAgent.dll"]
+ENTRYPOINT ["dotnet", "PersonalAgent.Api.dll"]

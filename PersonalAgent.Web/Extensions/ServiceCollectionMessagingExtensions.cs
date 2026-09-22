@@ -1,5 +1,5 @@
-using AgentPlayground.Contracts.Messaging;
-using AgentPlayground.Contracts.Events;
+using PersonalAgent.Contracts.Messaging;
+using PersonalAgent.Contracts.Messaging.Events;
 using MassTransit;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.Extensions.Options;

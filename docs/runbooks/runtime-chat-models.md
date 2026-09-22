@@ -50,7 +50,7 @@ If choices stop at an older model, inspect the active database policy and discov
 `DatabaseChatModelPolicyTests` uses PostgreSQL and the existing settings editor store to verify insert-only migration, current/older table schemas, scope precedence, inactive and deleted entries, policy edits, cache invalidation, provider failure, and invalid policy. Catalog tests cover timeout, cancellation, concurrency and availability changes. HTTP tests verify newer model session creation; Web tests render the picker and settings lifecycle labels. Providers are test doubles; no private account inventory or paid model-quality evaluation is claimed.
 
 ```powershell
-dotnet test PersonalAgent.Tests/PersonalAgent.Tests.csproj
+dotnet test PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj
 dotnet test PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj
 ```
 

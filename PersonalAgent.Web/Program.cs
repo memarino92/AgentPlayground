@@ -1,6 +1,6 @@
-using AgentPlayground.Contracts.Hosting;
-using AgentPlayground.Integrations;
-using AgentPlayground.Contracts.Configuration;
+using PersonalAgent.Contracts.Hosting;
+using PersonalAgent.Integrations;
+using PersonalAgent.Contracts.Configuration;
 using MudBlazor.Services;
 using PersonalAgent.Web.Extensions;
 using PersonalAgent.Web.Development;

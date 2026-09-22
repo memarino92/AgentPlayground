@@ -1,6 +1,6 @@
-using AgentPlayground.Contracts.Messaging;
-using AgentPlayground.Contracts.Messaging.Commands;
-using AgentPlayground.Contracts.Messaging.Events;
+using PersonalAgent.Contracts.Messaging;
+using PersonalAgent.Contracts.Messaging.Commands;
+using PersonalAgent.Contracts.Messaging.Events;
 using MassTransit;
 
 namespace PersonalAgent.Worker.Consumers;
