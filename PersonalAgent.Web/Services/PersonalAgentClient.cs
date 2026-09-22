@@ -361,6 +361,13 @@ internal class PersonalAgentClient : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task SaveOpenRouterCredentialAsync(SaveProviderCredentialRequest Request, CancellationToken CancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Put, "/api/admin/settings/providers/openrouter",
+            JsonContent.Create(Request, options: JsonOptions), CancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<DatabaseCredentialStatus> ReloadDatabaseCredentialsAsync(CancellationToken CancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Post, "/api/admin/settings/reload", cancellationToken: CancellationToken);

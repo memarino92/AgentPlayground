@@ -33,4 +33,4 @@ OpenRouter accepts prompts, history, tool schemas and tool outputs, so its data-
 
 ## Delivery and verification
 
-The first slice includes live-reloadable encrypted credentials, OpenAI-compatible client dispatch, qualified discovery, merged partial-failure behavior, the Auto seed for fresh policies, deployment seeding support, unit tests, and operations documentation. No paid live request, privacy review, downstream-model disclosure, or model-quality/cost comparison is claimed. See [runtime chat models](../runbooks/runtime-chat-models.md).
+The first slice includes live-reloadable encrypted credentials, OpenAI-compatible client dispatch, qualified discovery, merged partial-failure behavior, the Auto seed for fresh policies, deployment seeding support, unit tests, and operations documentation. The follow-up Settings slice adds authenticated first-time key creation and replacement, encrypted persistence with optimistic concurrency, immediate reload feedback, and masked browser behavior. No paid live request, privacy review, downstream-model disclosure, or model-quality/cost comparison is claimed. See [runtime chat models](../runbooks/runtime-chat-models.md).

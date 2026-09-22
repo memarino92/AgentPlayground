@@ -58,6 +58,13 @@ public sealed class IntegrationSettingsEndpointsTests
             using var response = await client.SendAsync(request);
             ((int)response.StatusCode).Should().Be(Expected);
         }
+        using (var client = app.GetTestClient())
+        {
+            Sign(client, Actor, Role, InternalKey, ForgeSignature);
+            using var response = await client.PutAsJsonAsync("/api/admin/settings/providers/openrouter",
+                new SaveProviderCredentialRequest(null, "private-key"));
+            ((int)response.StatusCode).Should().Be(Expected);
+        }
     }
 
     [Fact]

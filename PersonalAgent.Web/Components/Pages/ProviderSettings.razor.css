@@ -1,0 +1,7 @@
+.provider-settings { margin: 2rem 0; }
+.settings-card { border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+label { display: block; margin: .6rem 0; }
+input[type=password] { width: 100%; max-width: 100%; font-family: monospace; padding: .5rem; }
+button { padding: .5rem; cursor: pointer; }
+fieldset { border: 0; padding: 0; min-width: 0; }
+[role=alert] { color: var(--error-color); }

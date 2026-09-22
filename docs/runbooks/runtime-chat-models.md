@@ -12,7 +12,7 @@ Fresh policy seeds include GPT-5.5, GPT-5.6 Luna/Terra/Sol, GPT-6 Astra, and Ope
 
 ## OpenRouter and automatic routing
 
-Store the OpenRouter token as the encrypted active `Api` row `OpenRouter:ApiKey`. The optional `OPENROUTER_API_KEY` environment variable overrides it for bootstrap or emergency operation. The credential reload worker applies accepted changes to new discovery and chat requests without an API restart. The OpenAI credential remains required for embeddings and the existing OpenAI-backed capabilities.
+Open **Settings → AI providers** and enter the OpenRouter token. The API creates or replaces the encrypted active `Api` row `OpenRouter:ApiKey` without returning the secret to Web, then immediately checks live credentials. Concurrent setup or replacement is rejected rather than overwriting another administrator's change. The optional `OPENROUTER_API_KEY` environment variable overrides the database value for bootstrap or emergency operation and is named, without its value, after the reload check. The background credential worker also applies accepted changes to new discovery and chat requests within 15 seconds without an API restart. The OpenAI credential remains required for embeddings and the existing OpenAI-backed capabilities.
 
 For an existing database-owned model policy, add the following indexed rows at an unused `N`; startup deliberately does not extend an administrator-owned policy:
 
@@ -47,7 +47,7 @@ If choices stop at an older model, inspect the active database policy and discov
 
 ## Verification
 
-`DatabaseChatModelPolicyTests` uses PostgreSQL and the existing settings editor store to verify insert-only migration, current/older table schemas, scope precedence, inactive and deleted entries, policy edits, cache invalidation, provider failure, and invalid policy. Catalog tests cover timeout, cancellation, concurrency and availability changes. HTTP tests verify newer model session creation; Web tests render the picker and settings lifecycle labels. Providers are test doubles; no private account inventory or paid model-quality evaluation is claimed.
+`DatabaseChatModelPolicyTests` uses PostgreSQL and the existing settings editor store to verify insert-only migration, current/older table schemas, scope precedence, inactive and deleted entries, policy edits, cache invalidation, provider failure, and invalid policy. Provider-setting tests cover first-row creation, encrypted replacement, masking, stale writes, validation, route authorization, immediate reload, and browser secret clearing. Catalog tests cover timeout, cancellation, concurrency and availability changes. HTTP tests verify newer model session creation; Web tests render the picker and settings lifecycle labels. Providers are test doubles; no private account inventory or paid model-quality evaluation is claimed.
 
 ```powershell
 dotnet test PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj

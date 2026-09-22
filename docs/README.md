@@ -63,7 +63,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0029: Continuous conversation](decisions/0029-continuous-conversation.md) | Accepted; first slice implemented | One default chat, bounded contextual recall and trusted interactive cards |
 | [0030: Streaming chat and agent-managed scheduled jobs](decisions/0030-streaming-chat-and-agent-job-management.md) | Accepted; implemented | Stream provider responses to Web and let the authorized agent inspect, update and cancel durable jobs |
 | [0031: Runtime Agent Framework skills](decisions/0031-runtime-agent-skills.md) | Accepted; first skill implemented | Progressively disclose coaching-answer guidance while retaining tool authorization |
-| [0032: OpenRouter auto routing](decisions/0032-openrouter-auto-routing.md) | Accepted; first slice implemented | Add OpenRouter behind the existing agent boundary and use provider-managed auto routing as the first evaluated baseline |
+| [0032: OpenRouter auto routing](decisions/0032-openrouter-auto-routing.md) | Accepted; provider and Settings slices implemented | Add OpenRouter behind the existing agent boundary and use provider-managed auto routing as the first evaluated baseline |
 
 ## Working agreement
 

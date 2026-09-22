@@ -69,4 +69,50 @@ public sealed class DatabaseSettingsStoreTests(PostgresVectorFixture Fixture) : 
         foreach (var request in new[] { new SaveDatabaseSettingsRequest([]), new([edit, edit]), new([edit with { Value = new string('x', 262145) }]), new([edit with { Scope = "" }]) })
             await ((Func<Task>)(() => store.SaveAsync(request, default))).Should().ThrowAsync<IntegrationValidationException>();
     }
+
+    [Fact]
+    public async Task LiveCredential_CanBeCreatedAndReplacedWithEncryptionAndConcurrency()
+    {
+        var key = Convert.ToBase64String(new byte[32]);
+        var database = new IntegrationDatabase(Fixture.ConnectionString, key);
+        var store = new DatabaseSettingsStore(database);
+        await using var connection = await database.OpenAsync(default);
+        await using var initialize = new NpgsqlCommand("""
+            CREATE SCHEMA IF NOT EXISTS app;
+            DROP TABLE IF EXISTS app.configuration_settings;
+            CREATE TABLE app.configuration_settings(scope text, key text, value text NOT NULL,
+                is_secret boolean NOT NULL, is_active boolean NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY(scope,key));
+            """, connection);
+        await initialize.ExecuteNonQueryAsync();
+
+        await store.SaveLiveCredentialAsync("Api", "OpenRouter:ApiKey", new(null, "router-original"), default);
+        var setting = (await store.ReadAsync(default)).Should().ContainSingle().Which;
+        setting.Scope.Should().Be("Api");
+        setting.Key.Should().Be("OpenRouter:ApiKey");
+        setting.IsSecret.Should().BeTrue();
+        setting.IsActive.Should().BeTrue();
+        setting.Value.Should().BeNull();
+        await using var read = new NpgsqlCommand("SELECT value FROM app.configuration_settings", connection);
+        PostgresConfigurationCrypto.Decrypt((string)(await read.ExecuteScalarAsync())!, setting.Scope, setting.Key, key)
+            .Should().Be("router-original");
+
+        await ((Func<Task>)(() => store.SaveLiveCredentialAsync("Api", "OpenRouter:ApiKey", new(null, "duplicate"), default)))
+            .Should().ThrowAsync<IntegrationConflictException>();
+        await store.SaveLiveCredentialAsync("Api", "OpenRouter:ApiKey", new(setting.Version, "router-next"), default);
+        PostgresConfigurationCrypto.Decrypt((string)(await read.ExecuteScalarAsync())!, setting.Scope, setting.Key, key)
+            .Should().Be("router-next");
+        await ((Func<Task>)(() => store.SaveLiveCredentialAsync("Api", "OpenRouter:ApiKey", new(setting.Version, "stale"), default)))
+            .Should().ThrowAsync<IntegrationConflictException>();
+    }
+
+    [Theory]
+    [InlineData("Custom:ApiKey", "value")]
+    [InlineData("OpenRouter:ApiKey", "invalid value")]
+    public async Task LiveCredential_RejectsUnknownDestinationsAndInvalidValues(string SettingKey, string Value)
+    {
+        var store = new DatabaseSettingsStore(new("", ""));
+        await ((Func<Task>)(() => store.SaveLiveCredentialAsync("Api", SettingKey, new(null, Value), default)))
+            .Should().ThrowAsync<IntegrationValidationException>();
+    }
 }
