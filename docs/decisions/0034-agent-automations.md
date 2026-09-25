@@ -1,4 +1,4 @@
-# 0033: Agent-authored deterministic automations
+# 0034: Agent-authored deterministic automations
 
 - Status: Accepted; registered-action recipe slice implemented
 - Recorded: 2026-09-25
