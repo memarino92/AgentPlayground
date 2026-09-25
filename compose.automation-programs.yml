@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile.automation-runner
     environment:
       DOTNET_ENVIRONMENT: Development
+      SyntheticDemo__Enabled: "true"
       DATABASE_URL: "Host=postgres-demo;Database=agentplayground_demo;Username=demo;Password=synthetic-local-password"
       CONFIG_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     volumes:

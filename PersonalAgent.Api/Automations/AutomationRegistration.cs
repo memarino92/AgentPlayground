@@ -22,6 +22,10 @@ internal static class AutomationRegistration
         Services.AddSingleton<AutomationAuthorization>();
         Services.AddSingleton<AutomationRecipes>();
         Services.AddSingleton<AutomationTools>();
+        Services.AddSingleton<PersonalAgent.Integrations.AutomationRuntimeStore>();
+        Services.AddSingleton<PersonalAgent.Integrations.AutomationSandboxStore>();
+        Services.AddScoped<AutomationOperationGateway>();
+        Services.AddHostedService<AutomationRuntimeMigration>();
         Services.AddHostedService<AutomationScheduler>();
         return Services;
     }
@@ -43,6 +47,12 @@ internal static class AutomationRegistration
             });
         Bus.AddConsumer<AutomationStepConsumer, AutomationStepDefinition>();
     }
+}
+
+internal sealed class AutomationRuntimeMigration(PersonalAgent.Integrations.AutomationRuntimeStore Store) : IHostedService
+{
+    public Task StartAsync(CancellationToken Token) => Store.InitializeAsync(Token);
+    public Task StopAsync(CancellationToken Token) => Task.CompletedTask;
 }
 
 internal sealed class AutomationSagaDefinition : SagaDefinition<AutomationRun>

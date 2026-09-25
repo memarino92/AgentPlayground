@@ -16,7 +16,8 @@ public sealed record AutomationStepResponse(int Index, string Id, string Action,
 public sealed record AutomationReportResponse(Guid Id, string Title, string Content, DateTimeOffset CreatedAt);
 public sealed record AutomationDetail(AutomationSummary Automation, IReadOnlyList<AutomationVersionResponse> Versions,
     IReadOnlyList<AutomationRunResponse> Runs, IReadOnlyList<DateTimeOffset> UpcomingRuns);
-public sealed record AutomationRunDetail(AutomationRunResponse Run, IReadOnlyList<AutomationStepResponse> Steps, IReadOnlyList<AutomationReportResponse> Reports);
+public sealed record AutomationRunDetail(AutomationRunResponse Run, IReadOnlyList<AutomationStepResponse> Steps, IReadOnlyList<AutomationReportResponse> Reports,
+    IReadOnlyList<AutomationOperationEvidence>? Operations = null, IReadOnlyList<AutomationSandboxStatus>? Sandboxes = null);
 public sealed record AutomationActionDescriptor(string Action, string Description, object Arguments);
 
 // Commands contain identities only. Executable source and authority are loaded from persisted records.

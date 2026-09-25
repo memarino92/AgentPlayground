@@ -68,6 +68,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0032: OpenRouter auto routing](decisions/0032-openrouter-auto-routing.md) | Accepted; implemented | Add OpenRouter behind the existing agent boundary and use provider-managed auto routing as the default for new chats |
 | [0034: Agent automations](decisions/0034-agent-automations.md) | Accepted; recipe slice implemented | EF Core saga/outbox transactions, agent authoring and automation dashboard |
 | [0035: Isolated automation programs](decisions/0035-isolated-automation-programs.md) | Accepted; implemented | Single-source C# computation in disposable bounded containers |
+| [0036: Railway automation sandboxes](decisions/0036-railway-automation-sandboxes.md) | Accepted; live provider verification pending | Internet-enabled disposable VMs, durable cleanup, scoped read tools and optional Jev review |
 | [0033: Recurring scheduled jobs](decisions/0033-recurring-scheduled-jobs.md) | Accepted; implemented | Add agent-created fixed-interval series with durable run history and dashboard visibility |
 
 ## Working agreement

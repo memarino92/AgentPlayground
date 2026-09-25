@@ -28,6 +28,8 @@ internal static partial class PersonalAgentEndpoints
         apiGroup.MapCoachEvidence(securityOptions);
         apiGroup.MapScheduledJobs(securityOptions);
         apiGroup.MapAutomations(securityOptions);
+        apiGroup.MapAutomationRuntimeSettings(securityOptions, app.Configuration);
+        app.MapAutomationRuntimeGateway();
         MapConversationEndpoints(apiGroup, securityOptions);
 
         apiGroup.MapGet("/models", async (IChatModelCatalog chatModelCatalog, CancellationToken cancellationToken) =>

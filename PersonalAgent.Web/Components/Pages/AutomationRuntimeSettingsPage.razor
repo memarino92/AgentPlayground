@@ -1,0 +1,29 @@
+<section>
+    <h2>Railway automation runner</h2>
+    <p>Each run creates an isolated VM with Internet access. Changes apply to new runs and gateway requests; existing VMs retain cleanup credentials until destroyed.</p>
+    @if (Error is not null) { <p role="alert">@Error</p> }
+    @if (Notice is not null) { <p role="status">@Notice</p> }
+    <button disabled="@Busy" @onclick="LoadAsync">Reload</button>
+    @if (!Loaded) { <p>Loading runner settings…</p> }
+    else
+    {
+        <EditForm Model="Model" OnValidSubmit="SaveAsync" FormName="automation-runtime">
+            <DataAnnotationsValidator /><ValidationSummary />
+            <fieldset disabled="@Busy">
+                <label><InputCheckbox @bind-Value="Model.Enabled" /> Enable Railway execution</label>
+                <p>Saved revision @Revision · Railway token @(HasToken ? "configured" : "missing")</p>
+                <label>Railway token action <InputSelect @bind-Value="Model.TokenAction"><option value="keep">Keep</option><option value="replace">Replace</option><option value="clear">Clear</option></InputSelect></label>
+                @if (Model.TokenAction == "replace") { <label>New account/workspace token <InputText type="password" autocomplete="new-password" @bind-Value="Model.Token" /></label> }
+                <label>Railway environment UUID <InputText @bind-Value="Model.EnvironmentId" /></label>
+                <label>Prepared checkpoint name <InputText @bind-Value="Model.Checkpoint" /></label>
+                <label>Sandbox image ID (sha256:…) <InputText @bind-Value="Model.ImageId" /></label>
+                <label>Public API origin (https://…) <InputText @bind-Value="Model.GatewayUrl" /></label>
+                <label>Jev operation review <InputSelect @bind-Value="Model.ReviewMode"><option>Off</option><option>Shadow</option><option>Enforce</option></InputSelect></label>
+                <p>Uses the configured Jev key, model, thresholds and content-sharing consent. Shadow records decisions. Enforce declines when Jev is unavailable or uncertain. Jev can never override permissions or the package list.</p>
+                <label>Approved packages, one ID@exact.version per line (include transitive dependencies) <InputTextArea @bind-Value="Model.Packages" /></label>
+                <p>Generated programs must supply a NuGet lock file. These approvals govern managed restore and gateway tools; they do not inspect arbitrary Internet traffic. Enable the separate C# automation permission under Integrations to allow authoring.</p>
+                <button type="submit">Save runner settings</button>
+            </fieldset>
+        </EditForm>
+    }
+</section>

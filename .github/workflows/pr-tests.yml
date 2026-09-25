@@ -21,6 +21,14 @@ jobs:
         run: docker build -f Dockerfile.automation-sandbox -t agentplayground-csharp-sandbox:1 .
       - name: Verify program execution and sandbox limits
         run: dotnet test PersonalAgent.AutomationRunner.Tests/PersonalAgent.AutomationRunner.Tests.csproj
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Verify Railway sandbox SDK boundary without paid resources
+        working-directory: PersonalAgent.AutomationRunner/Railway
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --test bridge.test.mjs
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
