@@ -77,7 +77,7 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
         await AccessibleAsync(Access, Id, Token);
         var Run = await Db.Runs.AsNoTracking().SingleOrDefaultAsync(R => R.CorrelationId == RunId && R.AutomationId == Id, Token) ?? throw new KeyNotFoundException();
         var Steps = await Db.Steps.AsNoTracking().Where(S => S.RunId == RunId).OrderBy(S => S.Index)
-            .Select(S => new AutomationStepResponse(S.Index, S.StepId, S.Action, S.Status, S.Output, S.Error, S.CompletedAt)).ToListAsync(Token);
+            .Select(S => new AutomationStepResponse(S.Index, S.StepId, S.Action, S.Status, S.Output, S.Error, S.CompletedAt, S.ProgramEvidence)).ToListAsync(Token);
         var Reports = await Db.Reports.AsNoTracking().Where(R => R.RunId == RunId).OrderBy(R => R.StepIndex)
             .Select(R => new AutomationReportResponse(R.Id, R.Title, R.Content, R.CreatedAt)).ToListAsync(Token);
         return new(RunResponse(Run), Steps, Reports);

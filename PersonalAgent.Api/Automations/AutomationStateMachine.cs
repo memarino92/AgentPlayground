@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -35,7 +37,7 @@ internal sealed class AutomationStateMachine : MassTransitStateMachine<Automatio
                 .IfElse(C => C.Saga.Error is not null, B => B.TransitionTo(Blocked),
                     B => B.IfElse(C => C.Saga.FinishedAt is not null, D => D.TransitionTo(Completed), D => D.TransitionTo(Running))),
             When(StepFailed, C => C.Message.StepIndex == C.Saga.StepIndex)
-                .ThenAsync(async C => await Handler(C).FailAsync(C.Saga, C.Message.Error, C.Message.Blocked, C.CancellationToken))
+                .ThenAsync(async C => await Handler(C).FailAsync(C.Saga, C.Message.Error, C.Message.Blocked, C.CancellationToken, C.Message.Program))
                 .IfElse(C => C.Message.Blocked, B => B.TransitionTo(Blocked), B => B.TransitionTo(Failed)));
         During(Completed, Ignore(Start), Ignore(StepCompleted), Ignore(StepFailed));
         During(Failed, Ignore(Start), Ignore(StepCompleted), Ignore(StepFailed));
@@ -75,10 +77,17 @@ internal sealed class AutomationSagaActions(AutomationDbContext Db, AutomationAu
         var Recipe = Recipes.Parse(Version.Source);
         var Step = Recipe.Steps[Run.StepIndex];
         var Record = await Db.Steps.SingleAsync(S => S.RunId == Run.CorrelationId && S.Index == Run.StepIndex, Token);
+        if (Step.Action == "csharp" && (Access.Role != AgentRoles.Owner
+            || !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.PermissionKey, Token)))
+        { await FailAsync(Run, "C# automation permission was revoked.", true, Token); return; }
+        if (Step.Action == "csharp" && !Result.Skipped && (Result.Program is null || Result.Program.Status != "Completed"
+            || Result.Program.SourceHash != Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Step.Arguments.GetProperty("source").GetString()!)))))
+            throw new InvalidOperationException("C# result does not match the pinned source.");
         if (!Result.Skipped && Step.Action == "notify" && !await Permissions.IsAllowedAsync(Access.Role, AgentToolKeys.PublishMobileNotification, Token))
         { await FailAsync(Run, "Notification permission was revoked.", true, Token); return; }
         if (Result.Output.Length > 65536) throw new InvalidOperationException("Invalid oversized step result.");
         Record.Output = Result.Output;
+        Record.ProgramEvidence = Result.Program is null ? null : JsonSerializer.Serialize(Result.Program);
         Record.Status = Result.Skipped ? "Skipped" : "Completed";
         Record.CompletedAt = Clock.GetUtcNow();
         if (!Result.Skipped && Step.Action is "save_report" or "notify")
@@ -108,12 +117,13 @@ internal sealed class AutomationSagaActions(AutomationDbContext Db, AutomationAu
         // MassTransit's EF consumer outbox saves domain rows, saga state and messages in this transaction.
     }
 
-    public async Task FailAsync(AutomationRun Run, string Error, bool Blocked, CancellationToken Token)
+    public async Task FailAsync(AutomationRun Run, string Error, bool Blocked, CancellationToken Token, AutomationProgramEvidence? Program = null)
     {
         Run.Error = Error;
         Run.FinishedAt = Clock.GetUtcNow();
         var Record = await Db.Steps.SingleOrDefaultAsync(S => S.RunId == Run.CorrelationId && S.Index == Run.StepIndex, Token);
-        if (Record is not null) { Record.Status = Blocked ? "Blocked" : "Failed"; Record.Error = Error; Record.CompletedAt = Run.FinishedAt; }
+        if (Record is not null) { Record.Status = Blocked ? "Blocked" : "Failed"; Record.Error = Error; Record.CompletedAt = Run.FinishedAt;
+            Record.ProgramEvidence = Program is null ? null : JsonSerializer.Serialize(Program); }
         (await DefinitionAsync(Run, Token)).Status = "Paused";
         AutomationTelemetry.Finished(Blocked ? "Blocked" : "Failed");
         Activity.Current?.SetStatus(ActivityStatusCode.Error);

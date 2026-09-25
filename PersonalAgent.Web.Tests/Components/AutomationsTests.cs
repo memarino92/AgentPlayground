@@ -26,7 +26,8 @@ public sealed class AutomationsTests : TestContext
         Cut.Find(".automation-item").Click();
         Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Versions and source").And.Contain("Upcoming runs").And.Contain("2026-09-25"));
         Cut.FindAll("button").Single(B => B.TextContent == "Inspect run").Click();
-        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic saved content").And.Contain("trace-synthetic"));
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic saved content").And.Contain("trace-synthetic")
+            .And.Contain("C# build and execution").And.Contain("sha256:compiler"));
         Cut.FindAll("button").Single(B => B.TextContent == "Pause future runs").Click();
         Cut.WaitForAssertion(() => Handler.Paused.Should().BeTrue());
         Cut.WaitForAssertion(() => Cut.FindAll("button").Should().Contain(B => B.TextContent == "Resume"));
@@ -76,7 +77,8 @@ public sealed class AutomationsTests : TestContext
             var Definition = new AutomationSummary(Id, "Daily report", Paused ? "Paused" : "Active", 2, Date, Date.AddDays(1), TimeSpan.FromDays(1), "owner", "owner");
             var Run = new AutomationRunResponse(RunId, 1, "Completed", Date, Date, Date, null, "trace-synthetic");
             object Body = Request.RequestUri!.AbsolutePath.Contains("/runs/")
-                ? new AutomationRunDetail(Run, [new(0, "report", "save_report", "Completed", "Synthetic saved content", null, Date)], [])
+                ? new AutomationRunDetail(Run, [new(0, "program", "csharp", "Completed", "Synthetic saved content", null, Date,
+                    "{\"ImageId\":\"sha256:compiler\",\"StandardError\":\"<script>untrusted</script>\"}")], [])
                 : Request.RequestUri.AbsolutePath == "/api/automations/" ? new[] { Definition }
                 : new AutomationDetail(Definition, [new(2, "{\"steps\":[]}", "hash", Date), new(1, "{\"steps\":[]}", "old-hash", Date)], [Run], Paused ? [] : [Date.AddDays(1)]);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(Body, Body.GetType()) });

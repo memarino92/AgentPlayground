@@ -76,6 +76,7 @@
                                 <details @key="Step.Index"><summary>@(Step.Index + 1). @Step.Id · @Step.Action · @Step.Status</summary>
                                     @if (Step.Error is not null) { <p class="automation-error">@Step.Error</p> }
                                     <pre>@Step.Output</pre>
+                                    @if (Step.ProgramEvidence is not null) { <h5>C# build and execution</h5><pre>@Pretty(Step.ProgramEvidence)</pre> }
                                 </details>
                             }
                             @foreach (var Report in Execution.Reports) { <article @key="Report.Id"><h4>@Report.Title</h4><pre>@Report.Content</pre></article> }

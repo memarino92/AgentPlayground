@@ -81,7 +81,8 @@ public class AgentToolRegistryTests
         var catalog = await access.GetCatalogAsync();
         var tools = await binder.BindAsync(new("owner", AgentRoles.Owner, "owner"));
 
-        tools.Select(Tool => Tool.Descriptor.Key).Should().BeEquivalentTo(catalog.Tools.Select(Tool => Tool.Key));
+        tools.Select(Tool => Tool.Descriptor.Key).Should().BeEquivalentTo(catalog.Tools.Where(Tool => Tool.OwnerDefault).Select(Tool => Tool.Key));
+        catalog.Tools.Single(Tool => Tool.Key == "Local:csharp_automation").OwnerDefault.Should().BeFalse();
         tools.Should().HaveCount(16);
         foreach (var tool in tools)
         {

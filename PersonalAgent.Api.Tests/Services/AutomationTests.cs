@@ -204,7 +204,68 @@ public sealed class AutomationTests(PostgresVectorFixture Database) : IClassFixt
         Recipe.Steps.Should().ContainSingle();
     }
 
-    private async Task<IHost> CreateHostAsync(Mock<IScheduledActorPolicy>? Policy = null, FailReportCommit? Failure = null, bool Reset = true)
+    [Fact]
+    public async Task CSharpIsOptIn_DispatchesLiteralSource_AndRevocationBlocksResultCommit()
+    {
+        var Grants = new Dictionary<string, bool>();
+        using var Host = await CreateHostAsync(Grants: Grants);
+        const string Program = "Console.Write(\"{{literal source}}\");";
+        var Source = JsonSerializer.Serialize(new { steps = new object[] {
+            new { id = "code", action = "csharp", arguments = new { source = Program, input = "input {{run.id}}" } },
+            new { id = "report", action = "save_report", arguments = new { title = "Output", content = "{{steps.code}}" } } } });
+        await FluentActions.Awaiting(() => SaveAndQueueAsync(Host, Source)).Should().ThrowAsync<UnauthorizedAccessException>();
+        Grants[AutomationPrograms.PermissionKey] = true;
+        await using (var CheckScope = Host.Services.CreateAsyncScope())
+        {
+            var Recipes = CheckScope.ServiceProvider.GetRequiredService<AutomationRecipes>();
+            await FluentActions.Awaiting(() => Recipes.ValidateToolsAsync(Recipes.Parse(Source), CheckScope.ServiceProvider,
+                new("coach", AgentRoles.Coach, "owner"), CheckScope.ServiceProvider.GetRequiredService<ToolAccessService>(), default))
+                .Should().ThrowAsync<UnauthorizedAccessException>();
+        }
+        var (Id, Run) = await SaveAndQueueAsync(Host, Source);
+        await Host.StartAsync();
+        try
+        {
+            var Capture = Host.Services.GetRequiredService<ProgramCapture>();
+            await UntilAsync(() => Task.FromResult(Capture.Items.Count == 1));
+            var Request = Capture.Items.Single();
+            Request.Source.Should().Be(Program);
+            Request.Input.Should().Be("input " + Run);
+            Grants[AutomationPrograms.PermissionKey] = false;
+            var Evidence = new AutomationProgramEvidence("hash", "sha256:image", 0, "Completed", "", 1);
+            await (await Host.Services.GetRequiredService<IBus>().GetSendEndpoint(AutomationRegistration.SagaAddress))
+                .Send(new AutomationStepCompleted(Run, 0, "private output", Program: Evidence));
+            await WaitAsync(Host, Run, "Blocked");
+            await using var Scope = Host.Services.CreateAsyncScope();
+            var Detail = await Scope.ServiceProvider.GetRequiredService<AutomationService>().RunDetailAsync(Owner, Id, Run, default);
+            Detail.Reports.Should().BeEmpty();
+            Detail.Steps[0].Output.Should().BeNull();
+        }
+        finally { await Host.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task ProgramDiagnosticsPersistWithFailedSaga()
+    {
+        using var Host = await CreateHostAsync(Grants: new() { [AutomationPrograms.PermissionKey] = true });
+        var (Id, Run) = await SaveAndQueueAsync(Host, """{"steps":[{"id":"code","action":"csharp","arguments":{"source":"invalid code","input":""}}]}""");
+        await Host.StartAsync();
+        try
+        {
+            await UntilAsync(() => Task.FromResult(Host.Services.GetRequiredService<ProgramCapture>().Items.Count == 1));
+            var Evidence = new AutomationProgramEvidence("hash", "sha256:image", 200, "BuildFailed", "error CS1002", 1);
+            await (await Host.Services.GetRequiredService<IBus>().GetSendEndpoint(AutomationRegistration.SagaAddress))
+                .Send(new AutomationStepFailed(Run, 0, "Build failed", Program: Evidence));
+            await WaitAsync(Host, Run, "Failed");
+            await using var Scope = Host.Services.CreateAsyncScope();
+            var Detail = await Scope.ServiceProvider.GetRequiredService<AutomationService>().RunDetailAsync(Owner, Id, Run, default);
+            Detail.Steps[0].ProgramEvidence.Should().Contain("CS1002").And.Contain("sha256:image");
+            (await Scope.ServiceProvider.GetRequiredService<AutomationService>().DetailAsync(Owner, Id, 0, default)).Automation.Status.Should().Be("Paused");
+        }
+        finally { await Host.StopAsync(); }
+    }
+
+    private async Task<IHost> CreateHostAsync(Mock<IScheduledActorPolicy>? Policy = null, FailReportCommit? Failure = null, bool Reset = true, Dictionary<string, bool>? Grants = null)
     {
         var Host = new HostBuilder().ConfigureLogging(L => L.AddConsole().SetMinimumLevel(LogLevel.Warning))
             .ConfigureServices(S =>
@@ -213,7 +274,7 @@ public sealed class AutomationTests(PostgresVectorFixture Database) : IClassFixt
                 S.AddSingleton(Policy?.Object ?? PolicyMock().Object);
                 S.AddSingleton(Mock.Of<ICoachAssignmentStore>());
                 var Permissions = new Mock<IToolAccessStore>();
-                Permissions.Setup(P => P.GetRolePermissionsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new Dictionary<string, bool>());
+                Permissions.Setup(P => P.GetRolePermissionsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Grants ?? new Dictionary<string, bool>());
                 S.AddSingleton(Permissions.Object);
                 S.AddSingleton<ITavilyMcpToolProvider>(Mock.Of<ITavilyMcpToolProvider>(P => P.GetTools() == Array.Empty<AIFunction>()));
                 S.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
@@ -221,12 +282,15 @@ public sealed class AutomationTests(PostgresVectorFixture Database) : IClassFixt
                 S.AddScoped<AutomationService>(); S.AddScoped<AutomationSagaActions>();
                 S.AddSingleton<SchedulingService>(); S.AddSingleton<AgentEventService>();
                 S.AddSingleton<NotificationCapture>();
+                S.AddSingleton<ProgramCapture>();
                 S.AddDbContext<AutomationDbContext>(O =>
                 {
                     O.UseNpgsql(Database.ConnectionString, N => N.MigrationsHistoryTable("__EFMigrationsHistory", "automation"));
                     if (Failure is not null) O.AddInterceptors(Failure);
                 });
-                S.AddMassTransit(B => { B.AddAutomationMessaging(); B.AddConsumer<NotificationProbe>(); B.UsingInMemory((C, B) => B.ConfigureEndpoints(C)); });
+                S.AddMassTransit(B => { B.AddAutomationMessaging(); B.AddConsumer<NotificationProbe>();
+                    B.AddConsumer<ProgramProbe>().Endpoint(E => E.Name = AutomationPrograms.Queue);
+                    B.UsingInMemory((C, B) => B.ConfigureEndpoints(C)); });
             }).Build();
         await using var Scope = Host.Services.CreateAsyncScope();
         var Db = Scope.ServiceProvider.GetRequiredService<AutomationDbContext>();
@@ -273,6 +337,14 @@ public sealed class AutomationTests(PostgresVectorFixture Database) : IClassFixt
     private sealed class NotificationCapture
     {
         public System.Collections.Concurrent.ConcurrentBag<DevicePushNotificationRequested> Items { get; } = [];
+    }
+    private sealed class ProgramCapture
+    {
+        public System.Collections.Concurrent.ConcurrentBag<ExecuteAutomationProgram> Items { get; } = [];
+    }
+    private sealed class ProgramProbe(ProgramCapture Capture) : IConsumer<ExecuteAutomationProgram>
+    {
+        public Task Consume(ConsumeContext<ExecuteAutomationProgram> Context) { Capture.Items.Add(Context.Message); return Task.CompletedTask; }
     }
     private sealed class NotificationProbe(NotificationCapture Capture) : IConsumer<DevicePushNotificationRequested>
     {

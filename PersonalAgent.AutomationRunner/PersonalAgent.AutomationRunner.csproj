@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>PersonalAgent.AutomationRunner</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../PersonalAgent.Contracts/PersonalAgent.Contracts.csproj" />
+    <ProjectReference Include="../PersonalAgent.Integrations/PersonalAgent.Integrations.csproj" />
+    <PackageReference Include="MassTransit" />
+    <PackageReference Include="MassTransit.SqlTransport.PostgreSQL" />
+  </ItemGroup>
+</Project>

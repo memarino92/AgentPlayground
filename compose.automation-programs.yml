@@ -1,0 +1,16 @@
+# Opt-in addition to compose.synthetic.yml, for local/CI execution only.
+services:
+  automation-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.automation-runner
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      DATABASE_URL: "Host=postgres-demo;Database=agentplayground_demo;Username=demo;Password=synthetic-local-password"
+      CONFIG_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      personalagent-api:
+        condition: service_healthy
+    stop_grace_period: 30s

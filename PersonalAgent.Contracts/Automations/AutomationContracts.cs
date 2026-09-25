@@ -12,7 +12,7 @@ public sealed record AutomationSummary(Guid Id, string Name, string Status, int 
 public sealed record AutomationVersionResponse(int Version, string Source, string Hash, DateTimeOffset CreatedAt);
 public sealed record AutomationRunResponse(Guid Id, int Version, string Status, DateTimeOffset ScheduledAt,
     DateTimeOffset? StartedAt, DateTimeOffset? FinishedAt, string? Error, string? TraceId);
-public sealed record AutomationStepResponse(int Index, string Id, string Action, string Status, string? Output, string? Error, DateTimeOffset? CompletedAt);
+public sealed record AutomationStepResponse(int Index, string Id, string Action, string Status, string? Output, string? Error, DateTimeOffset? CompletedAt, string? ProgramEvidence = null);
 public sealed record AutomationReportResponse(Guid Id, string Title, string Content, DateTimeOffset CreatedAt);
 public sealed record AutomationDetail(AutomationSummary Automation, IReadOnlyList<AutomationVersionResponse> Versions,
     IReadOnlyList<AutomationRunResponse> Runs, IReadOnlyList<DateTimeOffset> UpcomingRuns);
@@ -22,5 +22,5 @@ public sealed record AutomationActionDescriptor(string Action, string Descriptio
 // Commands contain identities only. Executable source and authority are loaded from persisted records.
 public sealed record StartAutomation(Guid RunId);
 public sealed record ExecuteAutomationStep(Guid RunId, int StepIndex);
-public sealed record AutomationStepCompleted(Guid RunId, int StepIndex, string Output, bool Skipped = false);
-public sealed record AutomationStepFailed(Guid RunId, int StepIndex, string Error, bool Blocked = false);
+public sealed record AutomationStepCompleted(Guid RunId, int StepIndex, string Output, bool Skipped = false, AutomationProgramEvidence? Program = null);
+public sealed record AutomationStepFailed(Guid RunId, int StepIndex, string Error, bool Blocked = false, AutomationProgramEvidence? Program = null);

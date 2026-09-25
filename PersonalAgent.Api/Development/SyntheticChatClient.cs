@@ -17,7 +17,8 @@ internal sealed class SyntheticChatClient : IChatClient, IAgentChatClientFactory
         var Memory = Messages.LastOrDefault(Message => Message.Role == ChatRole.System && Message.Text.StartsWith("These historical user statements", StringComparison.Ordinal))?.Text;
         var History = Messages.LastOrDefault(Message => Message.Role == ChatRole.User && Message.Text.StartsWith("Historical excerpts supplied", StringComparison.Ordinal))?.Text;
         var Request = Messages.LastOrDefault(Message => Message.Role == ChatRole.User)?.Text ?? string.Empty;
-        if (Request.Trim().Equals("demo automation", StringComparison.OrdinalIgnoreCase))
+        var CSharp = Request.Trim().Equals("demo csharp automation", StringComparison.OrdinalIgnoreCase);
+        if (CSharp || Request.Trim().Equals("demo automation", StringComparison.OrdinalIgnoreCase))
         {
             // An explicit fixture exercises real tool binding, authorization, persistence and scheduling.
             // It is not an evaluation of live model authoring quality.
@@ -30,8 +31,10 @@ internal sealed class SyntheticChatClient : IChatClient, IAgentChatClientFactory
             return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
             [new FunctionCallContent(Guid.NewGuid().ToString("N"), "save_automation", new Dictionary<string, object?>
             {
-                ["name"] = "Synthetic chat automation",
-                ["source"] = """{"steps":[{"id":"message","action":"text","arguments":{"text":"Created through chat"}},{"id":"report","action":"save_report","arguments":{"title":"Chat automation report","content":"{{steps.message}}"}}]}""",
+                ["name"] = CSharp ? "Synthetic C# automation" : "Synthetic chat automation",
+                ["source"] = CSharp
+                    ? """{"steps":[{"id":"program","action":"csharp","arguments":{"source":"Console.Write(Console.In.ReadToEnd().ToUpperInvariant());","input":"created by c#"}},{"id":"report","action":"save_report","arguments":{"title":"Program report","content":"{{steps.program}}"}}]}"""
+                    : """{"steps":[{"id":"message","action":"text","arguments":{"text":"Created through chat"}},{"id":"report","action":"save_report","arguments":{"title":"Chat automation report","content":"{{steps.message}}"}}]}""",
                 ["automationId"] = null, ["expectedVersion"] = null, ["executeAt"] = null, ["repeatEvery"] = "PT1M"
             })])));
         }
