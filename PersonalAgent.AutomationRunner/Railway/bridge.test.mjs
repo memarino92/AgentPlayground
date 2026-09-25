@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dispatch } from './bridge.mjs';
+import { loadPreparationFiles } from './preparation-files.mjs';
+
+test('operator preparation resolves the checked-in compiler payload from any working directory', async () => {
+  const files = new Map(await loadPreparationFiles());
+  assert.equal(files.size, 4);
+  assert.ok(files.get('Dockerfile.automation-sandbox').includes('@sha256:'));
+  assert.ok(files.get('automation-sandbox/Program.csproj').includes('<TargetFramework>net11.0</TargetFramework>'));
+  assert.ok(files.get('automation-sandbox/run.sh').includes('dotnet build Program.csproj'));
+});
 
 function fake() {
   const writes = [], commands = [], connections = [];
