@@ -23,7 +23,8 @@ internal sealed class ScheduledJobRunner(IAgentSessionStore Sessions, IChatModel
         }
         var Model = (await Models.GetModelsAsync(Token)).FirstOrDefault(M => M.IsDefault)
             ?? throw new HttpRequestException("No chat model is available.");
-        await Sessions.CreateSessionAsync(SessionId, Access, JsonSerializer.Serialize(new AgentSessionState(Model.Id, SessionId)), Token);
+        await Sessions.CreateSessionAsync(SessionId, Access,
+            JsonSerializer.Serialize(new AgentSessionState(Model.Id, Access.ScheduledTaskId ?? SessionId)), Token);
     }
 
     public Task<string?> RunAsync(Guid SessionId, AgentAccessContext Access, string Instruction, CancellationToken Token) =>
@@ -61,8 +62,9 @@ internal sealed class ScheduledJobExecutionService(
             {
                 if (!WasRunning)
                 {
-                    if (Job.AttemptCount >= 5) return await FinishAsync("Failed", "Execution could not start after five attempts.");
-                    if (Job.AttemptCount > 0) await Store.SaveAsync(Connection, Job, false, true, false, Token);
+                    if (Job.FailureCount >= 5) return await FinishAsync("Failed", "Execution could not start after five attempts.");
+                    if (Job.Status == "Retrying" && Job.AttemptCount > 0)
+                        await Store.SaveAsync(Connection, Job, false, true, false, Token);
                     Job = Job with { Status = "Retrying", AttemptCount = Job.AttemptCount + 1, UpdatedAt = DateTimeOffset.UtcNow };
                     await Store.SaveAsync(Connection, Job, true, false, false, Token);
                 }
@@ -87,7 +89,7 @@ internal sealed class ScheduledJobExecutionService(
                     return await FinishAsync(DeliveryResult.Status, DeliveryResult.Summary ?? "Notification delivery finished.");
                 }
                 // A deterministic conversation identity survives a failure between session creation and job update.
-                var SessionId = Job.TaskId;
+                var SessionId = Job.RecurrenceInterval is null ? Job.TaskId : OccurrenceId(Job.TaskId, Job.AttemptCount);
                 await Runner.PrepareAsync(SessionId, Access, Token);
                 Access = await Authorization.ForExecutionAsync(Job, Token);
                 if (Access is null) return await FinishAsync("Blocked", "Scheduling access was revoked before execution.");
@@ -113,14 +115,28 @@ internal sealed class ScheduledJobExecutionService(
                     return Recovered is not null ? await FinishAsync("Completed", Recovered)
                         : await FinishAsync("NeedsReview", "Execution was interrupted. Tool effects may have occurred; automatic replay is disabled.");
                 }
-                if (Job.AttemptCount >= 5) return await FinishAsync("Failed", "Execution could not start after five attempts.");
-                Job = Job with { Status = "Retrying", Outcome = "Execution could not start. A retry is scheduled.", UpdatedAt = DateTimeOffset.UtcNow };
+                if (Job.FailureCount >= 4) return await FinishAsync("Failed", "Execution could not start after five attempts.");
+                Job = Job with
+                {
+                    Status = "Retrying", Outcome = "Execution could not start. A retry is scheduled.",
+                    FailureCount = Job.FailureCount + 1, UpdatedAt = DateTimeOffset.UtcNow
+                };
                 await Store.SaveAsync(Connection, Job, false, Job.AttemptCount > 0, false, Token);
                 return new(Job.Status, Job.Outcome);
             }
 
             async Task<ScheduledJobExecutionResponse> FinishAsync(string Status, string Outcome)
             {
+                if (Status == "Completed" && Job.RecurrenceInterval is { } Interval)
+                {
+                    Job = Job with
+                    {
+                        Status = "Scheduled", Outcome = Outcome, ExecuteAt = NextOccurrence(Job.ExecuteAt, Interval, DateTimeOffset.UtcNow),
+                        FailureCount = 0, UpdatedAt = DateTimeOffset.UtcNow
+                    };
+                    await Store.SaveAsync(Connection, Job, false, Job.AttemptCount > 0, true, Token, Status);
+                    return new(Status, Outcome);
+                }
                 Job = Job with { Status = Status, Outcome = Outcome, UpdatedAt = DateTimeOffset.UtcNow };
                 await Store.SaveAsync(Connection, Job, false, Job.AttemptCount > 0, true, Token);
                 return new(Job.Status, Job.Outcome);
@@ -144,4 +160,21 @@ internal sealed class ScheduledJobExecutionService(
     }
 
     private static bool IsTerminal(string Status) => Status is "Completed" or "Blocked" or "Cancelled" or "Failed" or "NeedsReview";
+
+    private static DateTimeOffset NextOccurrence(DateTimeOffset Previous, TimeSpan Interval, DateTimeOffset Now)
+    {
+        var ElapsedTicks = Math.Max(0, (Now - Previous).Ticks);
+        var Steps = ElapsedTicks / Interval.Ticks + 1;
+        return Previous.AddTicks(checked(Steps * Interval.Ticks));
+    }
+
+    private static Guid OccurrenceId(Guid JobId, int Number)
+    {
+        Span<byte> Input = stackalloc byte[20];
+        JobId.TryWriteBytes(Input);
+        BitConverter.TryWriteBytes(Input[16..], Number);
+        Span<byte> Hash = stackalloc byte[32];
+        System.Security.Cryptography.SHA256.HashData(Input, Hash);
+        return new Guid(Hash[..16]);
+    }
 }

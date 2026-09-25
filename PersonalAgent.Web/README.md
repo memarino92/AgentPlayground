@@ -8,7 +8,7 @@
 - Session list, session restore, and transcript browsing.
 - Draft chats saved on first send, persistent model changes, browser model preference and URL-backed selection.
 - Shared owner/coach recording views, authorized evidence playback and live processing refresh.
-- Scheduled jobs dashboard, pending cancellation and read-only result conversations.
+- Scheduled jobs dashboard with recurrence/next-run visibility, pending series cancellation and read-only result conversations.
 - Unified Settings for database rows, Sentry, OpenTelemetry, assignments and tool permissions.
 - API access via `PersonalAgentClient` with internal key and signed actor context.
 

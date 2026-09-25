@@ -9,6 +9,8 @@ internal sealed record ScheduledJob(
 {
     public string JobType { get; init; } = "AgentTask";
     public ScheduledNotification? Notification { get; init; }
+    public TimeSpan? RecurrenceInterval { get; init; }
+    public int FailureCount { get; init; }
 }
 
 internal sealed record ScheduledNotification(string Title, string Body, string? DeepLink);

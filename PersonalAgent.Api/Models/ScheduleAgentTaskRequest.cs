@@ -9,6 +9,7 @@ public record ScheduleAgentTaskRequest
     public DateTimeOffset? ExecuteAt { get; init; }
     public string? When { get; init; }
     public string? TimeZoneId { get; init; }
+    public string? RepeatEvery { get; init; }
     public bool NotifyOnCompletion { get; init; } = true;
     public Guid? CorrelationId { get; init; }
 }

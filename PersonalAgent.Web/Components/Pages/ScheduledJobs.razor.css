@@ -16,6 +16,7 @@ button:disabled { cursor: default; opacity: .65; }
 .job-card strong { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .job-card.selected { border: 2px solid light-dark(#3268ad, #8fceff); background: light-dark(#f2f7ff, #203b50); }
 .job-card span:not(.job-status), time { font-size: .86rem; color: var(--text-secondary); }
+.job-card .job-recurrence { color: var(--info-color); font-weight: 650; }
 .job-status { font-size: .78rem; font-weight: 700; border-radius: 5px; padding: 3px 8px; background: light-dark(#eaf0f7, #21333d); }
 .job-status[data-status=Completed] { background: light-dark(#e2f3e8, #183e39); color: var(--success-color); }
 .job-status[data-status=Blocked], .job-status[data-status=NeedsReview], .job-status[data-status=Failed] { background: light-dark(#fff0de, #44341f); color: light-dark(#794314, #ffd59c); }

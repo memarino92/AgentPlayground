@@ -28,15 +28,15 @@ internal sealed class AgentToolRegistry(ITavilyMcpToolProvider TavilyProvider) :
             (Services, Access) => (string query, CancellationToken token, string? exerciseTag = null, string? fileName = null, string? recency = null) =>
                 Services.GetRequiredService<CoachCheckinService>().SearchCoachCheckinsAsync(query, Access.SubjectProfileId, exerciseTag, token, fileName, recency)),
         Local(AgentToolKeys.ScheduleNotification, "Schedule notification", "Notifications",
-            "Schedule a mobile notification for the current user using delay, absolute executeAt datetime, or natural when text like 'tonight'.",
+            "Schedule a mobile notification for the current user using delay, absolute executeAt datetime, or natural when text like 'tonight'. Set repeatEvery to an ISO-8601 duration such as P1D or P7D to make it recurring.",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,
-            (Services, Access) => (string title, string body, string? delay, string? executeAt, string? when, string? timeZoneId, CancellationToken token) =>
-                Services.GetRequiredService<AgentEventService>().ScheduleNotificationToolAsync(Access, title, body, delay, executeAt, when, timeZoneId, token)),
+            (Services, Access) => (string title, string body, string? delay, string? executeAt, string? when, string? timeZoneId, string? repeatEvery, CancellationToken token) =>
+                Services.GetRequiredService<AgentEventService>().ScheduleNotificationToolAsync(Access, title, body, delay, executeAt, when, timeZoneId, repeatEvery, token)),
         Local(AgentToolKeys.ScheduleAgentTask, "Schedule agent task", "Scheduling",
-            "Schedule a future agent task. Required: instruction and exactly one timing field (delay, executeAt, or when).",
+            "Schedule a future agent task. Required: instruction and exactly one timing field (delay, executeAt, or when). Set repeatEvery to an ISO-8601 duration such as P1D or P7D to make it recurring.",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,
-            (Services, Access) => (string instruction, string? delay, string? executeAt, string? when, string? timeZoneId, bool notifyOnCompletion, CancellationToken token) =>
-                Services.GetRequiredService<AgentEventService>().ScheduleAgentTaskToolAsync(Access, instruction, delay, executeAt, when, timeZoneId, notifyOnCompletion, token)),
+            (Services, Access) => (string instruction, string? delay, string? executeAt, string? when, string? timeZoneId, string? repeatEvery, bool notifyOnCompletion, CancellationToken token) =>
+                Services.GetRequiredService<AgentEventService>().ScheduleAgentTaskToolAsync(Access, instruction, delay, executeAt, when, timeZoneId, repeatEvery, notifyOnCompletion, token)),
         Local(AgentToolKeys.ListScheduledJobs, "List scheduled jobs", "Scheduling",
             "List scheduled agent tasks and notifications for the current subject. Optionally filter by status or return jobs created before an ISO-8601 datetime.",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: false,

@@ -66,6 +66,20 @@ public sealed class ScheduledJobsTests : TestContext
     }
 
     [Fact]
+    public void RecurringJobShowsCadenceNextRunAndSeriesCancellation()
+    {
+        using var Handler = new JobHandler { Recurring = true };
+        Configure(Handler);
+        var Cut = RenderComponent<ScheduledJobs>();
+
+        Cut.WaitForAssertion(() => Cut.Find(".job-recurrence").TextContent.Should().Be("Recurring · Every day"));
+        Cut.Find(".job-card").TextContent.Should().Contain("Next run");
+        Cut.Find(".job-card").Click();
+        Cut.WaitForAssertion(() => Cut.Find(".job-detail").TextContent.Should().Contain("Repeats").And.Contain("Every day"));
+        Cut.Find(".job-cancel").TextContent.Should().Be("Cancel series");
+    }
+
+    [Fact]
     public void ErrorClearsPreviouslyVisibleDetailsAndCanRefresh()
     {
         using var Handler = new JobHandler();
@@ -118,6 +132,7 @@ public sealed class ScheduledJobsTests : TestContext
         public bool Completed;
         public bool Fail;
         public bool Notification;
+        public bool Recurring;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Token)
         {
             Request.Headers.Contains("X-Agent-Signature").Should().BeTrue();
@@ -129,7 +144,8 @@ public sealed class ScheduledJobsTests : TestContext
                 null, Completed ? Id.ToString() : null, true, Id, 0, Date)
             {
                 JobType = Notification ? "Notification" : "AgentTask",
-                Notification = Notification ? new("Appointment", "Remember the appointment", null) : null
+                Notification = Notification ? new("Appointment", "Remember the appointment", null) : null,
+                RecurrenceInterval = Recurring ? TimeSpan.FromDays(1) : null
             };
             object Body = Request.RequestUri!.AbsolutePath == "/api/jobs/" ? new[] { Job } : new ScheduledJobDetailResponse(Job, []);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(Body, Body.GetType()) });

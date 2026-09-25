@@ -98,14 +98,19 @@ internal sealed class ScheduledJobStore(IOptions<AgentMemoryOptions> Options)
     }
 
     // The caller holds the session advisory lock. State, attempt outcome and notification commit together.
-    public async Task SaveAsync(NpgsqlConnection Connection, ScheduledJob Job, bool StartAttempt, bool FinishAttempt, bool Notify, CancellationToken Token)
+    public async Task SaveAsync(NpgsqlConnection Connection, ScheduledJob Job, bool StartAttempt, bool FinishAttempt, bool Notify, CancellationToken Token,
+        string? AttemptStatus = null)
     {
+        var EffectiveAttemptStatus = AttemptStatus ?? Job.Status;
         await using var Transaction = await Connection.BeginTransactionAsync(Token);
         await using var Command = new NpgsqlCommand($"""
-            UPDATE {Table} SET status = @status, data = @data::jsonb, next_dispatch_at = now() + interval '1 minute' WHERE task_id = @id
+            UPDATE {Table} SET execute_at = @due, status = @status, data = @data::jsonb,
+                next_dispatch_at = CASE WHEN @status = 'Scheduled' THEN @due ELSE now() + interval '1 minute' END
+            WHERE task_id = @id
                 AND status NOT IN ('Completed', 'Blocked', 'Cancelled', 'Failed', 'NeedsReview')
             """, Connection, Transaction);
         Command.Parameters.AddWithValue("id", Job.TaskId);
+        Command.Parameters.AddWithValue("due", Job.ExecuteAt);
         Command.Parameters.AddWithValue("status", Job.Status);
         Command.Parameters.AddWithValue("data", JsonSerializer.Serialize(Job));
         if (await Command.ExecuteNonQueryAsync(Token) == 0) return;
@@ -117,7 +122,7 @@ internal sealed class ScheduledJobStore(IOptions<AgentMemoryOptions> Options)
                 : $"UPDATE {Attempts} SET finished_at = now(), status = @status, outcome = @outcome WHERE task_id = @id AND number = @number";
             Command.Parameters.AddWithValue("id", Job.TaskId);
             Command.Parameters.AddWithValue("number", Job.AttemptCount);
-            Command.Parameters.AddWithValue("status", Job.Status);
+            Command.Parameters.AddWithValue("status", EffectiveAttemptStatus);
             if (FinishAttempt) Command.Parameters.AddWithValue("outcome", NpgsqlTypes.NpgsqlDbType.Text, (object?)Job.Outcome ?? DBNull.Value);
             await Command.ExecuteNonQueryAsync(Token);
         }
@@ -136,7 +141,7 @@ internal sealed class ScheduledJobStore(IOptions<AgentMemoryOptions> Options)
             {
                 NotificationId = Job.TaskId, TenantId = Tenant, UserId = User, CorrelationId = Job.CorrelationId,
                 RequestedAtUtc = Job.UpdatedAt, ExecuteAtUtc = Job.UpdatedAt,
-                Title = Job.Status == "Completed" ? "Scheduled task complete" : "Scheduled task needs attention",
+                Title = EffectiveAttemptStatus == "Completed" ? "Scheduled task complete" : "Scheduled task needs attention",
                 Body = "Open Scheduled Jobs to view the outcome.", DeepLink = $"/jobs?jobId={Job.TaskId}", Source = "ScheduledJob"
             }, Token);
         }

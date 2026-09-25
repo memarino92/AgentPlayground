@@ -115,7 +115,7 @@ internal sealed class ScheduledJobManagementService(
     private static object Summary(ScheduledJob Job) => new
     {
         Job.TaskId, Job.JobType, Job.Instruction, Job.ExecuteAt, Job.Status, Job.Outcome,
-        Job.NotifyOnCompletion, NotificationTitle = Job.Notification?.Title, NotificationBody = Job.Notification?.Body
+        Job.RecurrenceInterval, Job.NotifyOnCompletion, NotificationTitle = Job.Notification?.Title, NotificationBody = Job.Notification?.Body
     };
 
     private static int CountValues(params string?[] Values) => Values.Count(Value => !string.IsNullOrWhiteSpace(Value));

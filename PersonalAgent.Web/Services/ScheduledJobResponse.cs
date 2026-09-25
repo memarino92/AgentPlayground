@@ -8,6 +8,8 @@ public sealed record ScheduledJobResponse(
 {
     public string JobType { get; init; } = "AgentTask";
     public ScheduledNotificationResponse? Notification { get; init; }
+    public TimeSpan? RecurrenceInterval { get; init; }
+    public int FailureCount { get; init; }
 }
 public sealed record ScheduledNotificationResponse(string Title, string Body, string? DeepLink);
 public sealed record ScheduledJobAttemptResponse(int Number, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, string Status, string? Outcome);

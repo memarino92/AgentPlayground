@@ -11,7 +11,7 @@ The repository name remains `AgentPlayground` to preserve existing project and d
 - Coach audio uploads, transcription, live processing updates, speaker attribution, and dated retrieval evidence with retained audio and playback-following transcripts.
 - GitHub owner and Google coach sign-in, athlete assignments, and a tool-permission admin UI.
 - Unified Settings with encrypted Sentry/OpenTelemetry revisions, live provider credential reload, and database-owned chat model policy.
-- Authorized durable agent and notification jobs with an activity dashboard, pending cancellation, conservative recovery, push outcomes, and separate approval records.
+- Authorized durable one-time and fixed-interval recurring agent/notification jobs with an activity dashboard, series cancellation, conservative recovery, push outcomes, and separate approval records.
 - Synthetic retrieval regressions and a repeatable opt-in coaching model evaluation runner; broader held-out quality evaluation remains open.
 - Android companion for notifications, approvals, and a WebView; still needs authentication and release polish.
 

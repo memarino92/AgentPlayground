@@ -95,6 +95,48 @@ public class ScheduledJobTests(PostgresVectorFixture Database) : IClassFixture<P
         (await Count.ExecuteScalarAsync()).Should().Be(1L);
     }
 
+    [Fact]
+    public async Task RecurringJobSchedulesNextRunAndRetainsEachCompletedAttempt()
+    {
+        var (Store, _) = await SetupAsync();
+        var Original = Job() with { RecurrenceInterval = TimeSpan.FromHours(1) };
+        await Store.CreateAsync(Original, default);
+        var Runner = new FakeRunner();
+        var Service = Execution(Store, Runner);
+
+        (await Service.ExecuteAsync(Delivery(Original), default)).Status.Should().Be("Completed");
+        var AfterFirst = await Store.GetAsync(Original.TaskId, default);
+        AfterFirst!.Status.Should().Be("Scheduled");
+        AfterFirst.ExecuteAt.Should().BeAfter(DateTimeOffset.UtcNow.AddMinutes(59));
+        AfterFirst.Outcome.Should().Be("Synthetic result");
+        (await Store.GetAttemptsAsync(Original.TaskId, default)).Should().ContainSingle().Which.Status.Should().Be("Completed");
+        (await Service.ExecuteAsync(Delivery(Original), default)).Status.Should().Be("Scheduled");
+
+        await using (var Connection = await Store.OpenAsync(default))
+        {
+            (await Store.TryLockAsync(Connection, Original.TaskId, default)).Should().BeTrue();
+            try { (await Store.UpdatePendingAsync(Connection, AfterFirst with { ExecuteAt = DateTimeOffset.UtcNow.AddSeconds(-1) }, default)).Should().BeTrue(); }
+            finally { await Store.UnlockAsync(Connection, Original.TaskId); }
+        }
+
+        (await Service.ExecuteAsync(Delivery(Original), default)).Status.Should().Be("Completed");
+        Runner.Runs.Should().Be(2);
+        (await Store.GetAttemptsAsync(Original.TaskId, default)).Select(Attempt => Attempt.Status).Should().Equal("Completed", "Completed");
+    }
+
+    [Theory]
+    [InlineData("PT1M", 1)]
+    [InlineData("P1D", 1440)]
+    public void RecurrenceParserAcceptsBoundedIsoDurations(string Value, double ExpectedMinutes) =>
+        SchedulingTimeParser.ParseRecurrence(Value)!.Value.TotalMinutes.Should().Be(ExpectedMinutes);
+
+    [Theory]
+    [InlineData("PT30S")]
+    [InlineData("P367D")]
+    [InlineData("daily")]
+    public void RecurrenceParserRejectsUnsafeOrAmbiguousValues(string Value) =>
+        FluentActions.Invoking(() => SchedulingTimeParser.ParseRecurrence(Value)).Should().Throw<InvalidOperationException>();
+
     [Theory]
     [InlineData(null, "NeedsReview")]
     [InlineData("Durable result", "Completed")]

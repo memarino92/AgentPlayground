@@ -10,6 +10,7 @@ public record ScheduleNotificationRequest
     public DateTimeOffset? ExecuteAt { get; init; }
     public string? When { get; init; }
     public string? TimeZoneId { get; init; }
+    public string? RepeatEvery { get; init; }
     public string? DeepLink { get; init; }
     public Guid? CorrelationId { get; init; }
 }
