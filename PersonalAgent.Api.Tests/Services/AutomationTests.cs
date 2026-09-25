@@ -15,11 +15,12 @@ using PersonalAgent.Api.Models;
 using PersonalAgent.Api.Services;
 using PersonalAgent.Contracts.Automations;
 using PersonalAgent.Contracts.Messaging.Events;
+using PersonalAgent.Integrations;
 using Xunit;
 
 namespace PersonalAgent.Api.Tests.Services;
 
-public sealed class AutomationTests(PostgresVectorFixture Database) : IClassFixture<PostgresVectorFixture>
+public sealed partial class AutomationTests(PostgresVectorFixture Database) : IClassFixture<PostgresVectorFixture>
 {
     private static readonly AgentAccessContext Owner = new("owner", AgentRoles.Owner, "owner");
     private const string Source = """
@@ -265,7 +266,8 @@ public sealed class AutomationTests(PostgresVectorFixture Database) : IClassFixt
         finally { await Host.StopAsync(); }
     }
 
-    private async Task<IHost> CreateHostAsync(Mock<IScheduledActorPolicy>? Policy = null, FailReportCommit? Failure = null, bool Reset = true, Dictionary<string, bool>? Grants = null)
+    private async Task<IHost> CreateHostAsync(Mock<IScheduledActorPolicy>? Policy = null, FailReportCommit? Failure = null, bool Reset = true, Dictionary<string, bool>? Grants = null,
+        bool JevConfigured = false, ToolChoiceResult? Decision = null)
     {
         var Host = new HostBuilder().ConfigureLogging(L => L.AddConsole().SetMinimumLevel(LogLevel.Warning))
             .ConfigureServices(S =>
@@ -283,6 +285,15 @@ public sealed class AutomationTests(PostgresVectorFixture Database) : IClassFixt
                 S.AddSingleton<SchedulingService>(); S.AddSingleton<AgentEventService>();
                 S.AddSingleton<NotificationCapture>();
                 S.AddSingleton<ProgramCapture>();
+                S.AddSingleton(new IntegrationDatabase(Database.ConnectionString, Convert.ToBase64String(new byte[32])));
+                S.AddSingleton<AutomationRuntimeStore>(); S.AddSingleton<AutomationSandboxStore>();
+                S.AddScoped<AutomationOperationGateway>();
+                var Snapshot = JevConfigured ? new JevRoutingSnapshot(new() { AllowUserContent = true }, "test-key") : JevRoutingSnapshot.Disabled;
+                S.AddSingleton(Mock.Of<IJevRoutingSettings>(J => J.Current == Snapshot));
+                var Decisions = new Mock<IToolDecisionClient>();
+                Decisions.Setup(D => D.ChooseAsync(It.IsAny<ToolChoiceRequest>(), It.IsAny<JevRoutingSnapshot>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(Decision ?? new ToolChoiceResult(null, Reason: "disabled"));
+                S.AddSingleton(Decisions.Object);
                 S.AddDbContext<AutomationDbContext>(O =>
                 {
                     O.UseNpgsql(Database.ConnectionString, N => N.MigrationsHistoryTable("__EFMigrationsHistory", "automation"));
@@ -296,6 +307,7 @@ public sealed class AutomationTests(PostgresVectorFixture Database) : IClassFixt
         var Db = Scope.ServiceProvider.GetRequiredService<AutomationDbContext>();
         if (Reset) await Db.Database.ExecuteSqlRawAsync("DROP SCHEMA IF EXISTS automation CASCADE");
         await Db.Database.MigrateAsync();
+        await Host.Services.GetRequiredService<AutomationRuntimeStore>().InitializeAsync(default);
         return Host;
     }
 

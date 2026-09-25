@@ -40,6 +40,15 @@ public sealed class IntegrationSettingsEndpointsTests
             ((int)response.StatusCode).Should().Be(Expected);
         }
         service.VerifyNoOtherCalls();
+        foreach (var method in new[] { HttpMethod.Get, HttpMethod.Put })
+        {
+            using var client = app.GetTestClient();
+            Sign(client, Actor, Role, InternalKey, ForgeSignature);
+            using var request = new HttpRequestMessage(method, "/api/admin/automation-runtime");
+            if (method == HttpMethod.Put) request.Content = JsonContent.Create(new PersonalAgent.Contracts.Automations.SaveAutomationRuntime(0, new()));
+            using var response = await client.SendAsync(request);
+            ((int)response.StatusCode).Should().Be(Expected);
+        }
         foreach (var (method, suffix) in new[] { (HttpMethod.Get, ""), (HttpMethod.Put, ""), (HttpMethod.Post, "/apply"), (HttpMethod.Post, "/reload") })
         {
             using var client = app.GetTestClient();
@@ -98,9 +107,11 @@ public sealed class IntegrationSettingsEndpointsTests
         builder.Services.AddSingleton<OtelSettingsService>();
         builder.Services.AddSingleton(new DatabaseSettingsStore(new IntegrationDatabase("", "")));
         builder.Services.AddSingleton<DatabaseCredentialRuntime>();
+        builder.Services.AddSingleton(new AutomationRuntimeStore(new IntegrationDatabase("", "")));
         var app = builder.Build();
         var group = app.MapGroup("/api").AddEndpointFilter(new InternalApiKeyFilter(Options.Create(new ApiKeyOptions { InternalApiKey = "internal" })));
         group.MapIntegrationSettings(Options.Create(new SecurityOptions { ActorSigningKey = "signing-key" }), builder.Configuration);
+        group.MapAutomationRuntimeSettings(Options.Create(new SecurityOptions { ActorSigningKey = "signing-key" }), builder.Configuration);
         await app.StartAsync();
         return app;
     }

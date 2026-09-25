@@ -5,6 +5,7 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio"><PrivateAssets>all</PrivateAssets></PackageReference>
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
     <ProjectReference Include="../PersonalAgent.AutomationRunner/PersonalAgent.AutomationRunner.csproj" />
   </ItemGroup>
 </Project>

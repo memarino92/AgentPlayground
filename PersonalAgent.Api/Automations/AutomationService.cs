@@ -80,7 +80,10 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
             .Select(S => new AutomationStepResponse(S.Index, S.StepId, S.Action, S.Status, S.Output, S.Error, S.CompletedAt, S.ProgramEvidence)).ToListAsync(Token);
         var Reports = await Db.Reports.AsNoTracking().Where(R => R.RunId == RunId).OrderBy(R => R.StepIndex)
             .Select(R => new AutomationReportResponse(R.Id, R.Title, R.Content, R.CreatedAt)).ToListAsync(Token);
-        return new(RunResponse(Run), Steps, Reports);
+        var Gateway = Services.GetService<AutomationOperationGateway>();
+        var Sandboxes = Services.GetService<PersonalAgent.Integrations.AutomationSandboxStore>();
+        return new(RunResponse(Run), Steps, Reports, Gateway is null ? [] : await Gateway.EvidenceAsync(RunId, Token),
+            Sandboxes is null ? [] : await Sandboxes.StatusAsync(RunId, Token));
     }
 
     public async Task SetStatusAsync(AgentAccessContext Access, Guid Id, bool Paused, CancellationToken Token)

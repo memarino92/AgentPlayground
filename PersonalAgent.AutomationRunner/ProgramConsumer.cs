@@ -5,7 +5,7 @@ using PersonalAgent.Integrations;
 
 namespace PersonalAgent.AutomationRunner;
 
-internal sealed class ProgramConsumer(DockerProgramExecutor Executor, ILogger<ProgramConsumer> Logger) : IConsumer<ExecuteAutomationProgram>
+internal sealed class ProgramConsumer(IProgramExecutor Executor, ILogger<ProgramConsumer> Logger) : IConsumer<ExecuteAutomationProgram>
 {
     public async Task Consume(ConsumeContext<ExecuteAutomationProgram> Context)
     {
@@ -18,7 +18,7 @@ internal sealed class ProgramConsumer(DockerProgramExecutor Executor, ILogger<Pr
         }
         using var Span = AutomationTelemetry.Start("automation.csharp", Message.RunId, Message.StepIndex);
         Span?.SetTag("automation.action", "csharp");
-        var Result = await Executor.ExecuteAsync(Message.Source, Message.Input, Context.CancellationToken);
+        var Result = await Executor.ExecuteAsync(Message, Context.CancellationToken);
         if (Result.Evidence.Status == "Completed")
             await Endpoint.Send(new AutomationStepCompleted(Message.RunId, Message.StepIndex, Result.Output, Program: Result.Evidence), Context.CancellationToken);
         else

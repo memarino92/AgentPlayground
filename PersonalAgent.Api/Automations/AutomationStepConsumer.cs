@@ -45,8 +45,11 @@ internal sealed class AutomationStepConsumer(AutomationDbContext Db, AutomationA
                 {
                     var Input = Arguments.GetProperty("input").GetString()!;
                     if (Input.Length > AutomationPrograms.MaxInput) throw new ArgumentException("Program input exceeds 64 KiB.");
+                    if (AutomationRecipes.Packages(Arguments).Length > 0)
+                        await Services.GetRequiredService<AutomationOperationGateway>().ApprovePackagesAsync(Run.CorrelationId, Run.StepIndex, Step, Token);
                     await (await Context.GetSendEndpoint(new Uri("queue:" + AutomationPrograms.Queue))).Send(
-                        new ExecuteAutomationProgram(Run.CorrelationId, Run.StepIndex, Arguments.GetProperty("source").GetString()!, Input, DateTimeOffset.UtcNow.AddMinutes(3)), Token);
+                        new ExecuteAutomationProgram(Run.CorrelationId, Run.StepIndex, Arguments.GetProperty("source").GetString()!, Input, DateTimeOffset.UtcNow.AddMinutes(3),
+                            AutomationRecipes.Packages(Arguments), Arguments.TryGetProperty("packageLock", out var Lock) ? Lock.GetString() : null), Token);
                     Status = "Dispatched";
                     return; // The isolated runner reports completion; dispatch is not successful execution.
                 }

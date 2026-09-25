@@ -80,6 +80,22 @@
                                 </details>
                             }
                             @foreach (var Report in Execution.Reports) { <article @key="Report.Id"><h4>@Report.Title</h4><pre>@Report.Content</pre></article> }
+                            @if (Execution.Operations is { Count: > 0 } Operations)
+                            {
+                                <h4>Package and tool decisions</h4>
+                                @foreach (var Operation in Operations)
+                                {
+                                    <details><summary>@Operation.Kind · @Operation.Target · @Operation.Outcome</summary><p>@Operation.OperationId · @Format(Operation.CreatedAt)</p><pre>@Operation.Policy</pre></details>
+                                }
+                            }
+                            @if (Execution.Sandboxes is { Count: > 0 } Sandboxes)
+                            {
+                                <h4>Railway sandboxes</h4>
+                                @foreach (var Sandbox in Sandboxes)
+                                {
+                                    <p>Step @(Sandbox.Step + 1) · @Sandbox.State · <code>@Sandbox.SandboxId</code> · Cleanup deadline @Format(Sandbox.ExpiresAt)</p>
+                                }
+                            }
                             <p class="automation-muted">Completed notification steps mean queued for push delivery, not confirmed device receipt.</p>
                         }
                     </section>

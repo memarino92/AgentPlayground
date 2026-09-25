@@ -1,12 +1,19 @@
+FROM node:24-bookworm-slim AS railway
+WORKDIR /railway
+COPY PersonalAgent.AutomationRunner/Railway/package*.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
 FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.1 AS build
 WORKDIR /src
 COPY . .
 RUN dotnet publish PersonalAgent.AutomationRunner/PersonalAgent.AutomationRunner.csproj -c Release -o /app/publish /p:UseAppHost=false
 
-# Only the dedicated trusted controller has the Docker CLI/socket. Never mount it in API or sandbox containers.
+# Docker CLI is used only by the explicitly guarded local synthetic backend.
 FROM docker:28-cli AS docker
 FROM mcr.microsoft.com/dotnet/aspnet:11.0.0-rc.1
 COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=railway /usr/local/bin/node /usr/local/bin/node
 WORKDIR /app
 COPY --from=build /app/publish .
+COPY --from=railway /railway/node_modules ./Railway/node_modules
 ENTRYPOINT ["dotnet", "PersonalAgent.AutomationRunner.dll"]

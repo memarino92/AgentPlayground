@@ -1,7 +1,8 @@
 param(
     [string]$ProjectId,
     [string]$EnvironmentName = "production",
-    [string]$EnvFilePath = ".env.railway"
+    [string]$EnvFilePath = ".env.railway",
+    [switch]$IncludeAutomationRunner
 )
 
 Set-StrictMode -Version Latest
@@ -46,7 +47,9 @@ if ($LASTEXITCODE -ne 0)
     throw "Failed to link Railway CLI to project '$ProjectId'."
 }
 
-foreach ($service in @("personalagent-api", "personalagent-web", "personalagent-worker"))
+$deploymentServices = @("personalagent-api", "personalagent-web", "personalagent-worker")
+if ($IncludeAutomationRunner) { $deploymentServices += "personalagent-automation-runner" }
+foreach ($service in $deploymentServices)
 {
     Write-Status "Deploying $service..."
     $commandOutput = & $railwayCommand.Source up --service $service --detach --json 2>&1

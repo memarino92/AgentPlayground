@@ -1,6 +1,6 @@
 # 0035: Isolated C# computation in agent automations
 
-- Status: Accepted
+- Status: Deployment/network policy superseded by [0036](0036-railway-automation-sandboxes.md); retained as the initial Docker implementation record
 - Recorded: 2026-09-25
 - Decision date: 2026-09-25
 - Evidence: User requested generated C# after the registered-recipe PR; `PersonalAgent.AutomationRunner`, `Dockerfile.automation-sandbox`, and automation saga integration.

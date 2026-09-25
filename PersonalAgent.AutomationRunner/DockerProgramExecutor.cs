@@ -11,8 +11,13 @@ namespace PersonalAgent.AutomationRunner;
 public sealed record ProgramResult(string Output, AutomationProgramEvidence Evidence);
 
 /// <summary>Only this dedicated host has Docker access. Source/input travel over stdin, never shell arguments or host mounts.</summary>
-public sealed class DockerProgramExecutor
+public sealed class DockerProgramExecutor : IProgramExecutor
 {
+    public Task<ProgramResult> ExecuteAsync(ExecuteAutomationProgram Message, CancellationToken Token)
+    {
+        if (Message.Packages is { Length: > 0 }) throw new InvalidOperationException("Synthetic Docker execution supports BCL programs only.");
+        return ExecuteAsync(Message.Source, Message.Input, Token);
+    }
     private string? ImageId;
     private readonly SemaphoreSlim Capacity = new(2, 2);
     private const string Label = "personalagent.automation-sandbox=true";

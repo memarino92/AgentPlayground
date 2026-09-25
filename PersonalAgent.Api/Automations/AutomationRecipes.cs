@@ -24,12 +24,12 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
     public object Catalog(IServiceProvider Services, AgentAccessContext Access) => new
     {
         format = "{\"steps\":[{\"id\":\"hello\",\"action\":\"text\",\"arguments\":{\"text\":\"Hello\"}}]}",
-        templates = "String values support {{steps.ID}} (whole earlier output), {{run.scheduledAt}}, {{run.id}}. Optional when: {step: earlierId, equals: exactOutput}. C# source is literal and never expanded. No arbitrary HTTP, shell actions, or model calls.",
+        templates = "String values support {{steps.ID}} (whole earlier output), {{run.scheduledAt}}, {{run.id}}. Optional when: {step: earlierId, equals: exactOutput}. C# source and dependency/tool declarations are literal; only its input is expanded. Recipes have no shell/model actions; Railway C# programs can access the public Internet.",
         actions = new object[]
         {
             new { action = "text", arguments = new { text = "literal or template" } },
             new { action = "csharp", arguments = new { source = "Console.WriteLine(Console.In.ReadToEnd().ToUpperInvariant());", input = "literal or template" },
-                requirements = "Owner only; administrator must enable Local:csharp_automation and deploy the dedicated runner. Single C# source file, net11.0 BCL only; no package/property/project directives. Read stdin, write stdout (32 KiB combined output); 90 second build/run limit, 512 MiB RAM, no network or application credentials. Programs compute values; use subsequent recipe steps for domain writes. Build errors appear in run diagnostics." },
+                requirements = "Owner only; administrator must enable Local:csharp_automation and configure the Railway runner. Single C# source file, net11.0; no project/property directives. Internet enabled, 512 MiB RAM, 95 second build/run watchdog, 32 KiB output. Optional packages: [ID@exact.version] require packageLock (NuGet packages.lock.json string) and administrator approval of every resolved dependency. Optional tools: [registered read-tool key] declares gateway capabilities. POST JSON {operationId: unique id, tool: registered key, inputs: object} to AUTOMATION_GATEWAY_URL with Bearer AUTOMATION_GATEWAY_TOKEN; response is {output: string}. No database/provider credentials. Use subsequent recipe steps for domain writes. Internet traffic is not intercepted by approvals." },
             new { action = "save_report", arguments = new { title = "report title", content = "literal or template" } },
             new { action = "notify", arguments = new { title = "notification title", body = "literal or template" }, outcome = "Queued for existing push delivery; not confirmed device receipt" },
             new { action = "tool", arguments = new { tool = "registered key", inputs = new { } }, tools = Registry.GetRegistrations()
@@ -57,7 +57,7 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
                 _ => throw new ArgumentException("Unknown action. Discover supported automation actions first.")
             };
             if (Step.Arguments.EnumerateObject().Select(P => P.Name).Distinct().Count() != Step.Arguments.EnumerateObject().Count()
-                || Step.Arguments.EnumerateObject().Any(P => !Keys.Contains(P.Name)) || Keys.Any(K => !Step.Arguments.TryGetProperty(K, out _)))
+                || Step.Arguments.EnumerateObject().Any(P => !Keys.Contains(P.Name) && !(Step.Action == "csharp" && P.Name is "packages" or "packageLock" or "tools")) || Keys.Any(K => !Step.Arguments.TryGetProperty(K, out _)))
                 throw new ArgumentException($"Invalid arguments for {Step.Action}.");
             foreach (var Key in Keys.Where(K => K != "inputs"))
                 if (Step.Arguments.GetProperty(Key).ValueKind != JsonValueKind.String) throw new ArgumentException($"{Key} must be a string.");
@@ -68,6 +68,7 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
                 || Step.Arguments.GetProperty("source").GetString()!.Length > AutomationPrograms.MaxSource
                 || Step.Arguments.GetProperty("input").GetString()!.Length > AutomationPrograms.MaxInput))
                 throw new ArgumentException("C# source must contain 1–24000 characters; input is limited to 65536 characters.");
+            if (Step.Action == "csharp") ValidateProgram(Step.Arguments);
             if (Step.When is { } Condition && (!Prior.Contains(Condition.Step) || Condition.Expected is null))
                 throw new ArgumentException("Conditions must compare an earlier step output.");
             foreach (Match Match in Placeholder.Matches(Step.Action == "csharp" ? Step.Arguments.GetProperty("input").GetString()! : Step.Arguments.GetRawText()))
@@ -91,7 +92,7 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
         JsonNode? Walk(JsonNode? Node) => Node switch
         {
             JsonObject Object => new JsonObject(Object.Select(P => KeyValuePair.Create(P.Key,
-                Step.Action == "csharp" && P.Key == "source" ? P.Value?.DeepClone() : Walk(P.Value))).ToArray()),
+                Step.Action == "csharp" && P.Key != "input" ? P.Value?.DeepClone() : Walk(P.Value))).ToArray()),
             JsonArray Array => new JsonArray(Array.Select(Walk).ToArray()),
             JsonValue Value when Value.TryGetValue<string>(out var Text) => JsonValue.Create(Expand(Text)),
             _ => Node?.DeepClone()
@@ -109,6 +110,9 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
             if (Step.Action == "csharp" && (Access.Role != AgentRoles.Owner
                 || !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.PermissionKey, Token)))
                 throw new UnauthorizedAccessException("C# automations require owner access and the administrator-enabled C# automation permission.");
+            if (Step.Action == "csharp" && Step.Arguments.TryGetProperty("tools", out var Tools))
+                foreach (var Tool in Tools.EnumerateArray())
+                    if (!await Permissions.IsAllowedAsync(Access.Role, Tool.GetString()!, Token)) throw new UnauthorizedAccessException("A declared tool is unauthorized.");
             if (Step.Action == "notify" && !await Permissions.IsAllowedAsync(Access.Role, AgentToolKeys.PublishMobileNotification, Token))
                 throw new UnauthorizedAccessException("Notification permission is required.");
             if (Step.Action != "tool") continue;
@@ -122,5 +126,30 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
             if (Schema.TryGetProperty("properties", out var Properties) && Inputs.EnumerateObject().Any(P => !Properties.TryGetProperty(P.Name, out _)))
                 throw new ArgumentException($"Unknown inputs for {Key}.");
         }
+    }
+
+    internal static string[] Packages(JsonElement Arguments) => Arguments.TryGetProperty("packages", out var Packages)
+        ? Packages.EnumerateArray().Select(P => P.GetString()!).ToArray() : [];
+
+    internal static string[] LockedPackages(string PackageLock) => AutomationPackageLock.ResolvedPackages(PackageLock);
+
+    private static void ValidateProgram(JsonElement Arguments)
+    {
+        if (Arguments.TryGetProperty("tools", out var Tools) && (Tools.ValueKind != JsonValueKind.Array || Tools.GetArrayLength() > 3
+            || Tools.EnumerateArray().Any(T => T.ValueKind != JsonValueKind.String || !AllowedTools.Contains(T.GetString()!))))
+            throw new ArgumentException("Declare only cataloged read tools.");
+        if (Arguments.TryGetProperty("packages", out var Items) && (Items.ValueKind != JsonValueKind.Array || Items.GetArrayLength() > 20
+            || Items.EnumerateArray().Any(P => P.ValueKind != JsonValueKind.String || !Regex.IsMatch(P.GetString()!, @"\A[A-Za-z0-9_.-]{1,100}@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?\z"))))
+            throw new ArgumentException("Packages must use exact ID@version entries.");
+        var Declared = Packages(Arguments);
+        if (Declared.Length == 0)
+        {
+            if (Arguments.TryGetProperty("packageLock", out _)) throw new ArgumentException("A package lock requires declared packages.");
+            return;
+        }
+        if (!Arguments.TryGetProperty("packageLock", out var Lock) || Lock.ValueKind != JsonValueKind.String || Lock.GetString()!.Length > 20000)
+            throw new ArgumentException("Packages require a bounded NuGet packageLock string for locked restore.");
+        var Resolved = LockedPackages(Lock.GetString()!);
+        if (Declared.Any(P => !Resolved.Contains(P, StringComparer.OrdinalIgnoreCase))) throw new ArgumentException("Declared package versions must match the lock.");
     }
 }
