@@ -177,6 +177,15 @@ public partial class ScheduledJobs
     }
 
     private string Format(DateTimeOffset Value) => TimeZoneInfo.ConvertTime(Value, Zone).ToString("MMM d, yyyy h:mm:ss tt");
+    private static string FormatInterval(TimeSpan Value) => Value switch
+    {
+        { TotalDays: 1 } => "day",
+        { TotalDays: var Days } when Days == Math.Truncate(Days) => $"{Days:0} days",
+        { TotalHours: 1 } => "hour",
+        { TotalHours: var Hours } when Hours == Math.Truncate(Hours) => $"{Hours:0} hours",
+        { TotalMinutes: 1 } => "minute",
+        _ => $"{Value.TotalMinutes:0} minutes"
+    };
     private static string Label(string Value) => Value == "NeedsReview" ? "Needs review" : Value;
     private static string ChatLink(string SessionId, string Subject) => $"/chat?sessionId={Uri.EscapeDataString(SessionId)}&profileId={Uri.EscapeDataString(Subject)}";
     public async ValueTask DisposeAsync()

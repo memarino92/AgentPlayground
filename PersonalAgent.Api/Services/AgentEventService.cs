@@ -51,7 +51,7 @@ internal class AgentEventService
         return $"Published mobile notification for profile {payload.ProfileId}";
     }
 
-    public async Task<string> ScheduleNotificationToolAsync(AgentAccessContext access, string title, string body, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, CancellationToken cancellationToken = default)
+    public async Task<string> ScheduleNotificationToolAsync(AgentAccessContext access, string title, string body, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, string? repeatEvery = null, CancellationToken cancellationToken = default)
     {
         var profileId = access.SubjectProfileId;
         if (string.IsNullOrWhiteSpace(profileId)) return "Unable to schedule notification: profileId is required.";
@@ -70,13 +70,16 @@ internal class AgentEventService
             Delay = delay,
             ExecuteAt = parsedExecuteAt,
             When = when,
-            TimeZoneId = timeZoneId
+            TimeZoneId = timeZoneId,
+            RepeatEvery = repeatEvery
         }, access, cancellationToken);
 
-        return $"Scheduled notification {result.Id} at {result.ExecuteAtUtc:O}";
+        return string.IsNullOrWhiteSpace(repeatEvery)
+            ? $"Scheduled notification {result.Id} at {result.ExecuteAtUtc:O}"
+            : $"Scheduled recurring notification {result.Id} starting at {result.ExecuteAtUtc:O}, repeating every {repeatEvery}.";
     }
 
-    public async Task<string> ScheduleAgentTaskToolAsync(AgentAccessContext access, string instruction, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, bool notifyOnCompletion = true, CancellationToken cancellationToken = default)
+    public async Task<string> ScheduleAgentTaskToolAsync(AgentAccessContext access, string instruction, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, string? repeatEvery = null, bool notifyOnCompletion = true, CancellationToken cancellationToken = default)
     {
         var profileId = access.SubjectProfileId;
         if (string.IsNullOrWhiteSpace(profileId)) return "Unable to schedule agent task: profileId is required.";
@@ -94,10 +97,13 @@ internal class AgentEventService
             ExecuteAt = parsedExecuteAt,
             When = when,
             TimeZoneId = timeZoneId,
+            RepeatEvery = repeatEvery,
             NotifyOnCompletion = notifyOnCompletion
         }, access, cancellationToken);
 
-        return $"Scheduled agent task {result.Id} at {result.ExecuteAtUtc:O}";
+        return string.IsNullOrWhiteSpace(repeatEvery)
+            ? $"Scheduled agent task {result.Id} at {result.ExecuteAtUtc:O}"
+            : $"Scheduled recurring agent task {result.Id} starting at {result.ExecuteAtUtc:O}, repeating every {repeatEvery}.";
     }
 
     private static (string TenantId, string UserId) ParseTenantAndUser(string profileId)

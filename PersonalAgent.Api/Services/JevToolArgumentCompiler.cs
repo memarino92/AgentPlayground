@@ -38,6 +38,7 @@ internal static class JevToolArgumentCompiler
             Arguments["executeAt"] = null;
             Arguments["when"] = null;
             Arguments["timeZoneId"] = null;
+            Arguments["repeatEvery"] = null;
             if (Key == AgentToolKeys.ScheduleNotification)
             {
                 Arguments["title"] = "Reminder";

@@ -24,7 +24,7 @@ The Worker is now orchestration-only for journal sync and calls these model task
 - `POST /api/sessions` create a session.
 - `GET /api/sessions` list sessions (cursor paging).
 - `PUT /api/sessions/{sessionId}/model` persist an authorized model change from the current catalog.
-- `POST /api/schedule/agent-tasks` and `/api/schedule/notifications` schedule authorized jobs.
+- `POST /api/schedule/agent-tasks` and `/api/schedule/notifications` schedule authorized one-time or fixed-interval recurring jobs (`repeatEvery`).
 - `GET /api/jobs`, `GET /api/jobs/{id}` and `POST /api/jobs/{id}/cancel` inspect or cancel permitted pending work; see [job operations](../docs/runbooks/scheduled-jobs.md).
 - `POST /api/sessions/{sessionId}/messages` send message.
 - `GET /api/sessions/{sessionId}/messages` read transcript.

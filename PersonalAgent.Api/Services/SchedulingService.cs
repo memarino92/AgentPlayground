@@ -16,14 +16,20 @@ internal class SchedulingService(ILogger<SchedulingService> logger, ScheduledJob
         if (current is null || current.Role != access.Role || !string.Equals(subject, access.SubjectProfileId, StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("Current scheduling access is required.");
         DateTimeOffset executeAtUtc;
-        try { executeAtUtc = SchedulingTimeParser.ResolveExecuteAtUtc(request.Delay, request.ExecuteAt, request.When, request.TimeZoneId, DateTimeOffset.UtcNow); }
+        TimeSpan? recurrence;
+        try
+        {
+            executeAtUtc = SchedulingTimeParser.ResolveExecuteAtUtc(request.Delay, request.ExecuteAt, request.When, request.TimeZoneId, DateTimeOffset.UtcNow);
+            recurrence = SchedulingTimeParser.ParseRecurrence(request.RepeatEvery);
+        }
         catch (InvalidOperationException Exception) { throw new ArgumentException("Invalid scheduling time.", Exception); }
         var now = DateTimeOffset.UtcNow;
         var job = new ScheduledJob(Guid.NewGuid(), access.ActorId, access.Email, subject, request.Title.Trim(), now,
             executeAtUtc, "Scheduled", null, access.SessionId, null, false, request.CorrelationId ?? Guid.NewGuid(), 0, now)
         {
             JobType = "Notification",
-            Notification = new(request.Title.Trim(), request.Body.Trim(), request.DeepLink)
+            Notification = new(request.Title.Trim(), request.Body.Trim(), request.DeepLink),
+            RecurrenceInterval = recurrence
         };
         if (await authorization.ForExecutionAsync(job, cancellationToken) is null)
             throw new UnauthorizedAccessException("Current scheduling permission is required.");
@@ -42,14 +48,22 @@ internal class SchedulingService(ILogger<SchedulingService> logger, ScheduledJob
         if (current is null || current.Role != access.Role || !string.Equals(subject, access.SubjectProfileId, StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("Current scheduling access is required.");
         DateTimeOffset executeAtUtc;
-        try { executeAtUtc = SchedulingTimeParser.ResolveExecuteAtUtc(request.Delay, request.ExecuteAt, request.When, request.TimeZoneId, DateTimeOffset.UtcNow); }
+        TimeSpan? recurrence;
+        try
+        {
+            executeAtUtc = SchedulingTimeParser.ResolveExecuteAtUtc(request.Delay, request.ExecuteAt, request.When, request.TimeZoneId, DateTimeOffset.UtcNow);
+            recurrence = SchedulingTimeParser.ParseRecurrence(request.RepeatEvery);
+        }
         catch (InvalidOperationException Exception) { throw new ArgumentException("Invalid scheduling time.", Exception); }
         var correlationId = request.CorrelationId ?? Guid.NewGuid();
         var taskId = Guid.NewGuid();
 
         var now = DateTimeOffset.UtcNow;
         var job = new ScheduledJob(taskId, access.ActorId, access.Email, subject, request.Instruction.Trim(), now,
-            executeAtUtc, "Scheduled", null, access.SessionId, null, request.NotifyOnCompletion, correlationId, 0, now);
+            executeAtUtc, "Scheduled", null, access.SessionId, null, request.NotifyOnCompletion, correlationId, 0, now)
+        {
+            RecurrenceInterval = recurrence
+        };
         if (await authorization.ForExecutionAsync(job, cancellationToken) is null)
             throw new UnauthorizedAccessException("Current scheduling permission is required.");
         await jobs.CreateAsync(job, cancellationToken);

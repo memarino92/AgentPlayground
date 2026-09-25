@@ -102,6 +102,23 @@ public class ScheduledNotificationTests(PostgresVectorFixture Database) : IClass
         (await Count.ExecuteScalarAsync()).Should().Be(0L);
     }
 
+    [Fact]
+    public async Task AgentToolCreatesRecurringNotificationSeries()
+    {
+        var (Store, _) = await new ScheduledJobTests(Database).SetupAsync();
+        var Events = new AgentEventService(Mock.Of<MassTransit.IBus>(),
+            new SchedulingService(NullLogger<SchedulingService>.Instance, Store, Authorization()),
+            NullLogger<AgentEventService>.Instance);
+
+        var Result = await Events.ScheduleNotificationToolAsync(new("owner", "Owner", "owner"),
+            "Daily reminder", "Review the dashboard", delay: "PT1M", repeatEvery: "P1D");
+
+        Result.Should().Contain("Scheduled recurring notification").And.Contain("P1D");
+        var Job = (await Store.ListAsync("owner", null, null, null, default)).Should().ContainSingle().Which;
+        Job.RecurrenceInterval.Should().Be(TimeSpan.FromDays(1));
+        Job.Status.Should().Be("Scheduled");
+    }
+
     [Theory]
     [InlineData("cancel", "Cancelled")]
     [InlineData("revokeActor", "Blocked")]

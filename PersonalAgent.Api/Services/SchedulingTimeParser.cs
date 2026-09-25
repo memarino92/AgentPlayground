@@ -4,6 +4,9 @@ namespace PersonalAgent.Api.Services;
 
 internal static class SchedulingTimeParser
 {
+    private static readonly TimeSpan MinimumRecurrence = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan MaximumRecurrence = TimeSpan.FromDays(366);
+
     public static DateTimeOffset ResolveExecuteAtUtc(string? delay, DateTimeOffset? executeAt, string? when, string? timeZoneId, DateTimeOffset nowUtc)
     {
         if (executeAt is not null) return executeAt.Value.ToUniversalTime();
@@ -19,6 +22,14 @@ internal static class SchedulingTimeParser
             return ParseNaturalTime(when.Trim(), timeZoneId, nowUtc);
 
         throw new InvalidOperationException("Provide one of delay, executeAt, or when.");
+    }
+
+    public static TimeSpan? ParseRecurrence(string? repeatEvery)
+    {
+        if (string.IsNullOrWhiteSpace(repeatEvery)) return null;
+        if (!TryParseDuration(repeatEvery.Trim(), out var interval) || interval < MinimumRecurrence || interval > MaximumRecurrence)
+            throw new InvalidOperationException("repeatEvery must be an ISO-8601 duration between PT1M and P366D.");
+        return interval;
     }
 
     private static bool TryParseDuration(string value, out TimeSpan duration)

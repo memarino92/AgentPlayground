@@ -36,9 +36,10 @@
                     <button type="button" @key="Job.TaskId" class="job-card @(Selected?.Job.TaskId == Job.TaskId ? "selected" : "")" @onclick="() => SelectAsync(Job.TaskId)" disabled="@Busy">
                         <span class="job-status" data-status="@Job.Status">@Label(Job.Status)</span>
                         <span class="job-type">@(Job.JobType == "Notification" ? "Notification" : "Agent task")</span>
+                        @if (Job.RecurrenceInterval is { } CardInterval) { <span class="job-recurrence">Recurring · Every @FormatInterval(CardInterval)</span> }
                         <strong>@Job.Instruction</strong>
                         <span>Scheduled by @(Job.ActorId ?? "Unknown (legacy)") · For @Job.SubjectProfileId</span>
-                        <time datetime="@Job.ExecuteAt.ToString("O")">Due @Format(Job.ExecuteAt)</time>
+                        <time datetime="@Job.ExecuteAt.ToString("O")">@(Job.RecurrenceInterval is null ? "Due" : "Next run") @Format(Job.ExecuteAt)</time>
                     </button>
                 }
                 @if (Jobs.Count == 50) { <button type="button" disabled="@Busy" @onclick="OlderAsync">Older jobs</button> }
@@ -57,7 +58,8 @@
                         <dt>Scheduled by</dt><dd>@(Job.ActorId ?? "Unknown (legacy)")</dd>
                         <dt>For</dt><dd>@Job.SubjectProfileId</dd>
                         <dt>Created</dt><dd>@Format(Job.CreatedAt)</dd>
-                        <dt>Due</dt><dd>@Format(Job.ExecuteAt)</dd>
+                        <dt>@(Job.RecurrenceInterval is null ? "Due" : "Next run")</dt><dd>@Format(Job.ExecuteAt)</dd>
+                        @if (Job.RecurrenceInterval is { } Interval) { <dt>Repeats</dt><dd>Every @FormatInterval(Interval)</dd> }
                         <dt>Updated</dt><dd>@Format(Job.UpdatedAt)</dd>
                         <dt>Job ID</dt><dd class="job-id">@Job.TaskId</dd>
                     </dl>
@@ -65,7 +67,7 @@
                     <div class="job-actions">
                         @if (Job.SourceSessionId is not null) { <a href="@ChatLink(Job.SourceSessionId, Job.SubjectProfileId)">Originating conversation</a> }
                         @if (Job.SessionId is not null) { <a href="@ChatLink(Job.SessionId, Job.SubjectProfileId)">Result conversation</a> }
-                        @if (Job.Status is "Scheduled" or "Retrying") { <button type="button" class="job-cancel" disabled="@Busy" @onclick="CancelAsync">Cancel job</button> }
+                        @if (Job.Status is "Scheduled" or "Retrying") { <button type="button" class="job-cancel" disabled="@Busy" @onclick="CancelAsync">Cancel @(Job.RecurrenceInterval is null ? "job" : "series")</button> }
                     </div>
                     <h3>Execution history</h3>
                     @if (Selected.Attempts.Count == 0) { <p>This job has not started.</p> }
@@ -74,7 +76,7 @@
                         <div @key="Attempt.Number" class="job-attempt">
                             <strong>Attempt @Attempt.Number · @Label(Attempt.Status)</strong>
                             <div>@Format(Attempt.StartedAt) @(Attempt.FinishedAt is { } Finished ? $"— {Format(Finished)}" : "— awaiting outcome")</div>
-                            @if (Attempt.Outcome is not null && Attempt.Status != "Completed") { <p>@Attempt.Outcome</p> }
+                            @if (Attempt.Outcome is not null) { <p>@Attempt.Outcome</p> }
                         </div>
                     }
                 }
