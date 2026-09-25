@@ -35,7 +35,7 @@ public static class ObservabilityExtensions
                 .AddAttributes([new("deployment.environment.name", Builder.Environment.EnvironmentName)]))
             .WithTracing(Tracing =>
             {
-                Tracing.AddSource(AiTelemetry.SourceName, PersonalAgent.Contracts.Messaging.CoachCallOutbox.ActivitySourceName,
+                Tracing.AddSource(AiTelemetry.SourceName, AutomationTelemetry.SourceName, PersonalAgent.Contracts.Messaging.CoachCallOutbox.ActivitySourceName,
                         DiagnosticHeaders.DefaultListenerName, "Npgsql")
                     .AddAspNetCoreInstrumentation(Options => Options.Filter = Context =>
                         !Context.Request.Path.StartsWithSegments("/health"))
@@ -55,7 +55,7 @@ public static class ObservabilityExtensions
             .WithMetrics(Metrics =>
             {
                 Metrics.AddAspNetCoreInstrumentation().AddHttpClientInstrumentation().AddRuntimeInstrumentation()
-                    .AddMeter(InstrumentationOptions.MeterName, AiMetricsProcessor.MeterName);
+                    .AddMeter(InstrumentationOptions.MeterName, AiMetricsProcessor.MeterName, AutomationTelemetry.SourceName);
                 Metrics.AddReader(Services => new PeriodicExportingMetricReader(
                     new ReloadingOtelExporter<Metric>(Services.GetRequiredService<OtelRuntime>())));
             });
@@ -86,7 +86,8 @@ public sealed class TelemetryPrivacyProcessor : BaseProcessor<Activity>
         "messaging.destination.name", "messaging.masstransit.message_type",
         "openinference.span.kind", "llm.model_name", "llm.system", "embedding.model_name", "tool.name",
         "llm.token_count.prompt", "llm.token_count.completion", "llm.token_count.total", "error.type",
-        "routing.mode", "routing.outcome", "decision.policy"
+        "routing.mode", "routing.outcome", "decision.policy",
+        "automation.run_id", "automation.step_index", "automation.action", "automation.status"
     ];
 
     public override void OnEnd(Activity Activity)

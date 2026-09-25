@@ -1,0 +1,99 @@
+@page "/automations"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.CoachTranscriptPolicy)]
+@implements IAsyncDisposable
+
+<PageTitle>Automations - PersonalAgent</PageTitle>
+<section class="automations-page">
+    <header class="automation-header">
+        <div><h1>Automations</h1><p>Reusable recipes created in chat. Run history, scheduled work, and the source behind each version.</p></div>
+        <button type="button" disabled="@Busy" @onclick="RefreshAsync">Refresh</button>
+    </header>
+    @if (Error is not null) { <p role="alert" class="automation-error">@Error</p> }
+    @if (Notice is not null) { <p role="status">@Notice</p> }
+    @if (!Initialized) { <p>Loading automations…</p> }
+    else
+    {
+        @if (Profiles.Count > 1)
+        {
+            <label>Profile <select value="@Profile" @onchange="ChangeProfileAsync">@foreach (var P in Profiles) { <option value="@P">@P</option> }</select></label>
+        }
+        <p class="automation-muted">Times shown in UTC. Recurrence uses fixed elapsed intervals; it does not follow daylight-saving changes.</p>
+        @if (Items.Count == 0) { <p>No automations here yet. <a href="/chat">Ask in chat</a> to create one—for example, “Every day, save a report with the current date and time.”</p> }
+        <div class="automation-grid">
+            <aside aria-label="Automations">
+                @foreach (var Item in Items)
+                {
+                    <button type="button" @key="Item.Id" class="automation-item" aria-pressed="@(Selected?.Automation.Id == Item.Id)" disabled="@Busy" @onclick="() => SelectAsync(Item.Id)">
+                        <strong>@Item.Name</strong><span>@Item.Status · v@(Item.Version)</span><small>Next: @Format(Item.Status == "Active" ? Item.NextRunAt : null)</small>
+                    </button>
+                }
+                <div class="automation-actions">
+                    <button disabled="@(Busy || Offset == 0)" @onclick="() => PageAsync(-50)">Newer</button>
+                    <button disabled="@(Busy || Items.Count < 50)" @onclick="() => PageAsync(50)">Older</button>
+                </div>
+            </aside>
+            <div>
+                @if (Selected is { } Detail)
+                {
+                    <section class="automation-panel">
+                        <h2>@Detail.Automation.Name</h2>
+                        <p>@Detail.Automation.Status · Version @Detail.Automation.Version · Created by @Detail.Automation.ActorId</p>
+                        <div class="automation-actions">
+                            <button disabled="@Busy" @onclick='() => ControlAsync("run")'>Run now</button>
+                            @if (Detail.Automation.Status == "Paused") { <button disabled="@Busy" @onclick='() => ControlAsync("resume")'>Resume</button> }
+                            else { <button disabled="@Busy" @onclick='() => ControlAsync("pause")'>Pause future runs</button> }
+                            <a href="/chat">Revise in chat</a>
+                        </div>
+                        <h3>Upcoming runs</h3>
+                        @if (Detail.UpcomingRuns.Count == 0) { <p>No future run scheduled.</p> }
+                        else
+                        {
+                            <ul>@foreach (var Due in Detail.UpcomingRuns) { <li>@Format(Due)</li> }</ul>
+                            <p class="automation-muted">Projected times. An active run delays the next start; missed intervals are skipped.</p>
+                        }
+                    </section>
+                    <section class="automation-panel">
+                        <h3>Run history</h3>
+                        @if (Detail.Runs.Count == 0) { <p>No runs yet.</p> }
+                        else
+                        {
+                            <div class="automation-table"><table><thead><tr><th>Scheduled</th><th>Version</th><th>Status</th><th></th></tr></thead><tbody>
+                            @foreach (var Run in Detail.Runs)
+                            {
+                                <tr @key="Run.Id"><td>@Format(Run.ScheduledAt)</td><td>v@(Run.Version)</td><td>@Run.Status</td><td><button disabled="@Busy" @onclick="() => SelectRunAsync(Run.Id)">Inspect run</button></td></tr>
+                            }
+                            </tbody></table></div>
+                        }
+                        <div class="automation-actions"><button disabled="@(Busy || RunOffset == 0)" @onclick="() => RunPageAsync(-50)">Newer runs</button><button disabled="@(Busy || Detail.Runs.Count < 50)" @onclick="() => RunPageAsync(50)">Older runs</button></div>
+                        @if (SelectedRun is { } Execution)
+                        {
+                            <h4>Run @Execution.Run.Id</h4>
+                            <p>@Execution.Run.Status · Started @Format(Execution.Run.StartedAt) · Finished @Format(Execution.Run.FinishedAt)</p>
+                            @if (Execution.Run.Error is not null) { <p class="automation-error">@Execution.Run.Error</p> }
+                            @if (Execution.Run.TraceId is not null) { <p class="automation-muted">Trace ID: <code>@Execution.Run.TraceId</code></p> }
+                            @foreach (var Step in Execution.Steps)
+                            {
+                                <details @key="Step.Index"><summary>@(Step.Index + 1). @Step.Id · @Step.Action · @Step.Status</summary>
+                                    @if (Step.Error is not null) { <p class="automation-error">@Step.Error</p> }
+                                    <pre>@Step.Output</pre>
+                                </details>
+                            }
+                            @foreach (var Report in Execution.Reports) { <article @key="Report.Id"><h4>@Report.Title</h4><pre>@Report.Content</pre></article> }
+                            <p class="automation-muted">Completed notification steps mean queued for push delivery, not confirmed device receipt.</p>
+                        }
+                    </section>
+                    <section class="automation-panel">
+                        <h3>Versions and source</h3>
+                        @foreach (var Version in Detail.Versions)
+                        {
+                            <details @key="Version.Version"><summary>Version @Version.Version · @Format(Version.CreatedAt)</summary>
+                                <p class="automation-muted">SHA-256 <code>@Version.Hash</code></p><pre>@Pretty(Version.Source)</pre>
+                            </details>
+                        }
+                    </section>
+                }
+                else { <p>Select an automation to see its schedule, runs, and source.</p> }
+            </div>
+        </div>
+    }
+</section>

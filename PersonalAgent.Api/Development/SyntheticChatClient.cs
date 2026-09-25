@@ -17,6 +17,24 @@ internal sealed class SyntheticChatClient : IChatClient, IAgentChatClientFactory
         var Memory = Messages.LastOrDefault(Message => Message.Role == ChatRole.System && Message.Text.StartsWith("These historical user statements", StringComparison.Ordinal))?.Text;
         var History = Messages.LastOrDefault(Message => Message.Role == ChatRole.User && Message.Text.StartsWith("Historical excerpts supplied", StringComparison.Ordinal))?.Text;
         var Request = Messages.LastOrDefault(Message => Message.Role == ChatRole.User)?.Text ?? string.Empty;
+        if (Request.Trim().Equals("demo automation", StringComparison.OrdinalIgnoreCase))
+        {
+            // An explicit fixture exercises real tool binding, authorization, persistence and scheduling.
+            // It is not an evaluation of live model authoring quality.
+            var Last = Messages.LastOrDefault();
+            if (Last?.Role == ChatRole.Tool)
+            {
+                var Result = Last.Contents.OfType<FunctionResultContent>().LastOrDefault()?.Result;
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, $"Synthetic automation tool result: {Result}")));
+            }
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+            [new FunctionCallContent(Guid.NewGuid().ToString("N"), "save_automation", new Dictionary<string, object?>
+            {
+                ["name"] = "Synthetic chat automation",
+                ["source"] = """{"steps":[{"id":"message","action":"text","arguments":{"text":"Created through chat"}},{"id":"report","action":"save_report","arguments":{"title":"Chat automation report","content":"{{steps.message}}"}}]}""",
+                ["automationId"] = null, ["expectedVersion"] = null, ["executeAt"] = null, ["repeatEvery"] = "PT1M"
+            })])));
+        }
         var Text = Memory is null
             ? "Synthetic demo response. Try: remember that my favorite exercise is deadlift, then ask about my favorite exercise. Upload a small .m4a file to see the fixed two-speaker review example."
             : "Synthetic demo recall from this account's stored conversation:\n" + Memory[(Memory.IndexOf('\n') + 1)..];
@@ -39,6 +57,7 @@ internal sealed class SyntheticChatClient : IChatClient, IAgentChatClientFactory
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> Messages, ChatOptions? Options = null, [EnumeratorCancellation] CancellationToken CancellationToken = default)
     {
         var Response = await GetResponseAsync(Messages, Options, CancellationToken);
-        yield return new ChatResponseUpdate(ChatRole.Assistant, Response.Text);
+        foreach (var Message in Response.Messages)
+            yield return new ChatResponseUpdate { Role = Message.Role, Contents = Message.Contents };
     }
 }

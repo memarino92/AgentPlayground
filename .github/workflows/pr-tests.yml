@@ -64,6 +64,9 @@ jobs:
       - name: Verify scheduled notification jobs
         shell: pwsh
         run: ./scripts/tests/Test-ScheduledNotifications.ps1
+      - name: Verify chat-authored deterministic automations
+        shell: pwsh
+        run: ./scripts/tests/Test-Automations.ps1
       - name: Capture demo logs
         if: failure()
         run: docker compose -f compose.synthetic.yml logs --tail 100

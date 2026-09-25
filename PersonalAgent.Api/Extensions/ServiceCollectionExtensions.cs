@@ -8,6 +8,7 @@ using PersonalAgent.Api.Consumers;
 using PersonalAgent.Api.Configuration;
 using PersonalAgent.Api.Services;
 using System.Text;
+using PersonalAgent.Api.Automations;
 
 namespace PersonalAgent.Api.Extensions;
 
@@ -157,8 +158,10 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<ICoachAssignmentStore, PostgresCoachAssignmentStore>();
         services.AddSingleton<AgentChatService>();
         services.AddSingleton<AgentService>();
+        services.AddAutomations();
         services.AddMassTransit(x =>
         {
+            x.AddAutomationMessaging();
             x.AddConsumer<TranscriptionRequestConsumer>()
                 .Endpoint(e => e.Name = "personal-agent-transcription");
             x.AddConsumer<ParseWorkJournalEntriesRequestConsumer>(cfg =>

@@ -19,6 +19,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
 - [Navigation and playback](runbooks/navigation.md): query state, draft chats, saved models and shared recording views.
 - [Scheduled jobs](runbooks/scheduled-jobs.md): authorization, dashboard, cancellation and conservative recovery.
+- [Agent automations](runbooks/automations.md): chat-authored recipes, immutable versions, saga execution, schedules and operational visibility.
 - [Journal sync](runbooks/journal-sync.md): Git blob checkpoints, retries, and reprocessing unchanged files.
 - [Coaching retrieval evaluation](runbooks/coach-retrieval-evaluation.md): synthetic regression baseline and live-model evaluation limits.
 - [Observability](runbooks/observability.md): service tracing, OpenInference, Sentry correlation and OTLP setup.
@@ -64,6 +65,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0030: Streaming chat and agent-managed scheduled jobs](decisions/0030-streaming-chat-and-agent-job-management.md) | Accepted; implemented | Stream provider responses to Web and let the authorized agent inspect, update and cancel durable jobs |
 | [0031: Runtime Agent Framework skills](decisions/0031-runtime-agent-skills.md) | Accepted; first skill implemented | Progressively disclose coaching-answer guidance while retaining tool authorization |
 | [0032: OpenRouter auto routing](decisions/0032-openrouter-auto-routing.md) | Accepted; implemented | Add OpenRouter behind the existing agent boundary and use provider-managed auto routing as the default for new chats |
+| [0033: Agent automations](decisions/0033-agent-automations.md) | Accepted; recipe slice implemented | EF Core saga/outbox transactions, agent authoring and automation dashboard |
 | [0033: Recurring scheduled jobs](decisions/0033-recurring-scheduled-jobs.md) | Accepted; implemented | Add agent-created fixed-interval series with durable run history and dashboard visibility |
 
 ## Working agreement

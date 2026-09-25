@@ -17,6 +17,26 @@ namespace PersonalAgent.Api.Tests.Services;
 public sealed class ObservabilityTests
 {
     [Fact]
+    public void AutomationSpansKeepOperationalCorrelationAndStripRecipeContents()
+    {
+        using var Listener = new ActivityListener
+        {
+            ShouldListenTo = Source => Source.Name == AutomationTelemetry.SourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded
+        };
+        ActivitySource.AddActivityListener(Listener);
+        var RunId = Guid.NewGuid();
+        using var Span = AutomationTelemetry.Start("automation.execute_step", RunId, 2)!;
+        Span.SetTag("automation.source", "private recipe");
+        Span.SetTag("automation.output", "private report");
+        new TelemetryPrivacyProcessor().OnEnd(Span);
+        Span.GetTagItem("automation.run_id").Should().Be(RunId.ToString());
+        Span.GetTagItem("automation.step_index").Should().Be(2);
+        Span.GetTagItem("automation.source").Should().BeNull();
+        Span.GetTagItem("automation.output").Should().BeNull();
+    }
+
+    [Fact]
     public async Task UnreachableExporter_DoesNotFailApplicationWork()
     {
         var builder = Host.CreateApplicationBuilder();
