@@ -2,6 +2,7 @@ using Microsoft.Extensions.AI;
 
 using PersonalAgent.Api.Models;
 using PersonalAgent.Api.Automations;
+using PersonalAgent.Contracts.Automations;
 
 namespace PersonalAgent.Api.Services;
 
@@ -10,6 +11,9 @@ internal sealed class AgentToolRegistry(ITavilyMcpToolProvider TavilyProvider) :
 {
     private static readonly IReadOnlyList<AgentToolRegistration> LocalTools = Array.AsReadOnly<AgentToolRegistration>(
     [
+        Local(AutomationPrograms.PermissionKey, "C# automation programs", "Automations",
+            "Discover how to include a csharp step in a saved automation. Call automation_catalog for the schema, then save_automation. Source is a single net11.0 C# program with BCL only: read Console.In, write Console.Out. No packages, networking or credentials. The dedicated runner must be deployed. Inspect build/run diagnostics before claiming completion.",
+            false, false, false, (Services, Access) => () => Services.GetRequiredService<AutomationRecipes>().Catalog(Services, Access)),
         Local("Local:automation_catalog", "Automation actions", "Automations",
             "Discover the recipe format and supported deterministic automation actions. Call before creating an automation. Recipes run without a model; do not promise unsupported scripts or integrations.",
             true, false, false, (Services, Access) => () => Services.GetRequiredService<AutomationRecipes>().Catalog(Services, Access)),

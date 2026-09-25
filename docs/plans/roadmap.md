@@ -6,7 +6,9 @@ Delivered: registered-action recipes authored/revised through chat, EF Core Post
 
 Validation: API/Web/Worker/Contracts regression suites, PostgreSQL failure/duplicate/restart tests, and eleven real SQL-transport synthetic chat checks. Browser verification covers source revisions and run reports. Live model authoring quality remains unmeasured.
 
-Next, separately authorized: isolated generated C# program building/execution integrated as an automation action. Acceptance: no application/provider secrets or network by default, bounded resources/time/output, persisted source and build/run results, immutable artifact identity, safe failure/restart behavior, and chat/dashboard visibility. Existing services remain outside the saga migration scope.
+Follow-up delivered on its own branch: default-disabled, owner-only C# computation via a dedicated Docker runner. Saved source remains revisioned; compilation/execution has no application secrets or network, bounded resources/time/output, per-run source/compiler fingerprints and scoped diagnostics. Chat-to-SQL-transport-to-container-to-report flow and dashboard evidence are verified with synthetic data. See [decision 0035](../decisions/0035-isolated-automation-programs.md) and [program operations](../runbooks/automation-programs.md). Existing services remain outside the saga migration scope.
+
+Future acceptance: compiled artifact caching needs content-addressed retention and compiler-upgrade policy; a hostile multitenant service requires a stronger isolation boundary such as microVMs and independent security evaluation. Live-model source-authoring quality, calendar recurrence and richer approved actions remain separate work.
 
 ## Runtime Agent Framework skills — first slice delivered 2026-09-21
 

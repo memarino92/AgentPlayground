@@ -24,10 +24,12 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
     public object Catalog(IServiceProvider Services, AgentAccessContext Access) => new
     {
         format = "{\"steps\":[{\"id\":\"hello\",\"action\":\"text\",\"arguments\":{\"text\":\"Hello\"}}]}",
-        templates = "String values support {{steps.ID}} (whole earlier output), {{run.scheduledAt}}, {{run.id}}. Optional when: {step: earlierId, equals: exactOutput}. No code, expressions, HTTP, shell, or model calls.",
+        templates = "String values support {{steps.ID}} (whole earlier output), {{run.scheduledAt}}, {{run.id}}. Optional when: {step: earlierId, equals: exactOutput}. C# source is literal and never expanded. No arbitrary HTTP, shell actions, or model calls.",
         actions = new object[]
         {
             new { action = "text", arguments = new { text = "literal or template" } },
+            new { action = "csharp", arguments = new { source = "Console.WriteLine(Console.In.ReadToEnd().ToUpperInvariant());", input = "literal or template" },
+                requirements = "Owner only; administrator must enable Local:csharp_automation and deploy the dedicated runner. Single C# source file, net11.0 BCL only; no package/property/project directives. Read stdin, write stdout (32 KiB combined output); 90 second build/run limit, 512 MiB RAM, no network or application credentials. Programs compute values; use subsequent recipe steps for domain writes. Build errors appear in run diagnostics." },
             new { action = "save_report", arguments = new { title = "report title", content = "literal or template" } },
             new { action = "notify", arguments = new { title = "notification title", body = "literal or template" }, outcome = "Queued for existing push delivery; not confirmed device receipt" },
             new { action = "tool", arguments = new { tool = "registered key", inputs = new { } }, tools = Registry.GetRegistrations()
@@ -51,7 +53,7 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
             if (Step.Arguments.ValueKind != JsonValueKind.Object) throw new ArgumentException("Step arguments must be an object.");
             string[] Keys = Step.Action switch
             {
-                "text" => ["text"], "save_report" => ["title", "content"], "notify" => ["title", "body"], "tool" => ["tool", "inputs"],
+                "text" => ["text"], "save_report" => ["title", "content"], "notify" => ["title", "body"], "tool" => ["tool", "inputs"], "csharp" => ["source", "input"],
                 _ => throw new ArgumentException("Unknown action. Discover supported automation actions first.")
             };
             if (Step.Arguments.EnumerateObject().Select(P => P.Name).Distinct().Count() != Step.Arguments.EnumerateObject().Count()
@@ -62,9 +64,13 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
             if (Step.Action == "tool" && (!AllowedTools.Contains(Step.Arguments.GetProperty("tool").GetString()!)
                 || Step.Arguments.GetProperty("inputs").ValueKind != JsonValueKind.Object))
                 throw new ArgumentException("Only cataloged read tools with an inputs object can be automated.");
+            if (Step.Action == "csharp" && (string.IsNullOrWhiteSpace(Step.Arguments.GetProperty("source").GetString())
+                || Step.Arguments.GetProperty("source").GetString()!.Length > AutomationPrograms.MaxSource
+                || Step.Arguments.GetProperty("input").GetString()!.Length > AutomationPrograms.MaxInput))
+                throw new ArgumentException("C# source must contain 1–24000 characters; input is limited to 65536 characters.");
             if (Step.When is { } Condition && (!Prior.Contains(Condition.Step) || Condition.Expected is null))
                 throw new ArgumentException("Conditions must compare an earlier step output.");
-            foreach (Match Match in Placeholder.Matches(Step.Arguments.GetRawText()))
+            foreach (Match Match in Placeholder.Matches(Step.Action == "csharp" ? Step.Arguments.GetProperty("input").GetString()! : Step.Arguments.GetRawText()))
             {
                 var Key = Match.Groups[1].Value;
                 if (Key is not ("run.id" or "run.scheduledAt") && !(Key.StartsWith("steps.", StringComparison.Ordinal) && Prior.Contains(Key[6..])))
@@ -84,7 +90,8 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
         });
         JsonNode? Walk(JsonNode? Node) => Node switch
         {
-            JsonObject Object => new JsonObject(Object.Select(P => KeyValuePair.Create(P.Key, Walk(P.Value))).ToArray()),
+            JsonObject Object => new JsonObject(Object.Select(P => KeyValuePair.Create(P.Key,
+                Step.Action == "csharp" && P.Key == "source" ? P.Value?.DeepClone() : Walk(P.Value))).ToArray()),
             JsonArray Array => new JsonArray(Array.Select(Walk).ToArray()),
             JsonValue Value when Value.TryGetValue<string>(out var Text) => JsonValue.Create(Expand(Text)),
             _ => Node?.DeepClone()
@@ -99,6 +106,9 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
     {
         foreach (var Step in Recipe.Steps)
         {
+            if (Step.Action == "csharp" && (Access.Role != AgentRoles.Owner
+                || !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.PermissionKey, Token)))
+                throw new UnauthorizedAccessException("C# automations require owner access and the administrator-enabled C# automation permission.");
             if (Step.Action == "notify" && !await Permissions.IsAllowedAsync(Access.Role, AgentToolKeys.PublishMobileNotification, Token))
                 throw new UnauthorizedAccessException("Notification permission is required.");
             if (Step.Action != "tool") continue;

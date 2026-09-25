@@ -5,9 +5,22 @@ on:
     branches:
       - main
       - 'digital-garden/**'
+      - 'feat/agent-automations'
   workflow_dispatch:
 
 jobs:
+  automation-programs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Build isolated C# compiler image
+        run: docker build -f Dockerfile.automation-sandbox -t agentplayground-csharp-sandbox:1 .
+      - name: Verify program execution and sandbox limits
+        run: dotnet test PersonalAgent.AutomationRunner.Tests/PersonalAgent.AutomationRunner.Tests.csproj
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -67,9 +80,16 @@ jobs:
       - name: Verify chat-authored deterministic automations
         shell: pwsh
         run: ./scripts/tests/Test-Automations.ps1
+      - name: Build isolated compiler and start dedicated program runner
+        run: |
+          docker build -f Dockerfile.automation-sandbox -t agentplayground-csharp-sandbox:1 .
+          docker compose -f compose.synthetic.yml -f compose.automation-programs.yml up --build --detach automation-runner
+      - name: Verify chat-authored C# program automation
+        shell: pwsh
+        run: ./scripts/tests/Test-AutomationPrograms.ps1
       - name: Capture demo logs
         if: failure()
-        run: docker compose -f compose.synthetic.yml logs --tail 100
+        run: docker compose -f compose.synthetic.yml -f compose.automation-programs.yml logs --tail 100
       - name: Stop disposable demo
         if: always()
-        run: docker compose -f compose.synthetic.yml down --volumes
+        run: docker compose -f compose.synthetic.yml -f compose.automation-programs.yml down --volumes

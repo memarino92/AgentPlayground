@@ -1,0 +1,12 @@
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.1 AS build
+WORKDIR /src
+COPY . .
+RUN dotnet publish PersonalAgent.AutomationRunner/PersonalAgent.AutomationRunner.csproj -c Release -o /app/publish /p:UseAppHost=false
+
+# Only the dedicated trusted controller has the Docker CLI/socket. Never mount it in API or sandbox containers.
+FROM docker:28-cli AS docker
+FROM mcr.microsoft.com/dotnet/aspnet:11.0.0-rc.1
+COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
+WORKDIR /app
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "PersonalAgent.AutomationRunner.dll"]

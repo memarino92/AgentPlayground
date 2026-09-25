@@ -4,7 +4,7 @@ Ask Chat to create an automation, for example: “Every day, get the current dat
 
 Supported actions: `text` (literal/template), `tool` (clock, scoped coaching search, owner work-journal search), `save_report`, and `notify`. Strings support `{{steps.ID}}`, `{{run.id}}`, and `{{run.scheduledAt}}`. An optional `when: {"step":"earlier_id","equals":"exact output"}` skips a step when the comparison fails. No model chooses steps during execution. Search may use the existing embedding provider; this is not an entirely model-free retrieval guarantee.
 
-Limits: 20 sequential steps, 32 KiB source, 64 KiB output per step, 60 seconds per step. No shell, arbitrary C#, arbitrary HTTP requests, recursive automations or general expression evaluation. The next slice will add isolated generated programs separately.
+Recipe limits: 20 sequential steps, 32,768 source characters, 65,536 output characters per registered step, 60 seconds per registered step. No host shell, arbitrary HTTP requests, recursive automations or general expression evaluation. The optional owner-only `csharp` action has its own dedicated runner, limits and default-disabled permission; see [C# programs](automation-programs.md).
 
 ## Scheduling and revisions
 

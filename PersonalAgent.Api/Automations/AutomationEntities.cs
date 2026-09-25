@@ -49,6 +49,7 @@ internal sealed class AutomationStepExecution
     public string Status { get; set; } = "Pending";
     public string? Output { get; set; }
     public string? Error { get; set; }
+    public string? ProgramEvidence { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
 }
 
