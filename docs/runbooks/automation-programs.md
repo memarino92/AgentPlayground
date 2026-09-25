@@ -24,7 +24,7 @@ In the existing tool access administration page, enable **C# automation programs
 
 `compose.automation-programs.yml` mounts the Docker socket only into the trusted controller. It is explicitly for a disposable local/CI daemon. For hosted execution, provision a dedicated patched Linux execution host/daemon, build the sandbox image there, and run `PersonalAgent.AutomationRunner` with Docker CLI access. Use the existing `DATABASE_URL`/`CONFIG_ENCRYPTION_KEY` bootstrap and encrypted `Shared`/`AutomationRunner` database settings for messaging/telemetry, or `Messaging:ConnectionString` user secrets for local development. Do not mount the socket in the API or a program sandbox. A daemon socket grants host-level control; this is not a hostile multitenant platform. The sandbox image identity and resource policy are trusted release configuration, not agent-editable settings.
 
-The runner fails startup if its local sandbox image is absent; it never pulls an agent-selected image. Build the image before starting it. Capability permissions are read live; image changes require a runner restart. No new environment variables are needed.
+The runner fails startup if its local sandbox image is absent or Docker does not report Linux memory/swap/CPU/PID enforcement and the default seccomp profile; it never pulls an agent-selected image. Build the image before starting it. Capability permissions are read live; image changes require a runner restart. No new environment variables are needed.
 
 ## Limits and recovery
 

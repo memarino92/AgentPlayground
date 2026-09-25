@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Formats.Tar;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using PersonalAgent.Contracts.Automations;
 
@@ -18,11 +19,28 @@ public sealed class DockerProgramExecutor
 
     public async Task InitializeAsync(CancellationToken Token)
     {
-        var Result = await DockerAsync(["image", "inspect", "--format", "{{.Id}}", AutomationPrograms.SandboxImage], null, Token);
+        using var Deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
+        Deadline.CancelAfter(TimeSpan.FromSeconds(15));
+        var Host = await DockerAsync(["info", "--format", "{{json .}}"], null, Deadline.Token);
+        if (Host.ExitCode != 0) throw new InvalidOperationException("Docker host capabilities could not be verified.");
+        RequireHostCapabilities(Host.Output);
+        var Result = await DockerAsync(["image", "inspect", "--format", "{{.Id}}", AutomationPrograms.SandboxImage], null, Deadline.Token);
         var Id = Result.Output.Trim();
         if (Result.ExitCode != 0 || !Regex.IsMatch(Id, "^sha256:[a-f0-9]{64}$"))
             throw new InvalidOperationException("Build the versioned automation sandbox image before starting the runner.");
         ImageId = Id; // Immutable identity for this runner lifetime. Never pull/build agent-selected images.
+    }
+
+    public static void RequireHostCapabilities(string Info)
+    {
+        using var Document = JsonDocument.Parse(Info);
+        var Host = Document.RootElement;
+        bool Enabled(string Key) => Host.TryGetProperty(Key, out var Value) && Value.ValueKind == JsonValueKind.True;
+        if (!Host.TryGetProperty("OSType", out var Os) || Os.GetString() != "linux"
+            || !new[] { "MemoryLimit", "SwapLimit", "CpuCfsQuota", "PidsLimit" }.All(Enabled)
+            || !Host.TryGetProperty("SecurityOptions", out var Security) || Security.ValueKind != JsonValueKind.Array
+            || !Security.EnumerateArray().Any(V => V.GetString() is "name=seccomp,profile=builtin" or "name=seccomp,profile=default"))
+            throw new InvalidOperationException("The runner requires Linux with memory, swap, CPU and PID limits plus Docker's default seccomp profile.");
     }
 
     public async Task<ProgramResult> ExecuteAsync(string Source, string Input, CancellationToken Token)
