@@ -1,5 +1,13 @@
 # Roadmap
 
+## Agent-authored automations — recipe slice delivered 2026-09-25
+
+Delivered: registered-action recipes authored/revised through chat, EF Core PostgreSQL saga persistence with MassTransit 8.5.8 transactional outboxes, fixed-interval recurrence, immutable revisions, current authorization, saved reports, step history, and an automation dashboard. OTEL spans/metrics, structured logs and existing Sentry error correlation cover execution. See [decision 0033](../decisions/0033-agent-automations.md) and [runbook](../runbooks/automations.md).
+
+Validation: API/Web/Worker/Contracts regression suites, PostgreSQL failure/duplicate/restart tests, and eleven real SQL-transport synthetic chat checks. Browser verification covers source revisions and run reports. Live model authoring quality remains unmeasured.
+
+Next, separately authorized: isolated generated C# program building/execution integrated as an automation action. Acceptance: no application/provider secrets or network by default, bounded resources/time/output, persisted source and build/run results, immutable artifact identity, safe failure/restart behavior, and chat/dashboard visibility. Existing services remain outside the saga migration scope.
+
 ## Runtime Agent Framework skills — first slice delivered 2026-09-21
 
 The API now packages a `coach-answer-grounding` skill and exposes it through Microsoft Agent Framework progressive disclosure. Coaching retrieval, recency, attribution, and citation guidance moved out of the universal prompt; authorized data access remains in `AgentToolRegistry`, and no skill script runner is enabled. A focused test verifies packaged discovery, advertisement, and instruction loading. Model selection/following quality remains covered by the existing coaching evaluation process rather than inferred from provider wiring. See [decision 0031](../decisions/0031-runtime-agent-skills.md) and the [runtime skill runbook](../runbooks/agent-skills.md).

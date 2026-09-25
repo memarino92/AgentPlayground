@@ -14,7 +14,7 @@ using PersonalAgent.Web.Configuration;
 
 namespace PersonalAgent.Web.Services;
 
-internal class PersonalAgentClient : IDisposable
+internal partial class PersonalAgentClient : IDisposable
 {
     private readonly HttpClient httpClient;
     private readonly AuthenticationStateProvider authenticationStateProvider;

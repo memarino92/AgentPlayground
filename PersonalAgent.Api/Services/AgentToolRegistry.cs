@@ -1,6 +1,7 @@
 using Microsoft.Extensions.AI;
 
 using PersonalAgent.Api.Models;
+using PersonalAgent.Api.Automations;
 
 namespace PersonalAgent.Api.Services;
 
@@ -9,6 +10,19 @@ internal sealed class AgentToolRegistry(ITavilyMcpToolProvider TavilyProvider) :
 {
     private static readonly IReadOnlyList<AgentToolRegistration> LocalTools = Array.AsReadOnly<AgentToolRegistration>(
     [
+        Local("Local:automation_catalog", "Automation actions", "Automations",
+            "Discover the recipe format and supported deterministic automation actions. Call before creating an automation. Recipes run without a model; do not promise unsupported scripts or integrations.",
+            true, false, false, (Services, Access) => () => Services.GetRequiredService<AutomationRecipes>().Catalog(Services, Access)),
+        Local(AutomationAuthorization.ManageKey, "Create or revise automation", "Automations",
+            "Create a deterministic registered-action JSON recipe, or revise an existing automation with automationId and expectedVersion. First discover automation_catalog. Name and source are required. Omit executeAt for an immediate run, or provide an ISO-8601 timestamp with offset. Optional repeatEvery is a fixed ISO duration (PT1M–P366D), not calendar/cron recurrence. A revision replaces future source and schedule; running executions keep their version. Return the dashboard link. Use this for reusable deterministic work, rather than scheduling a future agent conversation.",
+            true, false, true, (Services, Access) => (string name, string source, Guid? automationId, int? expectedVersion, string? executeAt, string? repeatEvery, CancellationToken token) =>
+                Services.GetRequiredService<AutomationTools>().SaveAsync(Access, name, source, automationId, expectedVersion, executeAt, repeatEvery, token)),
+        Local("Local:list_automations", "List automations", "Automations", "List the current subject's deterministic automations and next scheduled executions.",
+            true, false, false, (Services, Access) => (CancellationToken token) => Services.GetRequiredService<AutomationTools>().ListAsync(Access, token)),
+        Local("Local:inspect_automation", "Inspect automation", "Automations", "Inspect an automation's versions, source and run history, or provide runId to inspect step outputs, errors and saved reports.",
+            true, false, false, (Services, Access) => (Guid automationId, Guid? runId, CancellationToken token) => Services.GetRequiredService<AutomationTools>().InspectAsync(Access, automationId, runId, token)),
+        Local("Local:control_automation", "Control automation", "Automations", "Run an automation now, pause future runs, or resume it. operation must be run, pause, or resume. Pausing does not interrupt an already running execution.",
+            true, false, true, (Services, Access) => (Guid automationId, string operation, CancellationToken token) => Services.GetRequiredService<AutomationTools>().ControlAsync(Access, automationId, operation, token)),
         Local(AgentToolKeys.PublishMobileNotification, "Send mobile notification", "Notifications",
             "Send a push notification to the current user's registered mobile device. Use this when the user asks to notify or ping their phone.",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,

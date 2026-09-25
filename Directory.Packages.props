@@ -26,10 +26,15 @@
     <PackageVersion Include="Sentry" Version="6.10.0" />
     <!-- Messaging -->
     <PackageVersion Include="MassTransit" Version="8.5.8" />
+    <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="8.5.8" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="MassTransit.SqlTransport.PostgreSQL" Version="8.5.8" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.6.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.6.0" />
-    <PackageVersion Include="Npgsql" Version="8.0.7" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="OpenAI" Version="2.9.1" />
     <PackageVersion Include="ModelContextProtocol" Version="1.2.0" />
     <PackageVersion Include="Pgvector" Version="0.3.2" />
