@@ -1,37 +1,73 @@
 @using PersonalAgent.Integrations
 
-<section class="settings-card">
-    <h2>OpenTelemetry settings</h2>
-    <p>Export traces, metrics and redacted logs from API, Web and Worker. These database settings apply live; deployment environment variables do not override them.</p>
+<section class="settings-editor">
+    <h2>OpenTelemetry</h2>
+    <p>Send traces, metrics and redacted logs to your collector. Settings apply live to connected services.</p>
     <EditForm Model="Model" OnValidSubmit="SaveAsync" FormName="otel-settings">
         <DataAnnotationsValidator />
         <ValidationSummary />
         <fieldset disabled="@Busy">
-            <label><InputCheckbox @bind-Value="Model.Enabled" /> Enable telemetry export</label>
-            <label><InputCheckbox @bind-Value="Model.TracesEnabled" /> Export traces</label>
-            <label><InputCheckbox @bind-Value="Model.MetricsEnabled" /> Export metrics</label>
-            <label><InputCheckbox @bind-Value="Model.LogsEnabled" /> Export logs</label>
-            <label for="otel-endpoint">Collector base URL</label>
-            <InputText id="otel-endpoint" @bind-Value="Model.Endpoint" />
-            <label for="otel-protocol">Protocol</label>
-            <InputSelect id="otel-protocol" @bind-Value="Model.Protocol">
-                <option value="grpc">gRPC</option><option value="http/protobuf">HTTP/protobuf</option>
-            </InputSelect>
-            <p>For HTTP/protobuf, signal paths are appended to this base URL. Use HTTPS for authenticated collectors.</p>
-            <label for="otel-rate">Trace sample rate (0–1)</label>
-            <InputNumber id="otel-rate" @bind-Value="Model.SampleRate" min="0" max="1" step="0.1" />
-            <label for="otel-timeout">Export timeout (milliseconds)</label>
-            <InputNumber id="otel-timeout" @bind-Value="Model.TimeoutMilliseconds" min="100" max="10000" />
-            <label for="otel-secret-action">Authentication headers — @(Model.HeadersConfigured ? "configured" : "missing")</label>
-            <InputSelect id="otel-secret-action" @bind-Value="Model.HeadersAction" @bind-Value:after="ClearUnusedSecret">
-                <option value="keep">Keep saved value</option><option value="replace">Enter a new value</option><option value="clear">Clear saved value</option>
-            </InputSelect>
-            @if (Model.HeadersAction == "replace")
-            {
-                <label for="otel-headers">New headers (comma-separated name=value pairs)</label>
-                <InputText id="otel-headers" type="password" autocomplete="new-password" @bind-Value="Model.Headers" />
-            }
-            <button type="submit">@(Busy ? "Working…" : "Validate and save")</button>
+            <div class="settings-editor__group">
+                <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.Enabled" /> Enable telemetry export</label>
+                <h3>Signals</h3>
+                <div class="settings-editor__signals">
+                    <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.TracesEnabled" /> Traces</label>
+                    <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.MetricsEnabled" /> Metrics</label>
+                    <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.LogsEnabled" /> Redacted logs</label>
+                </div>
+            </div>
+            <div class="settings-editor__group">
+                <h3>Collector connection</h3>
+                <div class="settings-editor__field">
+                    <label for="otel-endpoint">Collector base URL</label>
+                    <InputText id="otel-endpoint" @bind-Value="Model.Endpoint" placeholder="https://collector.example.com" spellcheck="false" />
+                    <ValidationMessage For="() => Model.Endpoint" />
+                    <span class="settings-editor__hint">Use HTTPS for authenticated collectors. HTTP/protobuf adds the signal paths to this base URL.</span>
+                </div>
+                <div class="settings-editor__field">
+                    <label for="otel-protocol">Protocol</label>
+                    <InputSelect id="otel-protocol" @bind-Value="Model.Protocol">
+                        <option value="grpc">gRPC</option><option value="http/protobuf">HTTP/protobuf</option>
+                    </InputSelect>
+                    <ValidationMessage For="() => Model.Protocol" />
+                </div>
+                <div class="settings-editor__field">
+                    <label for="otel-secret-action">Authentication headers — @(Model.HeadersConfigured ? "configured" : "missing")</label>
+                    <InputSelect id="otel-secret-action" @bind-Value="Model.HeadersAction" @bind-Value:after="ClearUnusedSecret">
+                        <option value="keep">Keep saved value</option><option value="replace">Enter a new value</option><option value="clear">Clear saved value</option>
+                    </InputSelect>
+                    <ValidationMessage For="() => Model.HeadersAction" />
+                </div>
+                @if (Model.HeadersAction == "replace")
+                {
+                    <div class="settings-editor__field">
+                        <label for="otel-headers">New authentication headers</label>
+                        <InputText id="otel-headers" type="password" autocomplete="new-password" @bind-Value="Model.Headers" />
+                        <span class="settings-editor__hint">Comma-separated name=value pairs. Stored encrypted; saved values are never displayed.</span>
+                    </div>
+                }
+                <ValidationMessage For="() => Model.Headers" />
+            </div>
+            <div class="settings-editor__group">
+                <h3>Sampling and delivery</h3>
+                <div class="settings-editor__columns">
+                    <div class="settings-editor__field">
+                        <label for="otel-rate">Trace sample rate</label>
+                        <InputNumber id="otel-rate" @bind-Value="Model.SampleRate" min="0" max="1" step="any" />
+                        <ValidationMessage For="() => Model.SampleRate" />
+                        <span class="settings-editor__hint">0 to 1. For example, 0.25 samples 25% of traces.</span>
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="otel-timeout">Export timeout (milliseconds)</label>
+                        <InputNumber id="otel-timeout" @bind-Value="Model.TimeoutMilliseconds" min="100" max="10000" step="1" />
+                        <ValidationMessage For="() => Model.TimeoutMilliseconds" />
+                        <span class="settings-editor__hint">100 to 10,000 ms. The default is 3,000 ms.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-editor__footer">
+                <button type="submit">@(Busy ? "Working…" : "Validate and save")</button>
+            </div>
         </fieldset>
     </EditForm>
 </section>
