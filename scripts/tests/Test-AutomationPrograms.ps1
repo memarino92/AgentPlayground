@@ -10,14 +10,23 @@ function Check([bool] $Condition, [string] $Message) {
     Write-Host "PASS: $Message"
 }
 function Call([string] $Path, [string] $Method = 'GET', $Body = $null) {
-    $Timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
-    $Signature = [Convert]::ToHexString([Security.Cryptography.HMACSHA256]::HashData([Text.Encoding]::UTF8.GetBytes('synthetic-local-actor-signing-key'), [Text.Encoding]::UTF8.GetBytes("demo-owner`nOwner`n`n$Timestamp")))
-    $Parameters = @{ Uri = "$Api$Path"; Method = $Method; SkipHttpErrorCheck = $true; TimeoutSec = 45; Headers = @{
-        'X-Internal-Api-Key' = 'synthetic-local-internal-key'; 'X-Agent-Actor' = 'demo-owner'; 'X-Agent-Role' = 'Owner'
-        'X-Agent-Email' = ''; 'X-Agent-Timestamp' = $Timestamp; 'X-Agent-Signature' = $Signature
-    } }
-    if ($null -ne $Body) { $Parameters.Body = $Body | ConvertTo-Json -Depth 12; $Parameters.ContentType = 'application/json' }
-    Invoke-WebRequest @Parameters
+    $Deadline = [DateTimeOffset]::UtcNow.AddSeconds(90)
+    $RateLimited = $false
+    do {
+        $Timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
+        $Signature = [Convert]::ToHexString([Security.Cryptography.HMACSHA256]::HashData([Text.Encoding]::UTF8.GetBytes('synthetic-local-actor-signing-key'), [Text.Encoding]::UTF8.GetBytes("demo-owner`nOwner`n`n$Timestamp")))
+        $Parameters = @{ Uri = "$Api$Path"; Method = $Method; SkipHttpErrorCheck = $true; TimeoutSec = 45; Headers = @{
+            'X-Internal-Api-Key' = 'synthetic-local-internal-key'; 'X-Agent-Actor' = 'demo-owner'; 'X-Agent-Role' = 'Owner'
+            'X-Agent-Email' = ''; 'X-Agent-Timestamp' = $Timestamp; 'X-Agent-Signature' = $Signature
+        } }
+        if ($null -ne $Body) { $Parameters.Body = $Body | ConvertTo-Json -Depth 12; $Parameters.ContentType = 'application/json' }
+        $Response = Invoke-WebRequest @Parameters
+        if ($Response.StatusCode -ne 429) { return $Response }
+        # The shared limiter rejects before endpoint execution; retry only HTTP 429.
+        if ([DateTimeOffset]::UtcNow -ge $Deadline) { throw "Automation smoke request $Method $Path remained rate-limited (HTTP 429) for 90 seconds." }
+        if (-not $RateLimited) { Write-Host 'API rate limit reached; waiting for the next request window.'; $RateLimited = $true }
+        Start-Sleep -Seconds 2
+    } while ($true)
 }
 function Wait-Run([string] $Id, [string] $Status) {
     $Until = [DateTimeOffset]::UtcNow.AddSeconds(120)
