@@ -46,7 +46,7 @@ test('source is file content; Internet enabled; management token never enters VM
   assert.ok(!boundary.includes('management-secret'));
   assert.ok(!f.commands.at(-1)[0].includes('do-not-execute'));
   assert.ok(!f.commands.at(-1)[0].includes('--network=none'));
-  for (const flag of ['--read-only', '--memory=512m', '--pids-limit=128', '--pull=never', '--signal=KILL 95']) assert.ok(f.commands.at(-1)[0].includes(flag));
+  for (const flag of ['--read-only', '--memory=512m', '--pids-limit=128', '--ulimit nofile=4096:4096', '--pull=never', '--signal=KILL 95']) assert.ok(f.commands.at(-1)[0].includes(flag));
 });
 test('unknown operations and agent-selected image expressions are rejected', async () => {
   const f = fake();
