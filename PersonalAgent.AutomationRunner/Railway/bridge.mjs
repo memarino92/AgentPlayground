@@ -55,7 +55,8 @@ exec dotnet /work/out/Program.dll < /work/input.txt
   if (host.exitCode !== 0 || info.OSType !== 'linux' || !['MemoryLimit', 'SwapLimit', 'CpuCfsQuota', 'PidsLimit'].every(k => info[k])
     || !info.SecurityOptions?.some(v => /^name=seccomp,profile=(builtin|default)$/.test(v))) throw new Error('Resource limits unavailable');
   // Immutable image must already be present in the administrator-prepared checkpoint; no agent-selected pulls.
-  const command = `tar -C /job -cf - ${Object.keys(files).join(' ')} | docker run --rm -i --name automation-program --pull=never --read-only --user=65532:65532 --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --memory-swap=512m --cpus=1 --pids-limit=128 --ulimit nofile=256:256 --log-driver=none --tmpfs /work:rw,noexec,nosuid,size=268435456,mode=1777 --tmpfs /tmp:rw,noexec,nosuid,size=16777216,mode=1777 --env-file /job/runtime.env --entrypoint timeout ${request.imageId} --signal=KILL 95 /bin/sh -c 'cd /work && tar --no-same-owner -xf - && /bin/sh /work/run.sh'`;
+  // MSBuild/Roslyn need more than 256 descriptors on Railway. Keep a finite per-process ceiling.
+  const command = `tar -C /job -cf - ${Object.keys(files).join(' ')} | docker run --rm -i --name automation-program --pull=never --read-only --user=65532:65532 --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --memory-swap=512m --cpus=1 --pids-limit=128 --ulimit nofile=4096:4096 --log-driver=none --tmpfs /work:rw,noexec,nosuid,size=268435456,mode=1777 --tmpfs /tmp:rw,noexec,nosuid,size=16777216,mode=1777 --env-file /job/runtime.env --entrypoint timeout ${request.imageId} --signal=KILL 95 /bin/sh -c 'cd /work && tar --no-same-owner -xf - && /bin/sh /work/run.sh'`;
   let bytes = 0;
   const count = chunk => { if ((bytes += Buffer.byteLength(chunk)) > 32768) throw new Error('OutputLimitExceeded'); };
   try {

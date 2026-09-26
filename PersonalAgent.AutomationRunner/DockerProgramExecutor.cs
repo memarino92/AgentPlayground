@@ -94,7 +94,8 @@ public sealed class DockerProgramExecutor : IProgramExecutor
     [
         "run", "--rm", "--interactive", "--name", Name, "--label", Label, "--pull=never",
         "--network=none", "--read-only", "--user=65532:65532", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-        "--memory=512m", "--memory-swap=512m", "--cpus=1", "--pids-limit=128", "--ulimit", "nofile=256:256",
+        // Match Railway's bounded compiler allowance; 256 can exhaust MSBuild/Roslyn descriptors.
+        "--memory=512m", "--memory-swap=512m", "--cpus=1", "--pids-limit=128", "--ulimit", "nofile=4096:4096",
         "--log-driver=none", "--tmpfs", "/work:rw,noexec,nosuid,size=134217728,mode=1777",
         "--tmpfs", "/tmp:rw,noexec,nosuid,size=16777216,mode=1777", Image
     ];

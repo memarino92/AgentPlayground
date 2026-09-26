@@ -29,6 +29,27 @@ public sealed class DockerProgramTests
     }
 
     [Fact]
+    public async Task FileDescriptorAllowanceSupportsCompilerWorkloadsAndRemainsBounded()
+    {
+        const string Source = """
+            using System.Text.RegularExpressions;
+            var Limits = File.ReadAllText("/proc/self/limits");
+            if (!Regex.IsMatch(Limits, @"Max open files\s+4096\s+4096\s+files"))
+                throw new Exception("unexpected descriptor limits");
+            var Files = new List<FileStream>();
+            try
+            {
+                for (var Index = 0; Index < 512; Index++) Files.Add(File.OpenRead("/dev/null"));
+                Console.Write(Files.Count);
+            }
+            finally { foreach (var File in Files) File.Dispose(); }
+            """;
+        var Result = await (await ExecutorAsync()).ExecuteAsync(Source, "", default);
+        Result.Evidence.Status.Should().Be("Completed", Result.Evidence.StandardError);
+        Result.Output.Should().Be("512");
+    }
+
+    [Fact]
     public async Task InvalidSourceReturnsBoundedBuildDiagnostics()
     {
         var Result = await (await ExecutorAsync()).ExecuteAsync("this does not compile", "", default);
