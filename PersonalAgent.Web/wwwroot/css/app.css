@@ -544,3 +544,42 @@ a { color: var(--accent-color); }
   .navbar, .navbar__actions { flex-wrap: wrap; }
   .navbar__actions { justify-content: flex-end; }
 }
+
+/* Shared settings controls must also reach markup rendered by Blazor inputs. */
+.settings-editor { padding: clamp(1rem, 3vw, 2rem); border: 1px solid var(--border-color); border-radius: .9rem; background: var(--surface-color); min-width: 0; }
+.settings-editor h2 { margin: 0 0 .5rem; font-size: 1.35rem; }
+.settings-editor h3 { margin: 0; font-size: 1.05rem; }
+.settings-editor p { margin: 0; color: var(--text-secondary); line-height: 1.55; }
+.settings-editor > p { margin: .5rem 0 1rem; }
+.settings-editor__heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+.settings-editor fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 1.5rem; }
+.settings-editor__group { display: grid; gap: 1rem; padding: 1.25rem 0; border-bottom: 1px solid var(--border-color); }
+.settings-editor__field { display: grid; gap: .45rem; min-width: 0; }
+.settings-editor label { font-weight: 600; line-height: 1.4; }
+.settings-editor input:not([type=checkbox]), .settings-editor select, .settings-editor textarea {
+    display: block; width: 100%; min-width: 0; min-height: 2.8rem; padding: .7rem .8rem;
+    border: 1px solid var(--border-color); border-radius: .5rem; background: var(--surface-muted); color: var(--text-primary); font: inherit;
+}
+.settings-editor textarea { resize: vertical; line-height: 1.6; }
+.settings-editor input::placeholder, .settings-editor textarea::placeholder { color: var(--text-secondary); opacity: .8; }
+.settings-editor input:focus-visible, .settings-editor select:focus-visible, .settings-editor textarea:focus-visible, .settings-editor button:focus-visible {
+    outline: 2px solid var(--accent-color); outline-offset: 2px;
+}
+.settings-editor__toggle { display: flex; align-items: center; gap: .65rem; min-height: 2.5rem; cursor: pointer; }
+.settings-editor input[type=checkbox] { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; margin: 0; accent-color: var(--accent-color); }
+.settings-editor__signals { display: flex; flex-wrap: wrap; gap: .5rem 2rem; }
+.settings-editor__columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.settings-editor__hint { color: var(--text-secondary); font-size: .9rem; line-height: 1.5; overflow-wrap: anywhere; }
+.settings-editor__footer { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.settings-editor button { padding: .7rem 1.1rem; min-height: 2.8rem; border: 1px solid transparent; border-radius: .5rem; background: var(--accent-strong); color: var(--surface-color); font: inherit; font-weight: 600; cursor: pointer; }
+.settings-editor button.settings-editor__secondary { background: var(--surface-muted); border-color: var(--border-color); color: var(--text-primary); flex-shrink: 0; }
+.settings-editor button:disabled, .settings-editor fieldset:disabled { opacity: .6; }
+.settings-editor button:disabled { cursor: wait; }
+.settings-editor .validation-message, .settings-editor .validation-errors, .settings-editor .settings-editor__error { color: var(--error-color); }
+.settings-editor .invalid { border-color: var(--error-color); }
+.settings-editor .settings-editor__notice { color: var(--success-color); }
+@media (max-width: 600px) {
+    .settings-editor__columns { grid-template-columns: 1fr; }
+    .settings-editor__heading { flex-direction: column; }
+    .settings-editor__footer button { width: 100%; }
+}

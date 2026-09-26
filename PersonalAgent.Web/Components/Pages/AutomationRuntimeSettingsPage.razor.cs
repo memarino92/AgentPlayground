@@ -15,6 +15,7 @@ public partial class AutomationRuntimeSettingsPage : IAsyncDisposable
     private string? Error, Notice;
     protected override Task OnInitializedAsync() => LoadAsync();
     private Task LoadAsync() => RunAsync(async () => Apply(await Client.GetAutomationRuntimeAsync(Lifetime.Token)));
+    private void ClearUnusedToken() { if (Model.TokenAction != "replace") Model.Token = ""; }
     private Task SaveAsync() => RunAsync(async () =>
     {
         var Settings = new AutomationRuntimeSettings { Enabled = Model.Enabled, EnvironmentId = Model.EnvironmentId.Trim(), Checkpoint = Model.Checkpoint.Trim(),

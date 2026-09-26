@@ -1,4 +1,0 @@
-label { display: block; margin: 1rem 0; }
-input:not([type=checkbox]), select, textarea { display: block; width: min(100%, 46rem); }
-textarea { min-height: 8rem; }
-fieldset { border: 0; padding: 0; }

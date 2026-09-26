@@ -1,28 +1,79 @@
-<section>
-    <h2>Railway automation runner</h2>
-    <p>Each run creates an isolated VM with Internet access. Changes apply to new runs and gateway requests; existing VMs retain cleanup credentials until destroyed.</p>
-    @if (Error is not null) { <p role="alert">@Error</p> }
-    @if (Notice is not null) { <p role="status">@Notice</p> }
-    <button disabled="@Busy" @onclick="LoadAsync">Reload</button>
-    @if (!Loaded) { <p>Loading runner settings…</p> }
+<section class="settings-editor">
+    <div class="settings-editor__heading">
+        <div><h2>Automation runner</h2><p>Run generated C# programs in disposable Railway sandboxes with Internet access.</p></div>
+        <button class="settings-editor__secondary" disabled="@Busy" @onclick="LoadAsync">Reload settings</button>
+    </div>
+    @if (Error is not null) { <p role="alert" class="settings-editor__error">@Error</p> }
+    @if (Notice is not null) { <p role="status" class="settings-editor__notice">@Notice</p> }
+    @if (!Loaded) { <p>@(Busy ? "Loading runner settings…" : "Settings could not be loaded. Try reloading.")</p> }
     else
     {
         <EditForm Model="Model" OnValidSubmit="SaveAsync" FormName="automation-runtime">
             <DataAnnotationsValidator /><ValidationSummary />
             <fieldset disabled="@Busy">
-                <label><InputCheckbox @bind-Value="Model.Enabled" /> Enable Railway execution</label>
-                <p>Saved revision @Revision · Railway token @(HasToken ? "configured" : "missing")</p>
-                <label>Railway token action <InputSelect @bind-Value="Model.TokenAction"><option value="keep">Keep</option><option value="replace">Replace</option><option value="clear">Clear</option></InputSelect></label>
-                @if (Model.TokenAction == "replace") { <label>New account/workspace token <InputText type="password" autocomplete="new-password" @bind-Value="Model.Token" /></label> }
-                <label>Railway environment UUID <InputText @bind-Value="Model.EnvironmentId" /></label>
-                <label>Prepared checkpoint name <InputText @bind-Value="Model.Checkpoint" /></label>
-                <label>Sandbox image ID (sha256:…) <InputText @bind-Value="Model.ImageId" /></label>
-                <label>Public API origin (https://…) <InputText @bind-Value="Model.GatewayUrl" /></label>
-                <label>Jev operation review <InputSelect @bind-Value="Model.ReviewMode"><option>Off</option><option>Shadow</option><option>Enforce</option></InputSelect></label>
-                <p>Uses the configured Jev key, model, thresholds and content-sharing consent. Shadow records decisions. Enforce declines when Jev is unavailable or uncertain. Jev can never override permissions or the package list.</p>
-                <label>Approved packages, one ID@exact.version per line (include transitive dependencies) <InputTextArea @bind-Value="Model.Packages" /></label>
-                <p>Generated programs must supply a NuGet lock file. These approvals govern managed restore and gateway tools; they do not inspect arbitrary Internet traffic. Enable the separate C# automation permission under Integrations to allow authoring.</p>
-                <button type="submit">Save runner settings</button>
+                <div class="settings-editor__group">
+                    <h3>Connection</h3>
+                    <p>Railway token @(HasToken ? "configured" : "missing") · Saved revision @Revision</p>
+                    <div class="settings-editor__field">
+                        <label for="runner-token-action">Railway token</label>
+                        <InputSelect id="runner-token-action" @bind-Value="Model.TokenAction" @bind-Value:after="ClearUnusedToken">
+                            <option value="keep">Keep saved token</option><option value="replace">Enter a new token</option><option value="clear">Remove saved token</option>
+                        </InputSelect>
+                    </div>
+                    @if (Model.TokenAction == "replace")
+                    {
+                        <div class="settings-editor__field">
+                            <label for="runner-token">New account or workspace token</label>
+                            <InputText id="runner-token" type="password" autocomplete="new-password" @bind-Value="Model.Token" />
+                            <span class="settings-editor__hint">Stored encrypted. The saved token is never displayed.</span>
+                        </div>
+                    }
+                    <div class="settings-editor__field">
+                        <label for="runner-environment">Railway environment ID</label>
+                        <InputText id="runner-environment" @bind-Value="Model.EnvironmentId" spellcheck="false" />
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="runner-gateway">Public API origin</label>
+                        <InputText id="runner-gateway" @bind-Value="Model.GatewayUrl" placeholder="https://api.example.com" spellcheck="false" />
+                        <span class="settings-editor__hint">The HTTPS address sandboxes use to call approved tools.</span>
+                    </div>
+                </div>
+                <div class="settings-editor__group">
+                    <h3>Sandbox image</h3>
+                    <p>Use the checkpoint and image ID returned by sandbox preparation.</p>
+                    <div class="settings-editor__field">
+                        <label for="runner-checkpoint">Prepared checkpoint name</label>
+                        <InputText id="runner-checkpoint" @bind-Value="Model.Checkpoint" spellcheck="false" />
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="runner-image">Image ID</label>
+                        <InputText id="runner-image" @bind-Value="Model.ImageId" placeholder="sha256:…" spellcheck="false" />
+                    </div>
+                </div>
+                <div class="settings-editor__group">
+                    <h3>Operation review and packages</h3>
+                    <div class="settings-editor__field">
+                        <label for="runner-review">Jev operation review</label>
+                        <InputSelect id="runner-review" @bind-Value="Model.ReviewMode">
+                            <option value="Off">Off</option><option value="Shadow">Observe decisions</option><option value="Enforce">Require approval</option>
+                        </InputSelect>
+                        <span class="settings-editor__hint">Uses your Jev settings and content-sharing consent. Observe records decisions; Require approval blocks operations when Jev is unavailable or uncertain.</span>
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="runner-packages">Approved NuGet packages</label>
+                        <InputTextArea id="runner-packages" @bind-Value="Model.Packages" rows="5" spellcheck="false" placeholder='@("Package.Id@1.2.3")' />
+                        <span class="settings-editor__hint">One Package.Id@@exact.version per line, including transitive dependencies. Leave empty for programs using only built-in .NET libraries. Programs with packages require a lock file.</span>
+                    </div>
+                    <p>Jev cannot override permissions or package approvals. These checks cover package restore and gateway tools, not arbitrary Internet traffic.</p>
+                </div>
+                <div class="settings-editor__group">
+                    <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.Enabled" /> Enable Railway execution</label>
+                    <p>Enable after the token and sandbox image are configured. Also allow C# automation authoring under Integrations.</p>
+                </div>
+                <div class="settings-editor__footer">
+                    <button type="submit">@(Busy ? "Saving…" : "Save runner settings")</button>
+                    <span class="settings-editor__hint">Changes apply without a restart.</span>
+                </div>
             </fieldset>
         </EditForm>
     }

@@ -1,4 +1,4 @@
-.integration-settings { margin: 1.5rem 0; display: grid; gap: 1.2rem; }
+.integration-settings { margin: 1.5rem 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
 .actions { display: flex; gap: .75rem; flex-wrap: wrap; }
 button { padding: .6rem 1rem; border: 1px solid var(--border-color); border-radius: .4rem; background: var(--surface-color); color: var(--text-primary); }
 button:disabled { opacity: .5; }
