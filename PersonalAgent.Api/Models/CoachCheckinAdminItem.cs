@@ -12,6 +12,7 @@ internal record CoachCheckinAdminItem(
     bool HasAudioBlob,
     int UtteranceCount,
     int ChunkCount,
-    List<CoachCheckinSpeakerLabelInfo> SpeakerLabels);
+    List<CoachCheckinSpeakerLabelInfo> SpeakerLabels,
+    string? ExecutiveSummary = null);
 
 internal record CoachCheckinSpeakerLabelInfo(int SpeakerLabel, string SpeakerRole, int UtteranceCount, List<string> SampleTexts);

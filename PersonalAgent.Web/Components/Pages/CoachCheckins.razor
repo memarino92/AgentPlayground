@@ -60,7 +60,7 @@
             @if (!string.IsNullOrWhiteSpace(summaryMarkdown))
             {
                 <MudPaper Outlined="true" Class="pa-3">
-                    <MudText Typo="Typo.subtitle1">Summary</MudText>
+                    <MudText Typo="Typo.subtitle1">Executive summary</MudText>
                     <pre class="coach-upload-page__summary">@summaryMarkdown</pre>
                 </MudPaper>
             }
@@ -169,7 +169,15 @@
         if (status.Status == "Completed")
         {
             var summary = await ApiClient.GetCoachCheckinSummaryAsync(uploadId, profileId);
-            if (trackedUploadId == uploadId) summaryMarkdown = summary?.SummaryMarkdown;
+            if (trackedUploadId == uploadId)
+            {
+                summaryMarkdown = summary?.SummaryMarkdown;
+                if (string.IsNullOrWhiteSpace(summaryMarkdown))
+                {
+                    isProcessing = true;
+                    statusMessage = "Generating executive summary...";
+                }
+            }
         }
     }
 

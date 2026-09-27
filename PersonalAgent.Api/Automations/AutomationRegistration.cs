@@ -45,6 +45,13 @@ internal static class AutomationRegistration
                 R.ConcurrencyMode = ConcurrencyMode.Pessimistic;
                 R.UsePostgres();
             });
+        Bus.AddSagaStateMachine<CoachCallWorkflowStateMachine, CoachCallWorkflow, CoachCallWorkflowDefinition>()
+            .EntityFrameworkRepository(R =>
+            {
+                R.ExistingDbContext<AutomationDbContext>();
+                R.ConcurrencyMode = ConcurrencyMode.Pessimistic;
+                R.UsePostgres();
+            });
         Bus.AddConsumer<AutomationStepConsumer, AutomationStepDefinition>();
     }
 }

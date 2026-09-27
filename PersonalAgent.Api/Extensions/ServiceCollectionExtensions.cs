@@ -131,6 +131,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton(sp => PersonalAgentSkills.Create(sp.GetRequiredService<ILoggerFactory>()));
         services.AddSingleton<WorkJournalService>();
         services.AddSingleton<CoachCheckinService>();
+        services.AddSingleton<CoachCallExecutiveSummaryService>();
         services.AddSingleton<ICoachEvidenceService, CoachEvidenceService>();
         services.AddSingleton<SchedulingService>();
         services.AddSingleton<ScheduledJobStore>();
@@ -159,9 +160,11 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<AgentChatService>();
         services.AddSingleton<AgentService>();
         services.AddAutomations();
+        services.AddHostedService<CoachCallSummaryBackfill>();
         services.AddMassTransit(x =>
         {
             x.AddAutomationMessaging();
+            x.AddConsumer<CoachCallSummaryConsumer, CoachCallSummaryDefinition>();
             x.AddConsumer<TranscriptionRequestConsumer>()
                 .Endpoint(e => e.Name = "personal-agent-transcription");
             x.AddConsumer<ParseWorkJournalEntriesRequestConsumer>(cfg =>

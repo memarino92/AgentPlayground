@@ -14,6 +14,7 @@ using PersonalAgent.Api.Automations;
 using PersonalAgent.Api.Models;
 using PersonalAgent.Api.Services;
 using PersonalAgent.Contracts.Automations;
+using PersonalAgent.Contracts.Messaging.Commands;
 using PersonalAgent.Contracts.Messaging.Events;
 using PersonalAgent.Integrations;
 using Xunit;
@@ -27,6 +28,41 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
         {"steps":[{"id":"message","action":"text","arguments":{"text":"Synthetic report"}},
         {"id":"report","action":"save_report","arguments":{"title":"Weekly report","content":"{{steps.message}}"}}]}
         """;
+
+    [Fact]
+    public async Task CoachCallSaga_ResumesAfterSpeakerReview_AndFinishesAfterExecutiveSummary()
+    {
+        using var Host = await CreateHostAsync();
+        await Host.StartAsync();
+        try
+        {
+            var Upload = Guid.NewGuid();
+            var Session = Guid.NewGuid();
+            var Bus = Host.Services.GetRequiredService<IBus>();
+            var Endpoint = await Bus.GetSendEndpoint(new Uri("queue:personal-agent-coach-call-workflows"));
+            await Endpoint.Send(new StartCoachCallWorkflow(Upload, Session, "owner", Guid.NewGuid()));
+            await WaitCoachCallAsync(Host, Upload, "Transcribing");
+            await Endpoint.Send(new CoachCallWorkflowSignal(Upload, Session, "owner", "AwaitingSpeakerOverride"));
+            await WaitCoachCallAsync(Host, Upload, "AwaitingSpeakerOverride");
+            await Endpoint.Send(new CoachCallWorkflowSignal(Upload, Session, "owner", "Processing"));
+            await WaitCoachCallAsync(Host, Upload, "Processing");
+            await Endpoint.Send(new CoachCallWorkflowSignal(Upload, Session, "owner", "Completed"));
+            await WaitCoachCallAsync(Host, Upload, "Summarizing");
+            await Endpoint.Send(new CoachCallWorkflowSignal(Upload, Session, "owner", "Summarized"));
+            await WaitCoachCallAsync(Host, Upload, "Completed");
+            var LegacyUpload = Guid.NewGuid();
+            await Endpoint.Send(new StartCoachCallWorkflow(LegacyUpload, Guid.NewGuid(), "owner", Guid.NewGuid(), "Processing"));
+            await WaitCoachCallAsync(Host, LegacyUpload, "Processing");
+        }
+        finally { await Host.StopAsync(); }
+    }
+
+    private static Task WaitCoachCallAsync(IHost Host, Guid Upload, string Status) => UntilAsync(async () =>
+    {
+        await using var Scope = Host.Services.CreateAsyncScope();
+        return await Scope.ServiceProvider.GetRequiredService<AutomationDbContext>().CoachCallWorkflows
+            .AnyAsync(C => C.CorrelationId == Upload && C.CurrentState == Status);
+    });
 
     [Fact]
     public async Task DurableOutboxStartsAfterHostRestart_AndDuplicatesDoNotRepeatDomainWrites()

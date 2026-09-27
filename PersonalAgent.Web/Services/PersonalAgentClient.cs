@@ -488,7 +488,7 @@ public record CoachCheckinTranscriptUtteranceResponse(int SpeakerLabel, string S
 public record CoachEvidenceResponse(CoachCheckinTranscriptResponse Transcript, bool AudioAvailable, long MaxAudioUploadBytes = 25 * 1024 * 1024);
 public record SpeakerOverrideItem(int SpeakerLabel, string Role);
 public record CoachCheckinSpeakerLabelInfoResponse(int SpeakerLabel, string SpeakerRole, int UtteranceCount, List<string> SampleTexts);
-public record CoachCheckinAdminItemResponse(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount, List<CoachCheckinSpeakerLabelInfoResponse> SpeakerLabels);
+public record CoachCheckinAdminItemResponse(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount, List<CoachCheckinSpeakerLabelInfoResponse> SpeakerLabels, string? ExecutiveSummary = null);
 public record TranscriptDownloadResponse(string FileName, byte[] Bytes);
 public record AgentToolDescriptorResponse(string Key, string Name, string DisplayName, string Integration, string Description, bool IsAvailable, bool OwnerDefault, bool CoachDefault);
 public record ToolRolePermissionResponse(string Role, string ToolKey, bool IsEnabled);

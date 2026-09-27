@@ -39,7 +39,7 @@ public sealed class CoachEvidenceEndpointsTests(PostgresVectorFixture Database) 
             """, Connection);
         Command.Parameters.AddWithValue("id", State.Id);
         await Command.ExecuteNonQueryAsync();
-        var Service = new CoachCheckinService(Mock.Of<IBus>(),
+        var Service = new CoachCheckinService(
             Options.Create(new SqlTransportOptions { ConnectionString = State.Options.ConnectionString }),
             Options.Create(State.Options), Options.Create(new CoachCheckinOptions { CoachName = "Andrew", AthleteName = "Michael" }),
             Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);

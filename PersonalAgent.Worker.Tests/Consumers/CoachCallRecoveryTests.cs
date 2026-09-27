@@ -35,7 +35,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
 
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Processing");
         (await Roles(State)).Should().Equal("coach", "athlete");
-        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'ProcessCoachTranscriptCommand'")).Should().Be(1L);
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'ProcessCoachTranscriptCommand'")).Should().Be(0L);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         await FailOutboxAsync(State, false);
         await Transcribe(State);
         await Transcribe(State);
-        var Review = new CoachCheckinService(Mock.Of<IBus>(), State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
+        var Review = new CoachCheckinService(State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
         await Review.ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach"), new(1, "athlete")]);
         await Review.ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach"), new(1, "athlete")]);
         await Process(State, State.Command);
@@ -171,7 +171,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
     }
 
     [Fact]
-    public async Task RestartedTransport_DeliversPersistedCommandToProcessingQueue()
+    public async Task RestartedTransport_DeliversPersistedSignalToSagaQueue()
     {
         var State = await SetupAsync();
         State.Provider.Complete = true;
@@ -201,12 +201,14 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
                     Host.ConnectionString = Database.ConnectionString;
                     Host.Schema = State.Schema + "_bus";
                 });
-                if (Receive) Config.ReceiveEndpoint(MessagingEndpointNames.CoachCallProcessing, Endpoint =>
-                    Endpoint.Handler<ProcessCoachTranscriptCommand>(async Context =>
+                if (Receive) Config.ReceiveEndpoint("personal-agent-coach-call-workflows", Endpoint =>
+                {
+                    Endpoint.Handler<CoachCallWorkflowSignal>(Context =>
                     {
-                        await Process(State, Context.Message);
-                        Received.TrySetResult(Context.MessageId!.Value);
-                    }));
+                        if (Context.Message.Stage == "Processing") Received.TrySetResult(Context.MessageId!.Value);
+                        return Task.CompletedTask;
+                    });
+                });
             }));
         }).Build();
         Guid SentId = default;
@@ -216,7 +218,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
             var Bus = FirstHost.Services.GetRequiredService<IBus>();
             while (await CoachCallOutbox.DispatchOneAsync(Database.ConnectionString, State.Schema, async (Id, Message, Token) =>
             {
-                if (Message is ProcessCoachTranscriptCommand) SentId = Id;
+                if (Message is CoachCallWorkflowSignal { Stage: "Processing" }) SentId = Id;
                 await CoachCallOutbox.DeliverAsync(Bus, Id, Message, Token);
             }, default)) { }
             await FirstHost.StopAsync();
@@ -226,7 +228,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         try
         {
             (await Received.Task.WaitAsync(TimeSpan.FromSeconds(15))).Should().Be(SentId);
-            (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Completed");
+            (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("Processing");
             (await Scalar(State, "SELECT encode(audio_bytes, 'hex') FROM {0}.coach_call_uploads")).Should().Be("010203");
             using var Timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             while ((long)(await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox"))! != 0)
@@ -294,15 +296,15 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
 
         var Deliveries = new List<Guid>();
         var LostAcknowledgement = false;
-        for (var Attempt = 0; Attempt < 3 && !LostAcknowledgement; Attempt++)
+        for (var Attempt = 0; Attempt < 10 && !LostAcknowledgement; Attempt++)
         {
             try
             {
                 await CoachCallOutbox.DispatchOneAsync(Database.ConnectionString, State.Schema, async (Id, Message, Token) =>
                 {
-                    if (Message is not ProcessCoachTranscriptCommand Command) return;
+                    if (Message is not CoachCallWorkflowSignal { Stage: "Processing" }) return;
                     Deliveries.Add(Id);
-                    await Process(State, Command);
+                    await Process(State, State.Command);
                     LostAcknowledgement = true;
                     throw new IOException("Simulated process loss after transport acceptance");
                 }, default);
@@ -314,9 +316,9 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         var UpdatedAt = await Scalar(State, "SELECT updated_at FROM {0}.coach_call_sessions");
         while (await CoachCallOutbox.DispatchOneAsync(Database.ConnectionString, State.Schema, async (Id, Message, Token) =>
         {
-            if (Message is not ProcessCoachTranscriptCommand Command) return;
+            if (Message is not CoachCallWorkflowSignal { Stage: "Processing" }) return;
             Deliveries.Add(Id);
-            await Process(State, Command);
+            await Process(State, State.Command);
         }, default)) { }
         Deliveries.Should().HaveCount(2);
         Deliveries[1].Should().Be(Deliveries[0]);
@@ -405,7 +407,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         State.Provider.IncludeChannelMetadata = false;
         await Transcribe(State);
         await Execute(State, $"UPDATE {State.Schema}.coach_call_utterances SET speaker_role = 'unknown'");
-        var Review = new CoachCheckinService(Mock.Of<IBus>(), State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
+        var Review = new CoachCheckinService(State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
 
         await Review.ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach"), new(1, "athlete")]);
 
@@ -429,7 +431,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("AwaitingSpeakerOverride");
         await Execute(State, $"UPDATE {State.Schema}.coach_call_utterances SET speaker_role = 'unknown'");
         (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'ProcessCoachTranscriptCommand'")).Should().Be(0L);
-        CoachCheckinService Review() => new(Mock.Of<IBus>(), State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
+        CoachCheckinService Review() => new(State.Sql, Options.Create(State.Memory), Options.Create(new CoachCheckinOptions()), Mock.Of<IAgentEmbeddingService>(), NullLogger<CoachCheckinService>.Instance);
         await FailOutboxAsync(State, true);
         await Assert.ThrowsAsync<PostgresException>(() => Review().ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach")]));
         (await Scalar(State, "SELECT status FROM {0}.coach_call_uploads")).Should().Be("AwaitingSpeakerOverride");
@@ -439,7 +441,7 @@ public class CoachCallRecoveryTests(WorkerPostgresVectorFixture Database) : ICla
         await Review().ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "coach")]);
         await Review().ApplySpeakerOverridesAsync(State.Id, "owner", [new(0, "athlete")]);
         (await Scalar(State, "SELECT speaker_role FROM {0}.coach_call_speaker_overrides")).Should().Be("coach");
-        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'ProcessCoachTranscriptCommand'")).Should().Be(1L);
+        (await Scalar(State, "SELECT count(*) FROM {0}.coach_call_outbox WHERE message_type = 'ProcessCoachTranscriptCommand'")).Should().Be(0L);
     }
 
     private async Task<State> SetupAsync()
