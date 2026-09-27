@@ -23,7 +23,7 @@ internal sealed class CodingJobService(CodingJobStore Store, ScheduledJobAuthori
     {
         if (Access.Role != AgentRoles.Owner) throw new UnauthorizedAccessException();
         await RequireAsync(Access.ActorId, Access.Email, Access.SubjectProfileId, Token);
-        if (string.IsNullOrWhiteSpace(Request.Instruction) || Request.Instruction.Length > 8000 || !Guid.TryParse(Request.RequestKey, out _))
+        if (string.IsNullOrWhiteSpace(Request.Instruction) || Request.Instruction.Length > 8000 || !Guid.TryParse(Request.RequestKey, out var RequestId))
             throw new ArgumentException("An instruction of 1–8000 characters and a stable UUID requestKey are required.");
         var Settings = (await Store.SettingsAsync(Token)).View.Settings;
         if (!Settings.Enabled) throw new InvalidOperationException("Configure and enable platform coding in Settings first.");
@@ -34,7 +34,7 @@ internal sealed class CodingJobService(CodingJobStore Store, ScheduledJobAuthori
             Id = Id, ActorId = Access.ActorId, Email = Access.Email, Subject = Access.SubjectProfileId,
             Instruction = Request.Instruction.Trim(), Settings = Settings, BaseSha = BaseSha,
             Branch = $"feat/platform-improvement-{Id:N}", CreatedAt = Now, Deadline = Now.AddMinutes(Settings.MaxMinutes + 5)
-        }, Request.RequestKey, Token);
+        }, RequestId.ToString("D"), Token);
         if (Job.Instruction != Request.Instruction.Trim()) throw new InvalidOperationException("requestKey already identifies a different instruction.");
         return Job.View;
     }

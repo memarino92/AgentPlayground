@@ -17,6 +17,8 @@ export async function codingDispatch(request, api) {
   await sandbox.files.write('/coding/request.json', JSON.stringify({ repository: request.repository, baseSha: request.baseSha,
     instruction: request.instruction, gateway: request.gateway, capability: request.capability,
     testProject: request.testProject, testFilter: request.testFilter }));
+  const readable = await sandbox.exec('chmod 0444 /coding/request.json', { timeoutSec: 15 });
+  if (readable.exitCode !== 0) throw new Error('Request mount unavailable');
   const volume = await sandbox.exec('docker volume create coding-work', { timeoutSec: 15 });
   if (volume.exitCode !== 0) throw new Error('Workspace unavailable');
   const common = `--rm --pull=never --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=4g --memory-swap=4g --cpus=2 --pids-limit=512 --ulimit nofile=8192:8192 --log-driver=none --mount type=volume,src=coding-work,dst=/work --mount type=bind,src=/coding/request.json,dst=/run/job.json,readonly --tmpfs /tmp:rw,nosuid,size=536870912,mode=1777`;
