@@ -34,7 +34,7 @@ public sealed class RailwaySandboxClient : IRailwaySandboxClient
             var Text = new StringBuilder(); var Buffer = new char[2048]; int Count;
             while ((Count = await Reader.ReadAsync(Buffer.AsMemory(), Token)) > 0)
             {
-                if (Text.Length + Count > 150000) throw new InvalidOperationException("Sandbox adapter response limit.");
+                if (Text.Length + Count > 2000000) throw new InvalidOperationException("Sandbox adapter response limit.");
                 Text.Append(Buffer, 0, Count);
             }
             return Text.ToString();

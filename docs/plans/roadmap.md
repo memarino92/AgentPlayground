@@ -1,5 +1,19 @@
 # Roadmap
 
+## Platform improvement jobs — first slice 2026-09-27
+
+Requested outcome: explicit and eventually recurring platform changes produce tested PRs while the maintainer controls merge. See [decision 0038](../decisions/0038-platform-improvement-jobs.md) and [setup/limits](../runbooks/platform-coding.md).
+
+Implemented locally: owner chat tools and dashboard, encrypted database-first settings, durable/idempotent job dispatch, one active coding job, OpenCode/OpenRouter scoped model gateway with a $4.80 maximum reservation per job, separate Railway coding image/controller, retained diffs/checks, cleanup reconciliation and GitHub App draft publication with lost-response recovery. No merge/deploy operation is exposed. Docker proof uses real OpenCode with synthetic model replies and verifies a tool edit plus offline diff export without paid inference.
+
+Remaining acceptance and delivery order:
+
+1. **Live explicit chat-to-PR proof:** provision the repository-scoped GitHub App, require at least one review without App bypass (current ruleset was zero approvals), prepare the coding checkpoint and deploy reviewed code. Within the authorized $5 OpenRouter model cap, prove pinned public clone, real inference, meaningful selected tests, retained artifact, one draft PR and sandbox destruction. Test interruption/restart cleanup. No live coding run is yet claimed; API/Web/runner tests and fake GitHub/Railway checks do not establish it.
+2. **Recurring backlog selection:** expose a durable child-job recipe action, add eligibility/size metadata, atomically claim roadmap items, skip blocked/already-claimed work, cap outstanding PRs and record no-work/failure outcomes. Done when two scheduled occurrences select distinct eligible work or explain a skip, survive restart and stop when paused. P1D remains a 24-hour interval; calendar-daily scheduling is separate. PR creation does not mark work complete.
+3. **Review follow-up and measured learning:** authorized requests revise existing PRs and repair bounded CI failures; retain maintainer feedback and measure selection quality, accepted/rejected changes and regressions. Pinned upstream dotnet/MassTransit skills and a runtime skill editor remain follow-ups. Source, bundled skill and prompt proposals use the same reviewed PR path.
+
+The initial worker supports bounded UTF-8 text changes and a configurable Linux test gate, without Docker-in-Docker or private test services. The default AgentSkillsTests gate is only a smoke test. Enablement remains blocked until setup and live acceptance are completed.
+
 ## Agent-authored automations — recipe slice delivered 2026-09-25
 
 Delivered: registered-action recipes authored/revised through chat, EF Core PostgreSQL saga persistence with MassTransit 8.5.8 transactional outboxes, fixed-interval recurrence, immutable revisions, current authorization, saved reports, step history, and an automation dashboard. OTEL spans/metrics, structured logs and existing Sentry error correlation cover execution. See [decision 0034](../decisions/0034-agent-automations.md) and [runbook](../runbooks/automations.md).

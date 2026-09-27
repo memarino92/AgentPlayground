@@ -5,6 +5,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 ## Start here
 
 - [Personal assistant vision](plans/personal-assistant-vision.md): continuous chat, household usefulness, mobile direction, evaluated learning and cloud experiments.
+- [Platform improvement jobs](decisions/0038-platform-improvement-jobs.md): explicit chat-to-PR coding worker; recurring backlog selection remains planned. [Setup and limits](runbooks/platform-coding.md).
 - [Continuous conversation](runbooks/continuous-conversation.md): one default chat, scoped automatic context, fresh starts and persistent interactive cards.
 
 - [Architecture](architecture.md): current responsibilities and boundaries.
@@ -34,6 +35,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 
 | Record | Status | Purpose |
 | --- | --- | --- |
+| [0038: Platform improvement jobs](decisions/0038-platform-improvement-jobs.md) | Accepted; live acceptance pending | OpenCode/OpenRouter coding jobs propose draft PRs; maintainer controls merging |
 | [0001: Database configuration](decisions/0001-database-configuration.md) | Accepted, retrospective | Record the encrypted configuration refactor |
 | [0002: Actor and tool authorization](decisions/0002-actor-and-tool-authorization.md) | Accepted, retrospective | Record RBAC and its remaining boundaries |
 | [0003: Local parity and recovery](decisions/0003-local-parity-and-recovery.md) | Accepted; first slice implemented | Use local rehearsal before adding another hosted environment |
