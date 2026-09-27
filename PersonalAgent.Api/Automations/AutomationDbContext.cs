@@ -11,6 +11,7 @@ internal sealed class AutomationDbContext(DbContextOptions<AutomationDbContext> 
     public DbSet<AutomationRun> Runs => Set<AutomationRun>();
     public DbSet<AutomationStepExecution> Steps => Set<AutomationStepExecution>();
     public DbSet<AutomationReport> Reports => Set<AutomationReport>();
+    public DbSet<CoachCallWorkflow> CoachCallWorkflows => Set<CoachCallWorkflow>();
 
     protected override void OnModelCreating(ModelBuilder Model)
     {
@@ -44,6 +45,12 @@ internal sealed class AutomationDbContext(DbContextOptions<AutomationDbContext> 
             E.ToTable("Reports"); E.HasKey(X => X.Id);
             E.HasIndex(X => new { X.RunId, X.StepIndex }).IsUnique();
             E.HasOne<AutomationRun>().WithMany().HasForeignKey(X => X.RunId).OnDelete(DeleteBehavior.Restrict);
+        });
+        Model.Entity<CoachCallWorkflow>(E =>
+        {
+            E.ToTable("CoachCallWorkflows"); E.HasKey(X => X.CorrelationId);
+            E.Property(X => X.CurrentState).HasMaxLength(64);
+            E.HasIndex(X => new { X.ProfileId, X.UpdatedAt });
         });
         Model.AddInboxStateEntity();
         Model.AddOutboxMessageEntity();

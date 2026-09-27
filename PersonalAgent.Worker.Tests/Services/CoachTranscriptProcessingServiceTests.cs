@@ -59,8 +59,8 @@ public class CoachTranscriptProcessingServiceTests
         result.Chunks[0].SpeakerMix.Should().Be("mixed");
         result.Chunks[0].ExerciseTags.Should().Contain("squat");
         result.Chunks[0].Embedding.Should().HaveCount(3);
-        result.SummaryMarkdown.Should().Contain("Coach Check-In Summary");
-        result.SummaryJson.Should().Contain("chunkCount");
+        result.SummaryMarkdown.Should().BeEmpty();
+        result.SummaryJson.Should().Be("{}");
         embeddingClient.Verify(client => client.GetResponse<GenerateEmbeddingsResponse>(It.IsAny<GenerateEmbeddingsRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 

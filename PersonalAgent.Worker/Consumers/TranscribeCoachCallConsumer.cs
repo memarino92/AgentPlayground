@@ -59,11 +59,9 @@ internal class TranscribeCoachCallConsumer(
             var requiresOverride = utterances.Any(utterance => string.Equals(utterance.SpeakerRole, "unknown", StringComparison.OrdinalIgnoreCase));
             await UpdateUploadStatusAsync(connection, staged.UploadId, requiresOverride ? "AwaitingSpeakerOverride" : "Processing", null, context.CancellationToken);
             await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new CoachCallStatusChangedEvent(staged.UploadId, staged.ProfileId, requiresOverride ? "AwaitingSpeakerOverride" : "Processing"), context.CancellationToken);
+            await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new CoachCallWorkflowSignal(staged.UploadId, staged.SessionId, staged.ProfileId, requiresOverride ? "AwaitingSpeakerOverride" : "Processing"), context.CancellationToken);
             if (requiresOverride)
                 logger.LogInformation("Upload {UploadId} awaiting speaker override before processing", staged.UploadId);
-            else
-                await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new ProcessCoachTranscriptCommand(staged.UploadId, staged.SessionId, staged.ProfileId, staged.CorrelationId), context.CancellationToken);
-
             await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema,
                 new CoachCallTranscriptionCompletedEvent(
                     staged.UploadId,
@@ -83,6 +81,7 @@ internal class TranscribeCoachCallConsumer(
             if (staged is null) return;
             await UpdateUploadStatusAsync(connection, staged.UploadId, "Failed", ex.Message, context.CancellationToken);
             await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new CoachCallStatusChangedEvent(staged.UploadId, staged.ProfileId, "Failed"), context.CancellationToken);
+            await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema, new CoachCallWorkflowSignal(staged.UploadId, staged.SessionId, staged.ProfileId, "Failed"), context.CancellationToken);
             await CoachCallOutbox.EnqueueAsync(transaction, _options.Schema,
                 new CoachCallProcessingFailedEvent(staged.UploadId, staged.SessionId, staged.ProfileId, staged.CorrelationId, "transcription", ex.Message, DateTimeOffset.UtcNow), context.CancellationToken);
             await transaction.CommitAsync(context.CancellationToken);

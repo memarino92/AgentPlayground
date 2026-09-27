@@ -13,7 +13,6 @@ using System.Globalization;
 namespace PersonalAgent.Api.Services;
 
 internal class CoachCheckinService(
-    IBus bus,
     IOptions<SqlTransportOptions> sqlOptions,
     IOptions<AgentMemoryOptions> memoryOptions,
     IOptions<CoachCheckinOptions> coachOptions,
@@ -163,9 +162,9 @@ internal class CoachCheckinService(
         }
 
         await CoachCallOutbox.EnqueueAsync(transaction, _schema, new CoachCallStatusChangedEvent(uploadId, profileId, "Uploaded"), cancellationToken);
+        await CoachCallOutbox.EnqueueAsync(transaction, _schema, new StartCoachCallWorkflow(uploadId, sessionId, profileId, correlationId), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        await bus.Publish(new TranscribeCoachCallCommand(uploadId, profileId, correlationId), cancellationToken);
         logger.LogInformation("Created coach call upload {UploadId} for profile {ProfileId}", uploadId, profileId);
 
         return new CoachCallUploadResult(uploadId, correlationId, CoachCallUploadStatus.Uploaded, createdAt, false);
@@ -190,8 +189,10 @@ internal class CoachCheckinService(
                    u.updated_at,
                    u.audio_bytes IS NOT NULL AS has_audio_blob,
                    COALESCE(utterance_counts.utterance_count, 0) AS utterance_count,
-                   COALESCE(chunk_counts.chunk_count, 0) AS chunk_count
+                   COALESCE(chunk_counts.chunk_count, 0) AS chunk_count,
+                   CASE WHEN s.summary_json->>'executiveSummaryVersion' = '1' THEN s.summary_markdown ELSE NULL END
             FROM {CoachCallUploadsTable} u
+            JOIN {CoachCallSessionsTable} s ON s.session_id = u.session_id
             LEFT JOIN
             (
                 SELECT session_id, COUNT(*)::integer AS utterance_count
@@ -211,7 +212,7 @@ internal class CoachCheckinService(
         command.Parameters.Add(new NpgsqlParameter("profileId", NpgsqlDbType.Text) { Value = (object?)profileId ?? DBNull.Value });
         command.Parameters.AddWithValue("limit", normalizedLimit);
 
-        var rawRows = new List<(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, CoachCallUploadStatus Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount)>();
+        var rawRows = new List<(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, CoachCallUploadStatus Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount, string? ExecutiveSummary)>();
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             while (await reader.ReadAsync(cancellationToken))
@@ -227,7 +228,8 @@ internal class CoachCheckinService(
                     reader.GetFieldValue<DateTimeOffset>(7),
                     reader.GetBoolean(8),
                     reader.GetInt32(9),
-                    reader.GetInt32(10)));
+                    reader.GetInt32(10),
+                    reader.IsDBNull(11) ? null : reader.GetString(11)));
             }
         }
 
@@ -246,7 +248,8 @@ internal class CoachCheckinService(
                 row.HasAudioBlob,
                 row.UtteranceCount,
                 row.ChunkCount,
-                await GetSpeakerLabelsAsync(connection, row.UploadId, cancellationToken)));
+                await GetSpeakerLabelsAsync(connection, row.UploadId, cancellationToken),
+                row.ExecutiveSummary));
         }
 
         return items;
@@ -283,7 +286,9 @@ internal class CoachCheckinService(
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT u.upload_id, s.session_id, s.summary_markdown, s.summary_json::text, s.updated_at
+            SELECT u.upload_id, s.session_id,
+                   CASE WHEN s.summary_json->>'executiveSummaryVersion' = '1' THEN s.summary_markdown ELSE '' END,
+                   s.summary_json::text, s.updated_at
             FROM {CoachCallUploadsTable} u
             JOIN {CoachCallSessionsTable} s ON s.upload_id = u.upload_id
             WHERE u.upload_id = @uploadId
@@ -415,8 +420,8 @@ internal class CoachCheckinService(
             await uploadCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await CoachCallOutbox.EnqueueAsync(transaction, _schema, new ProcessCoachTranscriptCommand(uploadId, sessionId, profileId, correlationId), cancellationToken);
         await CoachCallOutbox.EnqueueAsync(transaction, _schema, new CoachCallStatusChangedEvent(uploadId, profileId, "Processing"), cancellationToken);
+        await CoachCallOutbox.EnqueueAsync(transaction, _schema, new CoachCallWorkflowSignal(uploadId, sessionId, profileId, "Processing"), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 

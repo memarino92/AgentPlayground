@@ -270,7 +270,7 @@ public sealed class CoachRetrievalEvaluationTests(PostgresVectorFixture Database
         var Embeddings = new Mock<IAgentEmbeddingService>();
         Embeddings.Setup(Value => Value.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ReadOnlyMemory<float>([1, 0, 0]));
-        return (new CoachCheckinService(Mock.Of<IBus>(), Options.Create(new SqlTransportOptions { ConnectionString = Database.ConnectionString }),
+        return (new CoachCheckinService(Options.Create(new SqlTransportOptions { ConnectionString = Database.ConnectionString }),
             Options.Create(Memory), Options.Create(new CoachCheckinOptions()), Embeddings.Object, NullLogger<CoachCheckinService>.Instance), Target, Memory);
     }
 }

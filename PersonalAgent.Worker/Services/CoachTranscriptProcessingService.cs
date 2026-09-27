@@ -22,9 +22,8 @@ internal class CoachTranscriptProcessingService(IRequestClient<GenerateEmbedding
             MetadataJson = MergeMetadata(chunk.MetadataJson, embeddings[index].Length),
             Embedding = embeddings[index]
         }).ToList();
-        var summaryMarkdown = BuildSummaryMarkdown(enrichedChunks);
-        var summaryJson = BuildSummaryJson(enrichedChunks);
-        return new CoachTranscriptProcessingResult(summaryMarkdown, summaryJson, enrichedChunks);
+        // The API summary step runs after chunk persistence and owns the executive summary.
+        return new CoachTranscriptProcessingResult("", "{}", enrichedChunks);
     }
 
     private async Task<List<float[]>> GenerateEmbeddingsAsync(Guid correlationId, List<string> inputs, CancellationToken cancellationToken)
@@ -88,64 +87,6 @@ internal class CoachTranscriptProcessingService(IRequestClient<GenerateEmbedding
         var tags = candidates.Where(content.Contains).Distinct().ToList();
         return JsonSerializer.Serialize(tags);
     }
-
-    private static string BuildSummaryMarkdown(IReadOnlyList<ProcessedCoachChunk> chunks)
-    {
-        var lines = new List<string>
-        {
-            "# Coach Check-In Summary",
-            $"- Chunks: {chunks.Count}",
-            $"- Exercises discussed: {string.Join(", ", ExtractTags(chunks.Select(chunk => chunk.ExerciseTags)).DefaultIfEmpty("none"))}",
-            $"- Main intents: {string.Join(", ", ExtractTags(chunks.Select(chunk => chunk.IntentTags)).DefaultIfEmpty("none"))}",
-            "",
-            "## Key Cues"
-        };
-
-        foreach (var chunk in chunks.Take(5))
-            lines.Add($"- ({FormatTimestamp(chunk.StartMs)}-{FormatTimestamp(chunk.EndMs)}) {TrimLine(chunk.Content)}");
-
-        return string.Join("\n", lines);
-    }
-
-    private static string BuildSummaryJson(IReadOnlyList<ProcessedCoachChunk> chunks)
-    {
-        var payload = new
-        {
-            generatedAtUtc = DateTimeOffset.UtcNow,
-            exercises = ExtractTags(chunks.Select(chunk => chunk.ExerciseTags)),
-            intents = ExtractTags(chunks.Select(chunk => chunk.IntentTags)),
-            priorities = ExtractTags(chunks.Select(chunk => chunk.PriorityTags)),
-            chunkCount = chunks.Count
-        };
-        return JsonSerializer.Serialize(payload);
-    }
-
-    private static IReadOnlyList<string> ExtractTags(IEnumerable<string> tagJson)
-    {
-        var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var json in tagJson)
-        {
-            try
-            {
-                var tags = JsonSerializer.Deserialize<List<string>>(json) ?? [];
-                foreach (var tag in tags)
-                    values.Add(tag);
-            }
-            catch
-            {
-            }
-        }
-
-        return values.OrderBy(value => value).ToList();
-    }
-
-    private static string TrimLine(string content)
-    {
-        var firstLine = content.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? content;
-        return firstLine.Length <= 120 ? firstLine : firstLine[..117] + "...";
-    }
-
-    private static string FormatTimestamp(int milliseconds) => TimeSpan.FromMilliseconds(milliseconds).ToString(@"mm\:ss");
 
     private static string MergeMetadata(string metadataJson, int embeddingDimensions)
     {

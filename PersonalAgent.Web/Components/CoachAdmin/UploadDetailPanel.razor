@@ -33,6 +33,18 @@ else
                 <MudAlert Severity="Severity.Error" Dense="true">@SelectedItem.Error</MudAlert>
             }
 
+            @if (!string.IsNullOrWhiteSpace(SelectedItem.ExecutiveSummary))
+            {
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudText Typo="Typo.subtitle1">Executive summary</MudText>
+                    <pre style="white-space: pre-wrap; font-family: inherit; margin: 0.5rem 0 0">@SelectedItem.ExecutiveSummary</pre>
+                </MudPaper>
+            }
+            else if (SelectedItem.Status == "Completed")
+            {
+                <MudText Typo="Typo.body2">Executive summary is being generated.</MudText>
+            }
+
             <MudStack Row="true" Spacing="1">
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Default"
