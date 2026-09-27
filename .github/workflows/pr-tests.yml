@@ -9,6 +9,18 @@ on:
   workflow_dispatch:
 
 jobs:
+  coding-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Build pinned coding image
+        run: docker build -f Dockerfile.coding-sandbox -t agentplayground-coding-sandbox:1 .
+      - name: Verify OpenCode tool editing and export without paid inference
+        run: node scripts/test-coding-image.mjs
   automation-programs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -28,7 +40,7 @@ jobs:
         working-directory: PersonalAgent.AutomationRunner/Railway
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          node --test bridge.test.mjs
+          node --test bridge.test.mjs coding.test.mjs
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30

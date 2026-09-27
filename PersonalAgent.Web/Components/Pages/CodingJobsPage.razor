@@ -1,0 +1,40 @@
+@page "/coding-jobs"
+@attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
+@implements IAsyncDisposable
+
+<PageTitle>Platform changes</PageTitle>
+<section class="automations-page">
+    <h1>Platform changes</h1>
+    <p>Ask chat to implement a change. Jobs open draft PRs for your review; they never merge or deploy.</p>
+    <a href="/admin/settings?section=coding">Coding settings</a>
+    <button type="button" disabled="@Busy" @onclick="RefreshAsync">Refresh</button>
+    @if (Error is not null) { <p role="alert">@Error</p> }
+    @if (!Loaded) { <p>Loading jobs…</p> }
+    else if (Items.Count == 0) { <p>No coding jobs yet.</p> }
+    else
+    {
+        @foreach (var Job in Items)
+        {
+            <article @key="Job.Id">
+                <h2>@Job.Instruction</h2>
+                <p>@Job.Status · @Job.CreatedAt.ToString("u") · Cleanup: @Job.CleanupState</p>
+                <p>Job @Job.Id · @Job.Repository · Base @Job.BaseSha</p>
+                <p>@Job.ModelRequests model requests reserved (@((Job.ModelRequests * .40m).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))) upper budget).</p>
+                @if (Job.PullRequestUrl is { } Url) { <a href="@Url" target="_blank" rel="noopener noreferrer">Review pull request</a> }
+                @if (!PersonalAgent.Contracts.Coding.CodingJobs.Terminal(Job.Status) && Job.Status != "Publishing")
+                { <button type="button" disabled="@Busy" @onclick="() => CancelAsync(Job.Id)">Cancel job</button> }
+                @if (Job.Error is not null) { <p role="status">@Job.Error</p> }
+                <button type="button" disabled="@Busy" @onclick="() => LoadArtifactAsync(Job.Id)">Load validation and files</button>
+                @if (Artifacts.TryGetValue(Job.Id, out var Artifact))
+                {
+                    <details><summary>Validation and proposed files</summary>
+                        @foreach (var Check in Artifact.Checks)
+                        { <h3>@Check.Command — exit @Check.ExitCode</h3><pre>@Check.Output</pre> }
+                        @foreach (var File in Artifact.Files)
+                        { <details><summary>@File.Path @(File.Content is null ? "(deleted)" : "")</summary><pre>@File.Content</pre></details> }
+                    </details>
+                }
+            </article>
+        }
+    }
+</section>

@@ -12,6 +12,7 @@
         <a class="@(CurrentSection == "telemetry" ? "active" : null)" href="/admin/settings?section=telemetry">OpenTelemetry</a>
         <a class="@(CurrentSection == "providers" ? "active" : null)" href="/admin/settings?section=providers">AI providers</a>
         <a class="@(CurrentSection == "automation" ? "active" : null)" href="/admin/settings?section=automation">Automation runner</a>
+        <a class="@(CurrentSection == "coding" ? "active" : null)" href="/admin/settings?section=coding">Platform coding</a>
         <a class="@(CurrentSection == "database" ? "active" : null)" href="/admin/settings?section=database">Database settings</a>
         <a class="@(CurrentSection == "integrations" ? "active" : null)" href="/admin/settings?section=integrations">Integrations and coach access</a>
     </nav>
@@ -21,6 +22,7 @@
         case "telemetry": <IntegrationSettings OpenTelemetry="true" /> break;
         case "providers": <ProviderSettings /> break;
         case "automation": <AutomationRuntimeSettingsPage /> break;
+        case "coding": <CodingSettingsPage /> break;
         case "integrations": <IntegrationsAdmin /> break;
         default: <DatabaseSettings /> break;
     }

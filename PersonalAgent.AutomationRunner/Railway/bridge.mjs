@@ -1,11 +1,13 @@
 import { Sandbox, SandboxNotFoundError } from 'railway';
 import { pathToFileURL } from 'node:url';
+import { codingDispatch } from './coding.mjs';
 
 const imagePattern = /^sha256:[a-f0-9]{64}$/;
 const packagePattern = /^([A-Za-z0-9_.-]{1,100})@([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?)$/;
 
 // The bridge is trusted controller code. Agent text is only ever written as file content.
 export async function dispatch(request, api = Sandbox) {
+  if (request.operation?.startsWith('coding-')) return codingDispatch(request, api);
   const options = { token: request.token, environmentId: request.environmentId, authType: 'bearer', verbose: false };
   if (request.operation === 'create') {
     const sandbox = await api.create(request.checkpoint, {
