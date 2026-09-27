@@ -4,9 +4,13 @@ using System.Security.Cryptography;
 using System.Text.Json;
 
 using FluentAssertions;
+using Microsoft.Extensions.AI;
+using Moq;
 using Xunit;
 
 using PersonalAgent.Api.Coding;
+using PersonalAgent.Api.Models;
+using PersonalAgent.Api.Services;
 using PersonalAgent.Contracts.Coding;
 using PersonalAgent.Integrations;
 
@@ -26,9 +30,19 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
         using var Handler = new GitHubHandler(); using var Http = new HttpClient(Handler);
         var Publisher = new GitHubCodingPublisher(Http, Store);
         var Sha = await Publisher.PrepareAsync(Settings, default);
-        var Id = Guid.NewGuid();
-        var Job = new CodingJob { Id = Id, Instruction = "Improve feature", Settings = Settings, BaseSha = Sha,
-            Branch = $"feat/platform-improvement-{Id:N}", CreatedAt = DateTimeOffset.UtcNow,
+        var Policy = new Mock<IScheduledActorPolicy>();
+        Policy.Setup(P => P.ResolveRoleAsync("owner", null, default)).ReturnsAsync(AgentRoles.Owner);
+        var Permissions = new Mock<IToolAccessStore>();
+        Permissions.Setup(P => P.GetRolePermissionsAsync(AgentRoles.Owner, default)).ReturnsAsync(new Dictionary<string, bool> { [CodingJobs.Permission] = true });
+        var Registry = new AgentToolRegistry(Mock.Of<ITavilyMcpToolProvider>(P => P.GetTools() == Array.Empty<AIFunction>()));
+        var Tools = new ToolAccessService(Permissions.Object, Registry);
+        var Service = new CodingJobService(Store, new(Policy.Object, Mock.Of<ICoachAssignmentStore>(), Tools), Tools, Publisher);
+        var Access = new AgentAccessContext("owner", AgentRoles.Owner, "owner");
+        var RequestKey = Guid.NewGuid();
+        var Created = await Service.StartAsync(Access, new("Improve feature", RequestKey.ToString("D")), default);
+        var Retried = await Service.StartAsync(Access, new("Improve feature", RequestKey.ToString("B").ToUpperInvariant()), default);
+        Retried.Id.Should().Be(Created.Id);
+        var Job = (await Store.GetAsync(Created.Id, default))! with {
             Artifact = new(Sha, [new("src/Feature.cs", "public class Feature {}")], [new("dotnet test", 0, "Passed")], "Adds the feature.") };
         await FluentActions.Awaiting(() => Publisher.PublishAsync(Job, default)).Should().ThrowAsync<HttpRequestException>();
         (await Publisher.PublishAsync(Job, default)).Should().Be("https://github.com/owner/repo/pull/1");

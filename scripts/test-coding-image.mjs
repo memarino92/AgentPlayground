@@ -1,7 +1,7 @@
 // Local Docker integration proof. Uses synthetic model responses; no API key or model charges.
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import assert from 'node:assert/strict';
@@ -10,6 +10,8 @@ const repositoryBase = process.argv[3];
 if (repositoryBase) assert.match(repositoryBase, /^[a-f0-9]{40}$/);
 const volume = `coding-smoke-${Date.now()}`;
 const folder = await mkdtemp(join(tmpdir(), 'coding-smoke-'));
+// Linux mkdtemp defaults to 0700; the container UID must traverse this synthetic request mount.
+await chmod(folder, 0o755);
 let calls = 0;
 let edited = false;
 const server = createServer(async (req, res) => {
