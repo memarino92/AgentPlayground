@@ -18,7 +18,12 @@
             <article @key="Job.Id">
                 <h2>@Job.Instruction</h2>
                 <p>@Job.Status · @Job.CreatedAt.ToString("u") · Cleanup: @Job.CleanupState</p>
-                <p>Job @Job.Id · @Job.Repository · Base @Job.BaseSha</p>
+                <p>Job @Job.Id · @Job.Repository</p>
+                <p>Branch: @Job.Branch</p>
+                @if (!string.IsNullOrWhiteSpace(Job.SandboxId))
+                {
+                    <p>Railway sandbox ID: @Job.SandboxId</p>
+                }
                 <p>@Job.ModelRequests model requests reserved (@((Job.ModelRequests * .40m).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))) upper budget).</p>
                 @if (Job.PullRequestUrl is { } Url) { <a href="@Url" target="_blank" rel="noopener noreferrer">Review pull request</a> }
                 @if (!PersonalAgent.Contracts.Coding.CodingJobs.Terminal(Job.Status) && Job.Status != "Publishing")
