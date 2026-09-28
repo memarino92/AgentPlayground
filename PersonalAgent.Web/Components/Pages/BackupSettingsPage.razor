@@ -2,33 +2,72 @@
 @inject PersonalAgent.Web.Services.PersonalAgentClient ApiClient
 @implements IAsyncDisposable
 
-<div class="settings-page">
+<section class="settings-editor backup-settings">
     <h2>Database backups</h2>
-    <p>The Railway backup job checks these settings each day. Once enabled, it uploads a database dump to SFTP every selected number of days. The SSH host key fingerprint is required.</p>
-    @if (Error is not null) { <p role="alert">@Error</p> }
-    @if (Notice is not null) { <p role="status">@Notice</p> }
+    <p>Send database backups to your SFTP server. The Railway job checks these settings daily.</p>
+    @if (Error is not null) { <p class="settings-editor__error" role="alert">@Error</p> }
+    @if (Notice is not null) { <p class="settings-editor__notice" role="status">@Notice</p> }
     @if (Settings is null)
     {
         <p>Loading backup settings…</p>
     }
     else
     {
-        <EditForm Model="Settings" OnSubmit="SaveAsync">
+        <EditForm Model="Settings" OnSubmit="SaveAsync" FormName="database-backups">
             <fieldset disabled="@Busy">
-                <label><input type="checkbox" @bind="Settings.Enabled" /> Enable SFTP backups</label>
-                <label>SFTP host <input type="text" maxlength="255" @bind="Settings.Host" /></label>
-                <label>Port <input type="number" min="1" max="65535" @bind="Settings.Port" /></label>
-                <label>Username <input type="text" maxlength="128" @bind="Settings.Username" /></label>
-                <label>Password <input type="password" autocomplete="new-password" maxlength="4096" @bind="Settings.Password" placeholder="Leave blank to keep saved password" /></label>
-                <label>SSH host key SHA-256 fingerprint <input type="text" maxlength="52" @bind="Settings.HostKeySha256" placeholder="SHA256:base64 fingerprint" /></label>
-                <label>Remote directory <input type="text" maxlength="512" @bind="Settings.Directory" /></label>
-                <label>Backup every <input type="number" min="1" max="365" @bind="Settings.IntervalDays" /> days</label>
-                <button type="submit">Save backup settings</button>
+                <div class="settings-editor__group">
+                    <h3>SFTP destination</h3>
+                    <div class="backup-settings__endpoint">
+                        <div class="settings-editor__field">
+                            <label for="backup-host">Host</label>
+                            <input id="backup-host" type="text" maxlength="255" autocomplete="off" @bind="Settings.Host" placeholder="backup.example.com" />
+                        </div>
+                        <div class="settings-editor__field">
+                            <label for="backup-port">Port</label>
+                            <input id="backup-port" type="number" min="1" max="65535" @bind="Settings.Port" />
+                        </div>
+                    </div>
+                    <div class="settings-editor__columns">
+                        <div class="settings-editor__field">
+                            <label for="backup-username">Username</label>
+                            <input id="backup-username" type="text" maxlength="128" autocomplete="username" @bind="Settings.Username" />
+                        </div>
+                        <div class="settings-editor__field">
+                            <label for="backup-password">Password</label>
+                            <input id="backup-password" type="password" autocomplete="new-password" maxlength="4096" @bind="Settings.Password" placeholder="@(Settings.HasPassword ? "Leave blank to keep saved password" : "Enter SFTP password")" />
+                            <span class="settings-editor__hint">@(Settings.HasPassword ? "A password is saved. Enter a new one only to replace it." : "No password saved yet.")</span>
+                        </div>
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="backup-fingerprint">SSH host key fingerprint</label>
+                        <input id="backup-fingerprint" type="text" maxlength="52" spellcheck="false" @bind="Settings.HostKeySha256" placeholder="SHA256:…" />
+                        <span class="settings-editor__hint">Paste the server's SHA-256 fingerprint so the job can verify its identity.</span>
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="backup-directory">Remote directory</label>
+                        <input id="backup-directory" type="text" maxlength="512" spellcheck="false" @bind="Settings.Directory" placeholder="/backups" />
+                        <span class="settings-editor__hint">Use an existing absolute path on the SFTP server.</span>
+                    </div>
+                </div>
+                <div class="settings-editor__group">
+                    <h3>Schedule</h3>
+                    <div class="settings-editor__field backup-settings__interval">
+                        <label for="backup-interval">Days between backups</label>
+                        <input id="backup-interval" type="number" min="1" max="365" @bind="Settings.IntervalDays" />
+                    </div>
+                    <span class="settings-editor__hint">The job checks daily at 03:00 UTC and uploads when the interval is due.</span>
+                    <label class="settings-editor__toggle" for="backup-enabled">
+                        <input id="backup-enabled" type="checkbox" @bind="Settings.Enabled" />
+                        Enable SFTP backups
+                    </label>
+                </div>
+                <div class="settings-editor__footer">
+                    <button type="submit">Save backup settings</button>
+                </div>
             </fieldset>
         </EditForm>
-        <p>Password saved: @(Settings.HasPassword ? "Yes" : "No")</p>
     }
-</div>
+</section>
 
 @code {
     private readonly CancellationTokenSource Lifetime = new();
