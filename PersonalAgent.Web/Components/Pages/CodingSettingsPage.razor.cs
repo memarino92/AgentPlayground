@@ -23,6 +23,7 @@ public partial class CodingSettingsPage : IAsyncDisposable
         {
             Enabled = Model.Enabled, Repository = Model.Repository.Trim(), Checkpoint = Model.Checkpoint.Trim(), ImageId = Model.ImageId.Trim(),
             GitHubAppId = Model.AppId, InstallationId = Model.InstallationId, MaxMinutes = Model.Minutes, MaxModelRequests = Model.Requests,
+            VerifiedRulesetId = Model.RulesetId, VerifiedRulesetUpdatedAt = Model.RulesetUpdatedAt.Trim(),
             ModelBudgetUsd = Model.Budget, TestProject = Model.TestProject.Trim(), TestFilter = Model.TestFilter.Trim()
         }, Model.RouterAction, Model.RouterAction == "replace" ? Model.RouterKey : null,
             Model.GitHubAction, Model.GitHubAction == "replace" ? Model.GitHubKey : null), Lifetime.Token));
@@ -34,6 +35,7 @@ public partial class CodingSettingsPage : IAsyncDisposable
         var S = V.Settings;
         Model = new() { Enabled = S.Enabled, Repository = S.Repository, Checkpoint = S.Checkpoint, ImageId = S.ImageId,
             AppId = S.GitHubAppId, InstallationId = S.InstallationId, Minutes = S.MaxMinutes, Requests = S.MaxModelRequests,
+            RulesetId = S.VerifiedRulesetId, RulesetUpdatedAt = S.VerifiedRulesetUpdatedAt,
             Budget = S.ModelBudgetUsd, TestProject = S.TestProject, TestFilter = S.TestFilter };
     }
     private async Task RunAsync(Func<Task> Action)
@@ -48,7 +50,7 @@ public partial class CodingSettingsPage : IAsyncDisposable
             {
                 HttpStatusCode.Forbidden => "Deployment administrator access is required.",
                 HttpStatusCode.Conflict => "Settings changed. Reload before saving.",
-                HttpStatusCode.BadRequest => "Check repository, checkpoint/image, App IDs, PEM key, test project and limits. Budget must cover $0.40 per permitted request. Disable before removing keys.",
+                HttpStatusCode.BadRequest => "Check repository, checkpoint/image, App IDs, PEM key, test project and limits. Ruleset verification needs both ID and exact UTC timestamp; clear it when changing repository or App identity. Budget must cover $0.40 per permitted request. Disable before removing keys.",
                 HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed => "Deploy the matching API version before configuring coding.",
                 _ => "Coding settings are unavailable. Check the API and retry."
             };
@@ -65,6 +67,8 @@ public partial class CodingSettingsPage : IAsyncDisposable
         public string ImageId { get; set; } = "";
         public long AppId { get; set; }
         public long InstallationId { get; set; }
+        public long RulesetId { get; set; }
+        public string RulesetUpdatedAt { get; set; } = "";
         public int Minutes { get; set; } = 20;
         public int Requests { get; set; } = 12;
         public decimal Budget { get; set; } = 5;

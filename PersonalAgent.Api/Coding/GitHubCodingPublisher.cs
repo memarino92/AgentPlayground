@@ -128,18 +128,28 @@ internal sealed class GitHubCodingPublisher(HttpClient Http, CodingJobStore Stor
                 || Rule.GetProperty("ruleset_source").GetString() != S.Repository) continue;
             var Id = Rule.GetProperty("ruleset_id").GetInt64();
             var Set = await SendAsync(HttpMethod.Get, $"repos/{S.Repository}/rulesets/{Id}", Credential, null, Token);
-            // Only explicit human bypasses are accepted. Missing visibility or broad role/App bypasses fail closed.
-            if (Set.GetProperty("enforcement").GetString() == "active" && Set.TryGetProperty("bypass_actors", out var Bypass)
-                && Bypass.EnumerateArray().All(A => A.GetProperty("actor_type").GetString() == "User")) return;
+            if (Set.GetProperty("enforcement").GetString() != "active") continue;
+            // GitHub omits bypass actors for Administration:read. A maintainer can attest to a
+            // specific ruleset revision without granting this publisher permission to edit it.
+            if (Set.TryGetProperty("bypass_actors", out var Bypass))
+            {
+                if (Bypass.EnumerateArray().All(A => A.GetProperty("actor_type").GetString() == "User")) return;
+                continue;
+            }
+            if (S.VerifiedRulesetId == Id && S.VerifiedRulesetUpdatedAt.Length > 0
+                && Set.TryGetProperty("updated_at", out var Updated)
+                && Updated.GetString() == S.VerifiedRulesetUpdatedAt) return;
         }
-        throw new InvalidOperationException("Main needs an active repository review ruleset with at least one approval and no role or App bypass, or enforced classic protection.");
+        throw new InvalidOperationException("Main needs an active repository review ruleset with at least one approval and no role or App bypass, or enforced classic protection. If GitHub hides bypass actors, a deployment administrator must review the bypass list and save the current ruleset ID and updated_at in Platform coding settings.");
     }
 
     private async Task<string> CredentialAsync(CodingSettings Settings, CancellationToken Token)
     {
         var Current = await Store.SettingsAsync(Token);
         if (!Current.View.Settings.Enabled || Current.View.Settings.Repository != Settings.Repository
-            || Current.View.Settings.GitHubAppId != Settings.GitHubAppId || Current.View.Settings.InstallationId != Settings.InstallationId)
+            || Current.View.Settings.GitHubAppId != Settings.GitHubAppId || Current.View.Settings.InstallationId != Settings.InstallationId
+            || Current.View.Settings.VerifiedRulesetId != Settings.VerifiedRulesetId
+            || Current.View.Settings.VerifiedRulesetUpdatedAt != Settings.VerifiedRulesetUpdatedAt)
             throw new UnauthorizedAccessException("Coding publication configuration changed or is disabled.");
         var Now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         static string B64(byte[] B) => Convert.ToBase64String(B).TrimEnd('=').Replace('+', '-').Replace('/', '_');

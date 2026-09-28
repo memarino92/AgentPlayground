@@ -15,6 +15,15 @@ namespace PersonalAgent.Api.Tests.Services;
 
 public sealed class CodingJobTests
 {
+    [Theory]
+    [InlineData(0, "2026-09-28T01:00:00Z")]
+    [InlineData(1, "")]
+    [InlineData(-1, "2026-09-28T01:00:00Z")]
+    [InlineData(1, "yesterday")]
+    public void RulesetVerificationRequiresAnExactIdAndTimestamp(long Id, string UpdatedAt) =>
+        FluentActions.Invoking(() => CodingJobStore.ValidateSettings(new()
+            { VerifiedRulesetId = Id, VerifiedRulesetUpdatedAt = UpdatedAt })).Should().Throw<ArgumentException>();
+
     [Fact]
     public void ModelGatewayRemovesPremiumRoutingAndCapsOutput()
     {

@@ -27,6 +27,8 @@ public sealed record CodingSettings
     public string ImageId { get; init; } = "";
     public long GitHubAppId { get; init; }
     public long InstallationId { get; init; }
+    public long VerifiedRulesetId { get; init; }
+    public string VerifiedRulesetUpdatedAt { get; init; } = "";
     public int MaxMinutes { get; init; } = 20;
     // Fixed model, standard text requests, max 8192 output tokens. Gateway enforces provider price ceilings.
     public int MaxModelRequests { get; init; } = 12;

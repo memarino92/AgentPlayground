@@ -12,6 +12,14 @@ The first slice accepts an explicit owner chat request, runs OpenCode 1.18.32 in
 6. Select the required Linux test project/filter. The default `AgentSkillsTests` filter is only a small smoke gate, not proof that arbitrary platform changes pass all relevant tests. Set a suitable gate for the requested task. Current workers have no Docker socket or production database; tests needing Testcontainers, mobile SDKs or private services are not supported. An empty filter runs the whole selected project; zero executed tests fails the gate.
 7. Save coding enabled, then explicitly grant Owner both **Implement platform change** and **Inspect platform changes** under Integrations. Coach access is always rejected. Saving validates configuration syntax; a real start verifies GitHub access and review policy. No credentials appear in settings reads.
 
+### When GitHub hides the ruleset bypass list
+
+The App's Administration:read permission cannot see `bypass_actors`. Using your own GitHub account with ruleset write access, inspect `gh api repos/OWNER/REPO/rulesets/ID`. Confirm that the ruleset is active, applies to main, requires at least one approval, and has an empty bypass list or only individual `User` entries. Never attest to App, team, organization or repository-role bypasses.
+
+In Platform coding settings, save **Verified ruleset ID** and the response's exact **updated_at** UTC timestamp (for example `2026-09-28T01:00:00Z`). Saving these fields is your confirmation of that review for the configured repository/App. Save repository/App identity first with verification cleared if changing it. Both fields may be cleared with ID 0 and an empty timestamp. Keep the App's administration permission read-only.
+
+The publisher checks the ruleset revision at start and publication. After any ruleset edit, review and save its new revision before starting another job. Do not edit rulesets while jobs are active: GitHub timestamps have second-level precision. Verification changes also invalidate publication for old job snapshots; recover deliberately rather than rerunning paid work blindly. A visible App/role bypass is rejected even with saved verification.
+
 ## Use and limits
 
 Ask chat for one precise change and its acceptance criteria. The start tool takes a UUID request key; retrying the same key returns the same durable job, while a changed instruction is rejected. The response contains a job ID and dashboard link, not a claim that a PR already exists. **Coding jobs** shows state, bounded artifact contents, validation commands/results, sandbox cleanup, model request count and the PR link.

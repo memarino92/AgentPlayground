@@ -58,6 +58,29 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
         await FluentActions.Awaiting(() => Publisher.PrepareAsync(Settings, default)).Should().ThrowAsync<InvalidOperationException>();
         Handler.AppBypass = false; Handler.Approvals = 0;
         await FluentActions.Awaiting(() => Publisher.PrepareAsync(Settings, default)).Should().ThrowAsync<InvalidOperationException>();
+        Handler.Approvals = 1; Handler.HideBypass = true;
+        await FluentActions.Awaiting(() => Publisher.PrepareAsync(Settings, default)).Should().ThrowAsync<InvalidOperationException>();
+        Settings = Settings with { VerifiedRulesetId = 1, VerifiedRulesetUpdatedAt = Handler.UpdatedAt };
+        Current = await Store.SettingsAsync(default);
+        await Store.SaveSettingsAsync(new(Current.View.Revision, Settings), default);
+        (await Publisher.PrepareAsync(Settings, default)).Should().Be(Sha);
+        // Publication checks the same live policy; a changed ruleset cannot use old attestation.
+        var VerifiedJob = Job with { Settings = Settings };
+        (await Publisher.PublishAsync(VerifiedJob, default)).Should().Contain("/pull/1");
+        Handler.UpdatedAt = "2026-09-28T01:00:01Z";
+        await FluentActions.Awaiting(() => Publisher.PublishAsync(VerifiedJob, default)).Should().ThrowAsync<InvalidOperationException>();
+        Handler.UpdatedAt = Settings.VerifiedRulesetUpdatedAt;
+        Handler.HideBypass = false; Handler.AppBypass = true;
+        await FluentActions.Awaiting(() => Publisher.PrepareAsync(Settings, default)).Should().ThrowAsync<InvalidOperationException>();
+        Handler.HideBypass = true;
+        Settings = Settings with { VerifiedRulesetId = 2 };
+        Current = await Store.SettingsAsync(default);
+        await Store.SaveSettingsAsync(new(Current.View.Revision, Settings), default);
+        await FluentActions.Awaiting(() => Publisher.PrepareAsync(Settings, default)).Should().ThrowAsync<InvalidOperationException>();
+        await FluentActions.Awaiting(() => Publisher.PublishAsync(VerifiedJob, default)).Should().ThrowAsync<UnauthorizedAccessException>();
+        Current = await Store.SettingsAsync(default);
+        await FluentActions.Awaiting(() => Store.SaveSettingsAsync(new(Current.View.Revision,
+            Settings with { InstallationId = 35 }), default)).Should().ThrowAsync<ArgumentException>();
     }
 
     private sealed class GitHubHandler : HttpMessageHandler
@@ -67,15 +90,24 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
         public string? LastBody;
         public bool Protected = true;
         public bool UseRuleset, AppBypass;
+        public bool HideBypass;
+        public string UpdatedAt = "2026-09-28T01:00:00Z";
         public int Approvals = 1;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Token)
         {
             var Path = Request.RequestUri!.AbsolutePath; Paths.Add(Path);
-            if (Path.EndsWith("access_tokens", StringComparison.Ordinal)) return Ok(new { token = "installation-token" });
+            if (Path.EndsWith("access_tokens", StringComparison.Ordinal))
+            {
+                var Body = await Request.Content!.ReadFromJsonAsync<JsonElement>(Token);
+                Body.GetProperty("permissions").GetProperty("administration").GetString().Should().Be("read");
+                return Ok(new { token = "installation-token" });
+            }
             Request.Headers.Authorization!.Parameter.Should().Be("installation-token");
             if (Path.EndsWith("/protection", StringComparison.Ordinal)) return UseRuleset ? new(HttpStatusCode.NotFound) : Ok(new { enforce_admins = new { enabled = Protected }, required_pull_request_reviews = new { required_approving_review_count = 1 } });
             if (Path.EndsWith("/rules/branches/main", StringComparison.Ordinal)) return Ok(new[] { new { type = "pull_request", parameters = new { required_approving_review_count = Approvals }, ruleset_source_type = "Repository", ruleset_source = "memarino92/AgentPlayground", ruleset_id = 1 } });
-            if (Path.EndsWith("/rulesets/1", StringComparison.Ordinal)) return Ok(new { enforcement = "active", bypass_actors = AppBypass ? new[] { new { actor_type = "Integration", actor_id = 12 } } : [] });
+            if (Path.EndsWith("/rulesets/1", StringComparison.Ordinal)) return HideBypass
+                ? Ok(new { enforcement = "active", updated_at = UpdatedAt })
+                : Ok(new { enforcement = "active", updated_at = UpdatedAt, bypass_actors = AppBypass ? new[] { new { actor_type = "Integration", actor_id = 12 } } : [] });
             if (Path.EndsWith("/AgentPlayground", StringComparison.Ordinal)) return Ok(new { @private = false });
             if (Path.EndsWith("/git/ref/heads/main", StringComparison.Ordinal)) return Ok(new { @object = new { sha = new string('b', 40) } });
             if (Path.Contains("/git/commits/", StringComparison.Ordinal)) return Ok(new { tree = new { sha = new string('c', 40) } });
