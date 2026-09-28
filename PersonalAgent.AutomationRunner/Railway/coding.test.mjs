@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { codingDispatch, validateRequest } from './coding.mjs';
+import { loadCodingPreparationFiles } from './coding-preparation-files.mjs';
+
+test('coding preparation loads the repository Dockerfile and immutable workload before provisioning', async () => {
+  const files = new Map(await loadCodingPreparationFiles());
+  assert.equal(files.size, 2);
+  assert.ok(files.get('Dockerfile.coding-sandbox').includes('opencode-ai@1.18.32'));
+  assert.ok(files.get('PersonalAgent.AutomationRunner/Railway/workload.mjs').includes("phase === 'export'"));
+});
 
 const request = { operation: 'coding-execute', imageId: 'sha256:' + 'a'.repeat(64), repository: 'owner/repo',
   baseSha: 'b'.repeat(40), minutes: 20, capability: 'c'.repeat(64), gateway: 'https://api.example.test/coding-runtime/1234/v1',
