@@ -116,9 +116,8 @@ public sealed class CodingJobStore(IntegrationDatabase Database)
             throw new ArgumentException("Use owner/repository, main, 5–30 minutes, 1–12 model requests covered by a budget of $0.40/request (at most $5), and a repository test project.");
         if (S.VerifiedRulesetId < 0 || S.VerifiedRulesetUpdatedAt is null
             || (S.VerifiedRulesetId == 0 ? S.VerifiedRulesetUpdatedAt.Length != 0
-                : !DateTimeOffset.TryParseExact(S.VerifiedRulesetUpdatedAt, "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out _)))
-            throw new ArgumentException("Ruleset verification requires a positive ID and the exact GitHub updated_at UTC timestamp, or both fields cleared.");
+                : CodingJobs.RulesetTimestamp(S.VerifiedRulesetUpdatedAt) is null))
+            throw new ArgumentException("Ruleset verification requires a positive ID and the exact GitHub updated_at timestamp including fractional seconds and timezone, or both fields cleared.");
         if (S.Enabled && (S.GitHubAppId <= 0 || S.InstallationId <= 0
             || !Regex.IsMatch(S.Checkpoint ?? "", @"\A[A-Za-z0-9_.-]{1,128}\z")
             || !Regex.IsMatch(S.ImageId ?? "", @"\Asha256:[a-f0-9]{64}\z")))

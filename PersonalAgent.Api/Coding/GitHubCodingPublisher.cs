@@ -136,9 +136,9 @@ internal sealed class GitHubCodingPublisher(HttpClient Http, CodingJobStore Stor
                 if (Bypass.EnumerateArray().All(A => A.GetProperty("actor_type").GetString() == "User")) return;
                 continue;
             }
-            if (S.VerifiedRulesetId == Id && S.VerifiedRulesetUpdatedAt.Length > 0
+            if (S.VerifiedRulesetId == Id && CodingJobs.RulesetTimestamp(S.VerifiedRulesetUpdatedAt) is { } Verified
                 && Set.TryGetProperty("updated_at", out var Updated)
-                && Updated.GetString() == S.VerifiedRulesetUpdatedAt) return;
+                && CodingJobs.RulesetTimestamp(Updated.GetString()) == Verified) return;
         }
         throw new InvalidOperationException("Main needs an active repository review ruleset with at least one approval and no role or App bypass, or enforced classic protection. If GitHub hides bypass actors, a deployment administrator must review the bypass list and save the current ruleset ID and updated_at in Platform coding settings.");
     }

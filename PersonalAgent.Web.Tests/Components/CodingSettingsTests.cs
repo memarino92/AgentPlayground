@@ -30,15 +30,15 @@ public sealed class CodingSettingsTests : TestContext
         Page.Find("#coding-github-action").Change("replace");
         Page.Find("#coding-github").Change("private-pem");
         Page.Find("#coding-ruleset").Change("123");
-        Page.Find("#coding-ruleset-updated").Change("2026-09-28T01:00:00Z");
+        Page.Find("#coding-ruleset-updated").Change("2026-09-27T21:00:00.841-04:00");
         Page.Find("form").Submit();
         Page.WaitForAssertion(() => Page.Markup.Should().Contain("OpenRouter key configured"));
         Handler.Saved!.ExpectedRevision.Should().Be(0);
         Handler.Saved.OpenRouterKeyAction.Should().Be("replace");
         Handler.Saved.GitHubPrivateKey.Should().Be("private-pem");
         Handler.Saved.Settings.VerifiedRulesetId.Should().Be(123);
-        Handler.Saved.Settings.VerifiedRulesetUpdatedAt.Should().Be("2026-09-28T01:00:00Z");
-        Page.Find("#coding-ruleset-updated").GetAttribute("value").Should().Be("2026-09-28T01:00:00Z");
+        Handler.Saved.Settings.VerifiedRulesetUpdatedAt.Should().Be("2026-09-27T21:00:00.841-04:00");
+        Page.Find("#coding-ruleset-updated").GetAttribute("value").Should().Be("2026-09-27T21:00:00.841-04:00");
         Page.Markup.Should().NotContain("private-router-key").And.NotContain("private-pem");
         Page.FindAll("#coding-router").Should().BeEmpty();
     }

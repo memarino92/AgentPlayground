@@ -7,6 +7,10 @@ public static class CodingJobs
     public const string Model = "openai/gpt-5.4-mini";
     public const int MaxArtifactBytes = 1_000_000;
     public static bool Terminal(string Status) => Status is "PrOpened" or "Failed" or "Cancelled";
+    public static DateTimeOffset? RulesetTimestamp(string? Value) => Value is not null
+        && System.Text.RegularExpressions.Regex.IsMatch(Value, @"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,7})?(Z|[+-]\d{2}:\d{2})\z")
+        && DateTimeOffset.TryParse(Value, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var Timestamp) ? Timestamp : null;
 }
 
 public sealed record ExecuteCodingJob(Guid JobId);

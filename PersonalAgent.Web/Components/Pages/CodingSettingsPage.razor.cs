@@ -50,7 +50,7 @@ public partial class CodingSettingsPage : IAsyncDisposable
             {
                 HttpStatusCode.Forbidden => "Deployment administrator access is required.",
                 HttpStatusCode.Conflict => "Settings changed. Reload before saving.",
-                HttpStatusCode.BadRequest => "Check repository, checkpoint/image, App IDs, PEM key, test project and limits. Ruleset verification needs both ID and exact UTC timestamp; clear it when changing repository or App identity. Budget must cover $0.40 per permitted request. Disable before removing keys.",
+                HttpStatusCode.BadRequest => "Check repository, checkpoint/image, App IDs, PEM key, test project and limits. Ruleset verification needs both ID and exact timestamp including fractional seconds and timezone; clear it when changing repository or App identity. Budget must cover $0.40 per permitted request. Disable before removing keys.",
                 HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed => "Deploy the matching API version before configuring coding.",
                 _ => "Coding settings are unavailable. Check the API and retry."
             };
