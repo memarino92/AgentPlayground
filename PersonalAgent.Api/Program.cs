@@ -20,6 +20,7 @@ builder.AddApplicationObservability("Api");
 builder.Services.AddSingleton<IIntegrationSettingsService, IntegrationSettingsService>();
 builder.Services.AddSingleton<OtelSettingsService>();
 builder.Services.AddSingleton<DatabaseSettingsStore>();
+builder.Services.AddSingleton<BackupSettingsStore>();
 builder.Services.AddSingleton<DatabaseCredentialRuntime>();
 builder.Services.AddHostedService<DatabaseCredentialReloadWorker>();
 if (syntheticDemo) builder.Services.AddSyntheticServices();

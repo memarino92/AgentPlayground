@@ -13,6 +13,8 @@ scripts/seed-configuration.generated.sql
 # Database snapshots contain private application data and encrypted credentials.
 *.dump
 *.backup
+!PersonalAgent.Backup/
+!PersonalAgent.Backup/**
 /snapshots/
 
 # Firebase mobile/backend credentials

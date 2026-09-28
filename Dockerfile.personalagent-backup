@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.1 AS build
+WORKDIR /src
+COPY ["global.json", "Directory.Build.props", "Directory.Packages.props", "."]
+COPY ["PersonalAgent.Contracts/PersonalAgent.Contracts.csproj", "PersonalAgent.Contracts/"]
+COPY ["PersonalAgent.Backup/PersonalAgent.Backup.csproj", "PersonalAgent.Backup/"]
+RUN dotnet restore "PersonalAgent.Backup/PersonalAgent.Backup.csproj"
+COPY . .
+RUN dotnet publish "PersonalAgent.Backup/PersonalAgent.Backup.csproj" -c Release -o /app/publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:11.0.0-rc.1 AS runtime
+FROM postgres:18-trixie
+COPY --from=runtime /usr/share/dotnet /usr/share/dotnet
+COPY --from=build /app/publish /app
+ENV DOTNET_ROOT=/usr/share/dotnet
+ENV PATH="/usr/share/dotnet:${PATH}"
+WORKDIR /app
+ENTRYPOINT ["dotnet", "PersonalAgent.Backup.dll"]

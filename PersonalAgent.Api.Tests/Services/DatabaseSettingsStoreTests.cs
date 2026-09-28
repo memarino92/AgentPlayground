@@ -8,6 +8,42 @@ namespace PersonalAgent.Api.Tests.Services;
 
 public sealed class DatabaseSettingsStoreTests(PostgresVectorFixture Fixture) : IClassFixture<PostgresVectorFixture>
 {
+    [Fact]
+    public async Task BackupSettings_AreCreatedEncryptedAndPasswordCanBeRetained()
+    {
+        var key = Convert.ToBase64String(new byte[32]);
+        var database = new IntegrationDatabase(Fixture.ConnectionString, key);
+        var store = new BackupSettingsStore(database);
+        await using var connection = await database.OpenAsync(default);
+        await using var initialize = new NpgsqlCommand("""
+            CREATE SCHEMA IF NOT EXISTS app;
+            DROP TABLE IF EXISTS app.configuration_settings;
+            CREATE TABLE app.configuration_settings(scope text, key text, value text NOT NULL,
+                is_secret boolean NOT NULL, is_active boolean NOT NULL,
+                updated_at timestamptz NOT NULL, PRIMARY KEY(scope,key));
+            """, connection);
+        await initialize.ExecuteNonQueryAsync();
+
+        var request = new SaveBackupSettingsRequest(true, "backup.example.com", 22, "backup-user", "first-secret",
+            "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "/archives", 3);
+        await ((Func<Task>)(() => store.SaveAsync(request with { Password = null }, default)))
+            .Should().ThrowAsync<IntegrationValidationException>();
+        await store.SaveAsync(request, default);
+        var saved = await store.ReadAsync(default);
+        saved.Enabled.Should().BeTrue();
+        saved.HasPassword.Should().BeTrue();
+        saved.HostKeySha256.Should().Be(new string('A', 43));
+        saved.IntervalDays.Should().Be(3);
+        await using var read = new NpgsqlCommand("SELECT value FROM app.configuration_settings WHERE scope = 'Backup' AND key = 'Backup:Sftp:Password'", connection);
+        var encrypted = (string)(await read.ExecuteScalarAsync())!;
+        encrypted.Should().NotContain("first-secret");
+        PostgresConfigurationCrypto.Decrypt(encrypted, "Backup", "Backup:Sftp:Password", key).Should().Be("first-secret");
+
+        await store.SaveAsync(request with { Password = null, IntervalDays = 7 }, default);
+        ((string)(await read.ExecuteScalarAsync())!).Should().Be(encrypted);
+        (await store.ReadAsync(default)).IntervalDays.Should().Be(7);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

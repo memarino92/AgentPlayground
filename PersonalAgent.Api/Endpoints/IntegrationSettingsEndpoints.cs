@@ -37,6 +37,11 @@ internal static class IntegrationSettingsEndpoints
             }, Logger, "save OpenRouter credential"))
             .WithName("SaveOpenRouterCredential").WithSummary("Create or replace the encrypted OpenRouter API credential");
 
+        settings.MapGet("/backup", ([Microsoft.AspNetCore.Mvc.FromServices] BackupSettingsStore Store, CancellationToken CancellationToken) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Store.ReadAsync(CancellationToken))));
+        settings.MapPut("/backup", (SaveBackupSettingsRequest Request, [Microsoft.AspNetCore.Mvc.FromServices] BackupSettingsStore Store, CancellationToken CancellationToken) =>
+            ExecuteAsync(async () => { await Store.SaveAsync(Request, CancellationToken); return TypedResults.NoContent(); }));
+
         var otel = Api.MapGroup("/admin/integrations/otel")
             .AddEndpointFilter(new SignedActorFilter(Security, ownerOnly: true))
             .AddEndpointFilter(new IntegrationAdministratorFilter(Configuration));

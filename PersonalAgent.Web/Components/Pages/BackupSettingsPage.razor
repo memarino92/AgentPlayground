@@ -1,0 +1,87 @@
+@using PersonalAgent.Integrations
+@inject PersonalAgent.Web.Services.PersonalAgentClient ApiClient
+@implements IAsyncDisposable
+
+<div class="settings-page">
+    <h2>Database backups</h2>
+    <p>The Railway backup job checks these settings each day. Once enabled, it uploads a database dump to SFTP every selected number of days. The SSH host key fingerprint is required.</p>
+    @if (Error is not null) { <p role="alert">@Error</p> }
+    @if (Notice is not null) { <p role="status">@Notice</p> }
+    @if (Settings is null)
+    {
+        <p>Loading backup settings…</p>
+    }
+    else
+    {
+        <EditForm Model="Settings" OnSubmit="SaveAsync">
+            <fieldset disabled="@Busy">
+                <label><input type="checkbox" @bind="Settings.Enabled" /> Enable SFTP backups</label>
+                <label>SFTP host <input type="text" maxlength="255" @bind="Settings.Host" /></label>
+                <label>Port <input type="number" min="1" max="65535" @bind="Settings.Port" /></label>
+                <label>Username <input type="text" maxlength="128" @bind="Settings.Username" /></label>
+                <label>Password <input type="password" autocomplete="new-password" maxlength="4096" @bind="Settings.Password" placeholder="Leave blank to keep saved password" /></label>
+                <label>SSH host key SHA-256 fingerprint <input type="text" maxlength="52" @bind="Settings.HostKeySha256" placeholder="SHA256:base64 fingerprint" /></label>
+                <label>Remote directory <input type="text" maxlength="512" @bind="Settings.Directory" /></label>
+                <label>Backup every <input type="number" min="1" max="365" @bind="Settings.IntervalDays" /> days</label>
+                <button type="submit">Save backup settings</button>
+            </fieldset>
+        </EditForm>
+        <p>Password saved: @(Settings.HasPassword ? "Yes" : "No")</p>
+    }
+</div>
+
+@code {
+    private readonly CancellationTokenSource Lifetime = new();
+    private BackupForm? Settings;
+    private bool Busy;
+    private string? Error;
+    private string? Notice;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var saved = await ApiClient.GetBackupSettingsAsync(Lifetime.Token);
+            Settings = new(saved.Enabled, saved.Host, saved.Port, saved.Username, "", saved.HasPassword,
+                saved.HostKeySha256, saved.Directory, saved.IntervalDays);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested) { }
+        catch (HttpRequestException) { Error = "Backup settings could not be loaded."; }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Busy || Settings is null) return;
+        Busy = true;
+        Error = Notice = null;
+        try
+        {
+            await ApiClient.SaveBackupSettingsAsync(new(Settings.Enabled, Settings.Host, Settings.Port, Settings.Username,
+                Settings.Password.Length == 0 ? null : Settings.Password, Settings.HostKeySha256, Settings.Directory, Settings.IntervalDays), Lifetime.Token);
+            Settings.Password = "";
+            await LoadAsync();
+            Notice = "Saved. The backup job reads these settings on its next daily run.";
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested) { }
+        catch (HttpRequestException) { Error = "Backup settings were not saved. Check the host, directory, interval, and SSH host key fingerprint."; }
+        finally { Busy = false; }
+    }
+
+    public async ValueTask DisposeAsync() { await Lifetime.CancelAsync(); Lifetime.Dispose(); }
+
+    private sealed class BackupForm(bool Enabled, string Host, int Port, string Username, string Password,
+        bool HasPassword, string HostKeySha256, string Directory, int IntervalDays)
+    {
+        public bool Enabled { get; set; } = Enabled;
+        public string Host { get; set; } = Host;
+        public int Port { get; set; } = Port;
+        public string Username { get; set; } = Username;
+        public string Password { get; set; } = Password;
+        public bool HasPassword { get; set; } = HasPassword;
+        public string HostKeySha256 { get; set; } = HostKeySha256;
+        public string Directory { get; set; } = Directory;
+        public int IntervalDays { get; set; } = IntervalDays;
+    }
+}
