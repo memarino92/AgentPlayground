@@ -2,7 +2,8 @@ param(
     [string]$ProjectId,
     [string]$EnvironmentName = "production",
     [string]$EnvFilePath = ".env.railway",
-    [switch]$IncludeAutomationRunner
+    [switch]$IncludeAutomationRunner,
+    [switch]$IncludeBackup
 )
 
 Set-StrictMode -Version Latest
@@ -49,6 +50,7 @@ if ($LASTEXITCODE -ne 0)
 
 $deploymentServices = @("personalagent-api", "personalagent-web", "personalagent-worker")
 if ($IncludeAutomationRunner) { $deploymentServices += "personalagent-automation-runner" }
+if ($IncludeBackup) { $deploymentServices += "personalagent-backup" }
 foreach ($service in $deploymentServices)
 {
     Write-Status "Deploying $service..."

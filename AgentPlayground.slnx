@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="PersonalAgent.Backup/PersonalAgent.Backup.csproj" />
   <Project Path="PersonalAgent.AutomationRunner/PersonalAgent.AutomationRunner.csproj" />
   <Project Path="PersonalAgent.AutomationRunner.Tests/PersonalAgent.AutomationRunner.Tests.csproj" />
   <Project Path="PersonalAgent.Integrations/PersonalAgent.Integrations.csproj" />

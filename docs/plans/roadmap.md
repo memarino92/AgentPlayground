@@ -74,7 +74,7 @@ Validation: 53 Web and 218 API tests pass. Synthetic browser checks cover single
 
 ## 1. Reproducible local data and proven recovery — in progress
 
-**Observed:** `infrastructure/backup/backup.sh` uploads custom-format dumps. Snapshot/restore helpers and a synthetic full-stack local environment are implemented; a production-archive application recovery rehearsal remains outstanding. Encrypted config, push tokens, staged audio, and SQL transport share the database.
+**Observed:** `infrastructure/backup/backup.sh` uploads custom-format dumps. An owner-configured, one-shot SFTP cron job is deployed disabled for offsite logical dumps; live upload verification awaits destination configuration. Snapshot/restore helpers and a synthetic full-stack local environment are implemented; a production-archive application recovery rehearsal remains outstanding. Encrypted config, push tokens, staged audio, and SQL transport share the database.
 
 **Deliver:** snapshot and restore helpers with named source/target settings, exit-code checks, checksums, an immutable manifest, an empty local target, and local-target guards. Separate full recovery from development sanitization. Use local configuration and a local encryption key; create fresh transport infrastructure before starting services. Add a synthetic seed for development without production access. Fix Compose and examples against the seeded startup contract.
 

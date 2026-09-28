@@ -361,6 +361,20 @@ internal partial class PersonalAgentClient : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task<BackupSettingsResponse> GetBackupSettingsAsync(CancellationToken CancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Get, "/api/admin/settings/backup", cancellationToken: CancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<BackupSettingsResponse>(JsonOptions, CancellationToken)
+            ?? throw new InvalidOperationException("No backup settings response was returned.");
+    }
+
+    public async Task SaveBackupSettingsAsync(SaveBackupSettingsRequest Request, CancellationToken CancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Put, "/api/admin/settings/backup", JsonContent.Create(Request, options: JsonOptions), CancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task SaveOpenRouterCredentialAsync(SaveProviderCredentialRequest Request, CancellationToken CancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Put, "/api/admin/settings/providers/openrouter",

@@ -14,6 +14,7 @@
         <a class="@(CurrentSection == "automation" ? "active" : null)" href="/admin/settings?section=automation">Automation runner</a>
         <a class="@(CurrentSection == "coding" ? "active" : null)" href="/admin/settings?section=coding">Platform coding</a>
         <a class="@(CurrentSection == "database" ? "active" : null)" href="/admin/settings?section=database">Database settings</a>
+        <a class="@(CurrentSection == "backup" ? "active" : null)" href="/admin/settings?section=backup">Database backups</a>
         <a class="@(CurrentSection == "integrations" ? "active" : null)" href="/admin/settings?section=integrations">Integrations and coach access</a>
     </nav>
     @switch (CurrentSection)
@@ -23,6 +24,7 @@
         case "providers": <ProviderSettings /> break;
         case "automation": <AutomationRuntimeSettingsPage /> break;
         case "coding": <CodingSettingsPage /> break;
+        case "backup": <BackupSettingsPage /> break;
         case "integrations": <IntegrationsAdmin /> break;
         default: <DatabaseSettings /> break;
     }
