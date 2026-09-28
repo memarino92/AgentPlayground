@@ -1,0 +1,7 @@
+.backup-settings { max-width: 820px; }
+.backup-settings__endpoint { display: grid; grid-template-columns: minmax(0, 2fr) minmax(7rem, .7fr); gap: 1.25rem; }
+.backup-settings__interval { max-width: 12rem; }
+@media (max-width: 600px) {
+    .backup-settings__endpoint { grid-template-columns: 1fr; }
+    .backup-settings__interval { max-width: none; }
+}
