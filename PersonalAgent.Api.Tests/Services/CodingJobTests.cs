@@ -20,9 +20,19 @@ public sealed class CodingJobTests
     [InlineData(1, "")]
     [InlineData(-1, "2026-09-28T01:00:00Z")]
     [InlineData(1, "yesterday")]
+    [InlineData(1, "2026-09-28T01:00:00")]
+    [InlineData(1, "2026-02-30T01:00:00Z")]
     public void RulesetVerificationRequiresAnExactIdAndTimestamp(long Id, string UpdatedAt) =>
         FluentActions.Invoking(() => CodingJobStore.ValidateSettings(new()
             { VerifiedRulesetId = Id, VerifiedRulesetUpdatedAt = UpdatedAt })).Should().Throw<ArgumentException>();
+
+    [Theory]
+    [InlineData("2026-09-28T01:00:00Z")]
+    [InlineData("2026-09-28T01:00:00.841Z")]
+    [InlineData("2026-09-27T21:00:00.841-04:00")]
+    public void RulesetVerificationPreservesGitHubTimestampFormats(string UpdatedAt) =>
+        FluentActions.Invoking(() => CodingJobStore.ValidateSettings(new()
+            { VerifiedRulesetId = 1, VerifiedRulesetUpdatedAt = UpdatedAt })).Should().NotThrow();
 
     [Fact]
     public void ModelGatewayRemovesPremiumRoutingAndCapsOutput()

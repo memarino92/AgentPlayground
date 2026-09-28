@@ -60,14 +60,14 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
         await FluentActions.Awaiting(() => Publisher.PrepareAsync(Settings, default)).Should().ThrowAsync<InvalidOperationException>();
         Handler.Approvals = 1; Handler.HideBypass = true;
         await FluentActions.Awaiting(() => Publisher.PrepareAsync(Settings, default)).Should().ThrowAsync<InvalidOperationException>();
-        Settings = Settings with { VerifiedRulesetId = 1, VerifiedRulesetUpdatedAt = Handler.UpdatedAt };
+        Settings = Settings with { VerifiedRulesetId = 1, VerifiedRulesetUpdatedAt = "2026-09-27T21:00:00.841-04:00" };
         Current = await Store.SettingsAsync(default);
         await Store.SaveSettingsAsync(new(Current.View.Revision, Settings), default);
         (await Publisher.PrepareAsync(Settings, default)).Should().Be(Sha);
         // Publication checks the same live policy; a changed ruleset cannot use old attestation.
         var VerifiedJob = Job with { Settings = Settings };
         (await Publisher.PublishAsync(VerifiedJob, default)).Should().Contain("/pull/1");
-        Handler.UpdatedAt = "2026-09-28T01:00:01Z";
+        Handler.UpdatedAt = "2026-09-28T01:00:00.842Z";
         await FluentActions.Awaiting(() => Publisher.PublishAsync(VerifiedJob, default)).Should().ThrowAsync<InvalidOperationException>();
         Handler.UpdatedAt = Settings.VerifiedRulesetUpdatedAt;
         Handler.HideBypass = false; Handler.AppBypass = true;
@@ -91,7 +91,7 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
         public bool Protected = true;
         public bool UseRuleset, AppBypass;
         public bool HideBypass;
-        public string UpdatedAt = "2026-09-28T01:00:00Z";
+        public string UpdatedAt = "2026-09-28T01:00:00.841Z";
         public int Approvals = 1;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Token)
         {
