@@ -84,6 +84,10 @@ public sealed class CodingJobStore(IntegrationDatabase Database)
         var Key = EditSecret(Request.OpenRouterKeyAction, Request.OpenRouterKey, Current.Secrets.OpenRouterKey);
         var GitHub = EditSecret(Request.GitHubPrivateKeyAction, Request.GitHubPrivateKey, Current.Secrets.GitHubPrivateKey);
         ValidateSettings(Request.Settings);
+        var Previous = Current.View.Settings;
+        if (Request.Settings.VerifiedRulesetId != 0 && (Previous.Repository != Request.Settings.Repository
+            || Previous.GitHubAppId != Request.Settings.GitHubAppId || Previous.InstallationId != Request.Settings.InstallationId))
+            throw new ArgumentException("Save repository and App identity with the ruleset verification cleared before verifying the new identity.");
         if (GitHub.Length > 0)
         {
             using var Rsa = RSA.Create();
@@ -110,6 +114,11 @@ public sealed class CodingJobStore(IntegrationDatabase Database)
             || !Regex.IsMatch(S.TestProject ?? "", @"\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.csproj\z")
             || (S.TestProject ?? "").Contains("..", StringComparison.Ordinal) || S.TestFilter is null || S.TestFilter.Length > 500)
             throw new ArgumentException("Use owner/repository, main, 5–30 minutes, 1–12 model requests covered by a budget of $0.40/request (at most $5), and a repository test project.");
+        if (S.VerifiedRulesetId < 0 || S.VerifiedRulesetUpdatedAt is null
+            || (S.VerifiedRulesetId == 0 ? S.VerifiedRulesetUpdatedAt.Length != 0
+                : !DateTimeOffset.TryParseExact(S.VerifiedRulesetUpdatedAt, "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                    System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out _)))
+            throw new ArgumentException("Ruleset verification requires a positive ID and the exact GitHub updated_at UTC timestamp, or both fields cleared.");
         if (S.Enabled && (S.GitHubAppId <= 0 || S.InstallationId <= 0
             || !Regex.IsMatch(S.Checkpoint ?? "", @"\A[A-Za-z0-9_.-]{1,128}\z")
             || !Regex.IsMatch(S.ImageId ?? "", @"\Asha256:[a-f0-9]{64}\z")))
