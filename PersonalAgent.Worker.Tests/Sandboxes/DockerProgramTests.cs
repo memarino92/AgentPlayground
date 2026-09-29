@@ -5,7 +5,9 @@ using FluentAssertions;
 using PersonalAgent.Contracts.Automations;
 using Xunit;
 
-namespace PersonalAgent.AutomationRunner.Tests;
+using PersonalAgent.Worker.Sandboxes;
+
+namespace PersonalAgent.Worker.Tests.Sandboxes;
 
 public sealed class DockerProgramTests
 {

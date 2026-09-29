@@ -6,11 +6,11 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using PersonalAgent.Contracts.Automations;
 
-namespace PersonalAgent.AutomationRunner;
+namespace PersonalAgent.Worker.Sandboxes;
 
 public sealed record ProgramResult(string Output, AutomationProgramEvidence Evidence);
 
-/// <summary>Only this dedicated host has Docker access. Source/input travel over stdin, never shell arguments or host mounts.</summary>
+/// <summary>The guarded local synthetic host uses Docker. Source/input travel over stdin, never shell arguments or host mounts.</summary>
 public sealed class DockerProgramExecutor : IProgramExecutor
 {
     public Task<ProgramResult> ExecuteAsync(ExecuteAutomationProgram Message, CancellationToken Token)

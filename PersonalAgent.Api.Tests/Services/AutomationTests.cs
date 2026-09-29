@@ -242,6 +242,46 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
     }
 
     [Fact]
+    public async Task OneShotSandbox_IsDurableAndIdempotentWithoutASchedule()
+    {
+        var Grants = new Dictionary<string, bool>
+        {
+            [AutomationPrograms.PermissionKey] = true,
+            [AutomationPrograms.RunSandboxPermissionKey] = true
+        };
+        using var Host = await CreateHostAsync(Grants: Grants);
+        var RequestKey = Guid.NewGuid();
+        var Source = """{"steps":[{"id":"program","action":"csharp","arguments":{"source":"Console.Write(7);","input":""}}]}""";
+        Guid RunId;
+        var Tool = new AutomationTools(Host.Services.GetRequiredService<IServiceScopeFactory>());
+        using var Started = JsonDocument.Parse(await Tool.RunSandboxAsync(Owner, "One time calculation", "Console.Write(7);", "",
+            RequestKey.ToString(), default));
+        Started.RootElement.GetProperty("status").GetString().Should().Be("Queued");
+        Started.RootElement.GetProperty("automationId").GetGuid().Should().Be(RequestKey);
+        RunId = Started.RootElement.GetProperty("runId").GetGuid();
+        await using (var Scope = Host.Services.CreateAsyncScope())
+        {
+            var Service = Scope.ServiceProvider.GetRequiredService<AutomationService>();
+            var Repeated = await Service.StartOneShotAsync(Owner, RequestKey, "One time calculation", Source, default);
+            Repeated.RunId.Should().Be(RunId);
+            Repeated.Automation.NextRunAt.Should().BeNull();
+            await FluentActions.Awaiting(() => Service.StartOneShotAsync(Owner, RequestKey, "Changed", Source.Replace("7", "8"), default))
+                .Should().ThrowAsync<InvalidOperationException>();
+            (await Scope.ServiceProvider.GetRequiredService<AutomationDbContext>().Runs.CountAsync(R => R.AutomationId == RequestKey)).Should().Be(1);
+            Grants[AutomationPrograms.RunSandboxPermissionKey] = false;
+            await FluentActions.Awaiting(() => Service.StartOneShotAsync(Owner, Guid.NewGuid(), "Denied", Source, default))
+                .Should().ThrowAsync<UnauthorizedAccessException>();
+        }
+        await Host.StartAsync();
+        try
+        {
+            await UntilAsync(() => Task.FromResult(Host.Services.GetRequiredService<ProgramCapture>().Items.Count == 1));
+            Host.Services.GetRequiredService<ProgramCapture>().Items.Single().RunId.Should().Be(RunId);
+        }
+        finally { await Host.StopAsync(); }
+    }
+
+    [Fact]
     public async Task CSharpIsOptIn_DispatchesLiteralSource_AndRevocationBlocksResultCommit()
     {
         var Grants = new Dictionary<string, bool>();

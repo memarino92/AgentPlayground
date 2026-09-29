@@ -49,6 +49,45 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
         return Summary(Definition);
     }
 
+    public async Task<(AutomationSummary Automation, Guid RunId)> StartOneShotAsync(AgentAccessContext Access, Guid RequestKey,
+        string Name, string Source, CancellationToken Token)
+    {
+        Access = await Authorization.RequireAsync(Access, Token);
+        if (Access.Role != AgentRoles.Owner || !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.RunSandboxPermissionKey, Token))
+            throw new UnauthorizedAccessException("Current owner access and sandbox-run permission are required.");
+        if (RequestKey == Guid.Empty) throw new ArgumentException("A nonempty UUID requestKey is required.");
+        if (string.IsNullOrWhiteSpace(Name) || Name.Length > 160) throw new ArgumentException("Name must contain 1–160 characters.");
+        var Recipe = Recipes.Parse(Source);
+        if (Recipe.Steps.Count != 1 || Recipe.Steps[0].Action != "csharp") throw new ArgumentException("One-shot sandbox jobs require one C# step.");
+        await Recipes.ValidateToolsAsync(Recipe, Services, Access, Permissions, Token);
+        var Hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Source)));
+        await using var Transaction = await Db.Database.BeginTransactionAsync(Token);
+        await Db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({BitConverter.ToInt64(RequestKey.ToByteArray())})", Token);
+        var Existing = await LockedAsync(RequestKey, Token);
+        if (Existing is not null)
+        {
+            var Version = await Db.Versions.SingleAsync(V => V.AutomationId == RequestKey && V.Version == 1, Token);
+            if (Existing.ActorId != Access.ActorId || Existing.SubjectProfileId != Access.SubjectProfileId || Version.Hash != Hash)
+                throw new InvalidOperationException("requestKey already identifies a different sandbox job.");
+            var ExistingRun = await Db.Runs.SingleAsync(R => R.AutomationId == RequestKey, Token);
+            return (Summary(Existing), ExistingRun.CorrelationId);
+        }
+        var Now = Clock.GetUtcNow();
+        var Definition = new AutomationDefinition { Id = RequestKey, Name = Name.Trim(), ActorId = Access.ActorId,
+            ActorEmail = Access.Email, SubjectProfileId = Access.SubjectProfileId, SourceSessionId = Access.SessionId,
+            Version = 1, Status = "Active", CreatedAt = Now, NextRunAt = null };
+        var Run = new AutomationRun { CorrelationId = Guid.NewGuid(), AutomationId = RequestKey, Version = 1, ScheduledAt = Now };
+        Db.Automations.Add(Definition);
+        Db.Versions.Add(new() { AutomationId = RequestKey, Version = 1, Source = Source, Hash = Hash, CreatedAt = Now });
+        Db.Runs.Add(Run);
+        Db.Steps.Add(new() { RunId = Run.CorrelationId, Index = 0, StepId = Recipe.Steps[0].Id, Action = "csharp" });
+        await (await Services.GetRequiredService<ISendEndpointProvider>().GetSendEndpoint(AutomationRegistration.SagaAddress))
+            .Send(new StartAutomation(Run.CorrelationId), Token);
+        await Db.SaveChangesAsync(Token);
+        await Transaction.CommitAsync(Token);
+        return (Summary(Definition), Run.CorrelationId);
+    }
+
     public async Task<IReadOnlyList<AutomationSummary>> ListAsync(AgentAccessContext Access, int Offset, CancellationToken Token)
     {
         Access = await Authorization.RequireAsync(Access, Token, false);

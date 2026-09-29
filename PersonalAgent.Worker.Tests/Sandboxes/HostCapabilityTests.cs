@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Xunit;
 
-namespace PersonalAgent.AutomationRunner.Tests;
+using PersonalAgent.Worker.Sandboxes;
+
+namespace PersonalAgent.Worker.Tests.Sandboxes;
 
 public sealed class HostCapabilityTests
 {

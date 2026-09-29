@@ -9,7 +9,9 @@ using PersonalAgent.Integrations;
 using Testcontainers.PostgreSql;
 using Xunit;
 
-namespace PersonalAgent.AutomationRunner.Tests;
+using PersonalAgent.Worker.Sandboxes;
+
+namespace PersonalAgent.Worker.Tests.Sandboxes;
 
 public sealed class RailwayProgramTests : IAsyncLifetime
 {

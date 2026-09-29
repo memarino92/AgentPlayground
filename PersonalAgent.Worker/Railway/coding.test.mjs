@@ -7,7 +7,7 @@ test('coding preparation loads the repository Dockerfile and immutable workload 
   const files = new Map(await loadCodingPreparationFiles());
   assert.equal(files.size, 2);
   assert.ok(files.get('Dockerfile.coding-sandbox').includes('opencode-ai@1.18.32'));
-  assert.ok(files.get('PersonalAgent.AutomationRunner/Railway/workload.mjs').includes("phase === 'export'"));
+  assert.ok(files.get('PersonalAgent.Worker/Railway/workload.mjs').includes("phase === 'export'"));
 });
 
 const request = { operation: 'coding-execute', imageId: 'sha256:' + 'a'.repeat(64), repository: 'owner/repo',

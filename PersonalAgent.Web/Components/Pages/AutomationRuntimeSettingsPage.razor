@@ -1,6 +1,6 @@
 <section class="settings-editor">
     <div class="settings-editor__heading">
-        <div><h2>Automation runner</h2><p>Run generated C# programs in disposable Railway sandboxes with Internet access.</p></div>
+        <div><h2>Railway sandboxes</h2><p>Run generated C# programs in disposable Railway sandboxes with Internet access.</p></div>
         <button class="settings-editor__secondary" disabled="@Busy" @onclick="LoadAsync">Reload settings</button>
     </div>
     @if (Error is not null) { <p role="alert" class="settings-editor__error">@Error</p> }

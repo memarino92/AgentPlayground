@@ -1,7 +1,7 @@
 <section class="settings-editor">
     <h2>Platform coding</h2>
     <p>Run OpenCode with OpenRouter to propose source changes in draft PRs. You review and merge them.</p>
-    <p>Uses the Railway connection from Automation runner with a separate coding checkpoint. Model calls are capped at $0.40 reserved per request and $5 per job; Railway compute is separate.</p>
+    <p>Uses the shared Railway sandbox connection with a separate coding checkpoint. Model calls are capped at $0.40 reserved per request and $5 per job; Railway compute is separate.</p>
     @if (Error is not null) { <p role="alert">@Error</p> }
     @if (Notice is not null) { <p role="status">@Notice</p> }
     <button type="button" disabled="@Busy" @onclick="LoadAsync">Reload settings</button>

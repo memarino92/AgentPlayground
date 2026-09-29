@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using PersonalAgent.Worker.Configuration;
 using PersonalAgent.Worker.Consumers;
 using PersonalAgent.Worker.Services;
+using PersonalAgent.Worker.Sandboxes;
 
 var builder = Host.CreateApplicationBuilder(args);
 var syntheticDemo = SyntheticEnvironment.IsEnabled(builder.Configuration, builder.Environment);
@@ -38,6 +39,26 @@ builder.Services.AddScoped<ITranscriptionService, ApiTranscriptionService>();
 builder.Services.AddScoped<CoachTranscriptProcessingService>();
 builder.Services.AddHostedService<CoachCallCleanupService>();
 builder.Services.AddHostedService<CoachCallOutboxDispatcher>();
+var sandboxProgramsEnabled = !syntheticDemo || builder.Configuration.GetValue<bool>("SyntheticDemo:AutomationProgramsEnabled");
+if (sandboxProgramsEnabled)
+{
+    builder.Services.AddSingleton<AutomationRuntimeStore>();
+    builder.Services.AddSingleton<AutomationSandboxStore>();
+    builder.Services.AddSingleton<CodingJobStore>();
+    if (syntheticDemo)
+    {
+        builder.Services.AddSingleton<DockerProgramExecutor>();
+        builder.Services.AddSingleton<IProgramExecutor>(S => S.GetRequiredService<DockerProgramExecutor>());
+        builder.Services.AddHostedService<SandboxStartup>();
+    }
+    else
+    {
+        builder.Services.AddSingleton<IRailwaySandboxClient, RailwaySandboxClient>();
+        builder.Services.AddSingleton<IProgramExecutor, RailwayProgramExecutor>();
+        builder.Services.AddHostedService<SandboxReconciler>();
+        builder.Services.AddHostedService<CodingSandboxReconciler>();
+    }
+}
 
 var workJournalConfigValidation = WorkerExtensions.ValidateWorkJournalSyncConfiguration(builder.Configuration);
 var workJournalSyncEnabled = !syntheticDemo && workJournalConfigValidation.IsValid;
@@ -65,6 +86,12 @@ builder.Services.AddPostgresMigrationHostedService(options =>
 });
 builder.Services.AddMassTransit(x =>
 {
+    if (sandboxProgramsEnabled)
+    {
+        x.AddConsumer<ProgramConsumer>().Endpoint(e => { e.Name = PersonalAgent.Contracts.Automations.AutomationPrograms.Queue; e.ConcurrentMessageLimit = 2; });
+        if (!syntheticDemo)
+            x.AddConsumer<CodingJobConsumer>().Endpoint(e => { e.Name = PersonalAgent.Contracts.Coding.CodingJobs.Queue; e.ConcurrentMessageLimit = 1; });
+    }
     x.AddRequestClient<GenerateEmbeddingsRequest>();
     x.AddRequestClient<TranscriptionRequest>(RequestTimeout.After(m: 3));
 

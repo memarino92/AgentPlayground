@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Remove="Railway/**" />
+    <Content Include="Railway/bridge.mjs;Railway/coding.mjs;Railway/package.json;Railway/package-lock.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <ProjectReference Include="..\PersonalAgent.Contracts\PersonalAgent.Contracts.csproj" />
     <ProjectReference Include="..\PersonalAgent.Integrations\PersonalAgent.Integrations.csproj" />
   </ItemGroup>
