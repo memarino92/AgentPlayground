@@ -44,11 +44,11 @@ public partial class AutomationRuntimeSettingsPage : IAsyncDisposable
                 HttpStatusCode.Conflict => "Settings changed in another session. Reload before saving.",
                 HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed => "Deploy the matching API revision to use runner setup.",
                 HttpStatusCode.BadRequest => "Check the environment UUID, checkpoint, image SHA-256, HTTPS origin, exact package versions and token action. Disable execution before clearing its token.",
-                _ => "Runner settings are unavailable. Check the API and encrypted database configuration."
+                _ => "Railway sandbox settings are unavailable. Check the API and encrypted database configuration."
             };
             if (E.StatusCode == HttpStatusCode.Forbidden) { Loaded = false; Model = new(); }
         }
-        catch (Exception) { Error = "Runner settings are unavailable. Check the API and retry."; }
+        catch (Exception) { Error = "Railway sandbox settings are unavailable. Check the API and retry."; }
         finally { Model.Token = ""; Busy = false; }
     }
     public async ValueTask DisposeAsync() { await Lifetime.CancelAsync(); Lifetime.Dispose(); }

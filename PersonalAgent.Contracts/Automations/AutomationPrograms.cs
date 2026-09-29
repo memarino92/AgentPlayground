@@ -9,6 +9,7 @@ public sealed record AutomationProgramEvidence(string SourceHash, string ImageId
 public static class AutomationPrograms
 {
     public const string PermissionKey = "Local:csharp_automation";
+    public const string RunSandboxPermissionKey = "Local:run_railway_sandbox";
     public const string Queue = "personal-agent-automation-programs";
     public const string SandboxImage = "agentplayground-csharp-sandbox:1";
     public const int MaxSource = 24000;

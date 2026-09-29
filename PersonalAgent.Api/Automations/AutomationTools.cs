@@ -7,6 +7,20 @@ namespace PersonalAgent.Api.Automations;
 // Chat tools are singleton-bound; create a scope per operation for the EF unit of work and bus outbox.
 internal sealed class AutomationTools(IServiceScopeFactory Scopes)
 {
+    public Task<string> RunSandboxAsync(AgentAccessContext Access, string Name, string Source, string Input, string RequestKey,
+        CancellationToken Token, string[]? Packages = null, string? PackageLock = null, string[]? ReadTools = null) => InvokeAsync(async S =>
+        {
+            if (!Guid.TryParse(RequestKey, out var Id)) throw new ArgumentException("requestKey must be a stable UUID.");
+            var Arguments = new Dictionary<string, object?> { ["source"] = Source, ["input"] = Input };
+            if (Packages is { Length: > 0 }) Arguments["packages"] = Packages;
+            if (PackageLock is not null) Arguments["packageLock"] = PackageLock;
+            if (ReadTools is { Length: > 0 }) Arguments["tools"] = ReadTools;
+            var Recipe = JsonSerializer.Serialize(new { steps = new[] { new { id = "program", action = "csharp", arguments = Arguments } } });
+            var (Automation, RunId) = await S.StartOneShotAsync(Access, Id, Name, Recipe, Token);
+            return new { automationId = Automation.Id, runId = RunId, status = "Queued",
+                dashboard = $"/automations?automationId={Automation.Id}&profileId={Uri.EscapeDataString(Automation.SubjectProfileId)}",
+                message = "Queued. Inspect the run for output, diagnostics and sandbox cleanup." };
+        });
     public Task<string> SaveAsync(AgentAccessContext Access, string Name, string Source, Guid? AutomationId, int? ExpectedVersion,
         string? ExecuteAt, string? RepeatEvery, CancellationToken Token) => InvokeAsync(async S =>
         {

@@ -6,7 +6,7 @@ using MassTransit;
 using PersonalAgent.Contracts.Coding;
 using PersonalAgent.Integrations;
 
-namespace PersonalAgent.AutomationRunner;
+namespace PersonalAgent.Worker.Sandboxes;
 
 internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeStore Runtime, IRailwaySandboxClient Client,
     ILogger<CodingJobConsumer> Logger) : IConsumer<ExecuteCodingJob>

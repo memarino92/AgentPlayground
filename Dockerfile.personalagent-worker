@@ -1,3 +1,10 @@
+FROM node:24-bookworm-slim AS railway
+WORKDIR /railway
+COPY PersonalAgent.Worker/Railway/package*.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
+FROM docker:28-cli AS docker
+
 FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.1 AS build
 WORKDIR /src
 
@@ -17,6 +24,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:11.0.0-rc.1 AS final
 WORKDIR /app
 ENV DOTNET_ENVIRONMENT=Production
 
+COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=railway /usr/local/bin/node /usr/local/bin/node
 COPY --from=build /app/publish .
+COPY --from=railway /railway/node_modules ./Railway/node_modules
 
 ENTRYPOINT ["dotnet", "PersonalAgent.Worker.dll"]

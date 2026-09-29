@@ -83,6 +83,7 @@ public class AgentToolRegistryTests
 
         tools.Select(Tool => Tool.Descriptor.Key).Should().BeEquivalentTo(catalog.Tools.Where(Tool => Tool.OwnerDefault).Select(Tool => Tool.Key));
         catalog.Tools.Single(Tool => Tool.Key == "Local:csharp_automation").OwnerDefault.Should().BeFalse();
+        catalog.Tools.Single(Tool => Tool.Key == "Local:run_railway_sandbox").OwnerDefault.Should().BeFalse();
         tools.Should().HaveCount(16);
         foreach (var tool in tools)
         {
@@ -94,7 +95,7 @@ public class AgentToolRegistryTests
         catalog.Tools.Where(Tool => Tool.HasSideEffects).Select(Tool => Tool.Key).Should().BeEquivalentTo(
             [AgentToolKeys.PublishMobileNotification, AgentToolKeys.SyncWorkJournal, AgentToolKeys.ScheduleNotification, AgentToolKeys.ScheduleAgentTask,
                 AgentToolKeys.UpdateScheduledJob, AgentToolKeys.CancelScheduledJob, "Local:save_automation", "Local:control_automation",
-                "Local:start_coding_job", "Local:inspect_coding_job"]);
+                "Local:start_coding_job", "Local:inspect_coding_job", "Local:run_railway_sandbox"]);
     }
 
     [Fact]

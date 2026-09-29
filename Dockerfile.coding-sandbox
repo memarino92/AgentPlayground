@@ -9,6 +9,6 @@ COPY --from=tools /usr/local/bin/node /usr/local/bin/node
 COPY --from=tools /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/opencode-ai/bin/opencode.exe /usr/local/bin/opencode \
     && opencode --version
-COPY PersonalAgent.AutomationRunner/Railway/workload.mjs /opt/coding/workload.mjs
+COPY PersonalAgent.Worker/Railway/workload.mjs /opt/coding/workload.mjs
 WORKDIR /work
 ENTRYPOINT ["node", "/opt/coding/workload.mjs"]

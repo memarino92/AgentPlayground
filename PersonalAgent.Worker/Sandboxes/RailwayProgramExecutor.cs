@@ -5,7 +5,7 @@ using System.Text.Json;
 using PersonalAgent.Contracts.Automations;
 using PersonalAgent.Integrations;
 
-namespace PersonalAgent.AutomationRunner;
+namespace PersonalAgent.Worker.Sandboxes;
 
 public interface IProgramExecutor
 {

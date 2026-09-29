@@ -21,7 +21,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Navigation and playback](runbooks/navigation.md): query state, draft chats, saved models and shared recording views.
 - [Scheduled jobs](runbooks/scheduled-jobs.md): authorization, dashboard, cancellation and conservative recovery.
 - [Agent automations](runbooks/automations.md): chat-authored recipes, immutable versions, saga execution, schedules and operational visibility.
-- [C# automation programs](runbooks/automation-programs.md): opt-in isolated compiler/runner deployment, resource limits, diagnostics and verification.
+- [C# automation programs](runbooks/automation-programs.md): Worker-owned Railway sandbox execution, resource limits, diagnostics and verification.
 - [Journal sync](runbooks/journal-sync.md): Git blob checkpoints, retries, and reprocessing unchanged files.
 - [Coaching retrieval evaluation](runbooks/coach-retrieval-evaluation.md): synthetic regression baseline and live-model evaluation limits.
 - [Observability](runbooks/observability.md): service tracing, OpenInference, Sentry correlation and OTLP setup.
@@ -72,6 +72,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0034: Agent automations](decisions/0034-agent-automations.md) | Accepted; recipe slice implemented | EF Core saga/outbox transactions, agent authoring and automation dashboard |
 | [0035: Isolated automation programs](decisions/0035-isolated-automation-programs.md) | Accepted; implemented | Single-source C# computation in disposable bounded containers |
 | [0036: Railway automation sandboxes](decisions/0036-railway-automation-sandboxes.md) | Accepted; live provider verification pending | Internet-enabled disposable VMs, durable cleanup, scoped read tools and optional Jev review |
+| [0040: Worker-owned Railway sandboxes](decisions/0040-worker-owned-railway-sandboxes.md) | Accepted; live provider verification pending | Consolidate sandbox lifecycle in Worker and expose one-time agent jobs |
 | [0037: Coach call saga and executive summaries](decisions/0037-coach-call-saga-and-executive-summary.md) | Accepted; implemented | Persist call workflow transitions and summarize new and historical calls |
 | [0033: Recurring scheduled jobs](decisions/0033-recurring-scheduled-jobs.md) | Accepted; implemented | Add agent-created fixed-interval series with durable run history and dashboard visibility |
 

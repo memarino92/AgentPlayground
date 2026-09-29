@@ -3,7 +3,7 @@ using MassTransit;
 using PersonalAgent.Contracts.Automations;
 using PersonalAgent.Integrations;
 
-namespace PersonalAgent.AutomationRunner;
+namespace PersonalAgent.Worker.Sandboxes;
 
 internal sealed class ProgramConsumer(IProgramExecutor Executor, ILogger<ProgramConsumer> Logger) : IConsumer<ExecuteAutomationProgram>
 {

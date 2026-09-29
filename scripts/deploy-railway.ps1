@@ -2,7 +2,6 @@ param(
     [string]$ProjectId,
     [string]$EnvironmentName = "production",
     [string]$EnvFilePath = ".env.railway",
-    [switch]$IncludeAutomationRunner,
     [switch]$IncludeBackup
 )
 
@@ -49,7 +48,6 @@ if ($LASTEXITCODE -ne 0)
 }
 
 $deploymentServices = @("personalagent-api", "personalagent-web", "personalagent-worker")
-if ($IncludeAutomationRunner) { $deploymentServices += "personalagent-automation-runner" }
 if ($IncludeBackup) { $deploymentServices += "personalagent-backup" }
 foreach ($service in $deploymentServices)
 {
