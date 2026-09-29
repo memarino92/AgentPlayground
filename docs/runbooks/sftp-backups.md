@@ -1,6 +1,6 @@
 # SFTP database backups
 
-The owner settings page is **Settings → Database backups**. Enter the SFTP host (without `sftp://`), port, username, password, existing absolute remote directory, and the server's SHA-256 SSH host key fingerprint. The password is encrypted in `app.configuration_settings` and is never returned to the browser. Leaving it blank when editing keeps the stored password. Choose a 1–365 day interval and enable backups.
+The owner settings page is **Settings → Database backups**. Enter the SFTP host (without `sftp://`), port, username, password, absolute remote directory, and the server's SHA-256 SSH host key fingerprint. The job creates missing directories along that path when the SFTP account has permission. The password is encrypted in `app.configuration_settings` and is never returned to the browser. Leaving it blank when editing keeps the stored password. Choose a 1–365 day interval and enable backups.
 
 The backup job is a separate Railway service named `personalagent-backup`, built from `Dockerfile.personalagent-backup` with repository root as build context. Set its cron schedule to `0 3 * * *` (03:00 UTC daily). Set `DATABASE_URL` and `CONFIG_ENCRYPTION_KEY` as Railway references to the same bootstrap values used by API. These two bootstrap values cannot be database-first: the job needs them to read and decrypt its database settings. The service needs outbound access to the SFTP host. No destination credentials belong in Railway variables.
 

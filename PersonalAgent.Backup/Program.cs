@@ -107,6 +107,19 @@ try
             hostKeyMismatch = !e.CanTrust;
         };
         client.Connect();
+        stage = "preparing the SFTP backup directory";
+        var currentDirectory = "";
+        foreach (var segment in directory.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            currentDirectory += "/" + segment;
+            if (!client.Exists(currentDirectory))
+            {
+                client.CreateDirectory(currentDirectory);
+                Console.WriteLine("Created a missing SFTP backup directory.");
+            }
+            if (!client.GetAttributes(currentDirectory).IsDirectory)
+                throw new InvalidOperationException("The SFTP backup path contains a file instead of a directory.");
+        }
         var remote = $"{directory.TrimEnd('/')}/{archiveName}";
         var temporary = remote + ".partial";
         stage = "uploading the database dump";

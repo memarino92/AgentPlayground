@@ -46,7 +46,7 @@
                     <div class="settings-editor__field">
                         <label for="backup-directory">Remote directory</label>
                         <input id="backup-directory" type="text" maxlength="512" spellcheck="false" @bind="Settings.Directory" placeholder="/backups" />
-                        <span class="settings-editor__hint">Use an existing absolute path on the SFTP server.</span>
+                        <span class="settings-editor__hint">Use an absolute path. The job creates missing folders when your account has permission.</span>
                     </div>
                 </div>
                 <div class="settings-editor__group">
