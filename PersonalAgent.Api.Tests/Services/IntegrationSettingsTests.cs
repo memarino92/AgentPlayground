@@ -93,7 +93,7 @@ public sealed class IntegrationSettingsTests
     }
 
     [Fact]
-    public async Task Logger_DoesNotFormatSensitiveState_AndIgnoresSdkLogs()
+    public async Task Logger_PreservesFailureContext_WhenFormatterFails_AndIgnoresSdkLogs()
     {
         var store = new MemoryStore { Revision = new(1, 1, Values()) };
         var factory = new FakeFactory();
@@ -107,10 +107,12 @@ public sealed class IntegrationSettingsTests
         var error = factory.Clients.Single().Errors.Should().ContainSingle().Subject;
         error.ExceptionType.Should().Be(typeof(InvalidOperationException).FullName);
         error.EventId.Should().Be(42);
+        error.Message.Should().Be("private journal");
+        error.ExceptionDetails.Should().Contain("System.InvalidOperationException").And.Contain("[redacted]");
     }
 
     [Fact]
-    public async Task RealSdk_QueuesSanitizedEnvelope_AndFlushesOnReplacement()
+    public async Task RealSdk_QueuesUsefulEnvelope_WithCredentialMasking_AndFlushesOnReplacement()
     {
         var transport = new RecordingTransport();
         var factory = new SentryErrorClientFactory(Options =>
@@ -122,13 +124,53 @@ public sealed class IntegrationSettingsTests
         using var runtime = new IntegrationRuntime(store, factory, new("Api"));
         await runtime.ReloadAsync(default);
         using var provider = new IntegrationLoggingProvider(runtime);
-        provider.CreateLogger("Application.Example").LogError(new Exception("private transcript secret"), "Credential {Key}", "private-key");
+        try { throw new InvalidOperationException("Transcript processing failed at line 12; password=top-secret"); }
+        catch (Exception failure)
+        {
+            provider.CreateLogger("Application.Example").LogError(failure,
+                "Failed processing {FileName} with credential {Key}", "coach-call.wav", "private-key");
+        }
         store.Revision = new(2, 2, IntegrationRegistry.Merge(Values(), new() { ["Environment"] = "staging" }));
         await runtime.ReloadAsync(default);
         var envelope = await transport.Envelope.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        envelope.Should().Contain("Application error (content redacted)").And.Contain("exception_type").And.Contain("production");
-        envelope.Should().NotContain("private transcript").And.NotContain("private-key");
+        envelope.Should().Contain("coach-call.wav").And.Contain("Transcript processing failed at line 12")
+            .And.Contain("exception_type").And.Contain("production").And.Contain("RealSdk_QueuesUsefulEnvelope");
+        envelope.Should().NotContain("private-key").And.NotContain("top-secret");
         runtime.CaptureTest(2).Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Logger_MasksCommonCredentialFormats_AndRetainsStructuredContext()
+    {
+        var store = new MemoryStore { Revision = new(1, 1, Values()) };
+        var factory = new FakeFactory();
+        using var runtime = new IntegrationRuntime(store, factory, new("Worker"));
+        await runtime.ReloadAsync(default);
+        using var provider = new IntegrationLoggingProvider(runtime);
+        provider.CreateLogger("Application.Automation").LogCritical(
+            new InvalidOperationException("Request failed at https://account:pass@example.com with Authorization: Bearer abc123"),
+            "Job {JobId} failed with {ApiKey} and password=secret123", 123, "opaque-key");
+
+        var error = factory.Clients.Single().Errors.Should().ContainSingle().Subject;
+        error.Critical.Should().BeTrue();
+        error.Message.Should().Contain("Job 123 failed").And.NotContain("opaque-key").And.NotContain("secret123");
+        error.Properties!["JobId"].Should().Be("123");
+        error.Properties["ApiKey"].Should().Be("[redacted]");
+        error.ExceptionDetails.Should().Contain("Request failed at https://[redacted]@example.com")
+            .And.NotContain("account:pass").And.NotContain("abc123");
+    }
+
+    [Fact]
+    public void SentryBoundary_MasksCredentials_EvenForDirectCapture()
+    {
+        var report = SentryErrorClient.CreateEvent(new("Application.Direct", 7, "InvalidOperationException", null,
+            Message: "Request token=raw-token failed", ExceptionMessage: "password=raw-password",
+            Properties: new Dictionary<string, string> { ["ApiKey"] = "raw-api-key", ["Operation"] = "fetch" }), "Api");
+
+        report.Message!.Message.Should().Contain("[redacted]").And.NotContain("raw-token");
+        report.SentryExceptions!.Single().Value.Should().NotContain("raw-password");
+        report.Extra["log.ApiKey"].Should().Be("[redacted]");
+        report.Extra["log.Operation"].Should().Be("fetch");
     }
 
     public static Dictionary<string, string> Values() => IntegrationRegistry.Merge(IntegrationRegistry.Defaults(), new() { ["Enabled"] = "true", ["Dsn"] = Dsn });

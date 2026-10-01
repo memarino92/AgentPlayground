@@ -86,7 +86,7 @@ internal sealed class CodingJobCoordinator(CodingJobStore Store, IServiceScopeFa
         {
             try { await SweepAsync(Token); }
             catch (OperationCanceledException) when (Token.IsCancellationRequested) { break; }
-            catch (Exception E) { Logger.LogError(new EventId(4401), "Coding reconciliation failed with {ExceptionType}", E.GetType().Name); }
+            catch (Exception E) { Logger.LogError(new EventId(4401), E, "Coding reconciliation failed with {ExceptionType}", E.GetType().Name); }
             await Task.Delay(TimeSpan.FromSeconds(10), Token);
         }
     }
