@@ -18,8 +18,17 @@ public sealed class IntegrationLoggingProvider(IntegrationRuntime Runtime) : ILo
             && !Category.StartsWith("Sentry", StringComparison.Ordinal) && !Category.StartsWith("PersonalAgent.Integrations", StringComparison.Ordinal);
         public void Log<TState>(LogLevel LogLevel, EventId EventId, TState State, Exception? Exception, Func<TState, Exception?, string> Formatter)
         {
-            if (IsEnabled(LogLevel)) Runtime.Capture(new(Category, EventId.Id, Exception?.GetType().FullName,
-                Activity.Current?.TraceId.ToString(), SpanId: Activity.Current?.SpanId.ToString()));
+            if (!IsEnabled(LogLevel)) return;
+            try
+            {
+                var (message, template, properties) = SentryDetails.FromLog(State, Exception, Formatter);
+                Runtime.Capture(new(Category, EventId.Id, Exception?.GetType().FullName,
+                    Activity.Current?.TraceId.ToString(), SpanId: Activity.Current?.SpanId.ToString(),
+                    Message: message, MessageTemplate: template, ExceptionDetails: SentryDetails.FromException(Exception),
+                    Properties: properties, Critical: LogLevel == LogLevel.Critical,
+                    ExceptionMessage: SentryDetails.ExceptionMessage(Exception), Frames: SentryDetails.ExceptionFrames(Exception)));
+            }
+            catch { /* Error reporting must not interrupt application work. */ }
         }
     }
 }

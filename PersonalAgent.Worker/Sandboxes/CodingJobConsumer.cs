@@ -51,7 +51,7 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
         }
         catch (Exception E)
         {
-            Logger.LogError(new EventId(4403), "Coding execution {JobId} failed with {ExceptionType}", Job.Id, E.GetType().Name);
+            Logger.LogError(new EventId(4403), E, "Coding execution {JobId} failed with {ExceptionType}", Job.Id, E.GetType().Name);
             await Store.SaveAsync(Job with { Status = "Failed", Error = E is OperationCanceledException ? "Coding stopped or timed out." : "Coding infrastructure failed; inspect controller diagnostics." }, "Running", CancellationToken.None);
         }
         finally
@@ -106,7 +106,7 @@ internal sealed class CodingSandboxReconciler(CodingJobStore Store, IRailwaySand
                         await CodingJobConsumer.CleanupAsync(Job.Id, Store, Client, Logger, Token);
             }
             catch (OperationCanceledException) when (Token.IsCancellationRequested) { break; }
-            catch (Exception E) { Logger.LogError(new EventId(4404), "Coding cleanup scan failed: {ExceptionType}", E.GetType().Name); }
+            catch (Exception E) { Logger.LogError(new EventId(4404), E, "Coding cleanup scan failed: {ExceptionType}", E.GetType().Name); }
             await Task.Delay(TimeSpan.FromSeconds(15), Token);
         }
     }

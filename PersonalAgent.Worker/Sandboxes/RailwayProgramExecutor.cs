@@ -105,7 +105,7 @@ public sealed class RailwayProgramExecutor(AutomationRuntimeStore Runtime, Autom
         }
         catch (Exception Exception)
         {
-            Logger.LogError(new EventId(4305), "Sandbox execution {RunId}/{StepIndex} failed with {ExceptionType}", Message.RunId, Message.StepIndex, Exception.GetType().Name);
+            Logger.LogError(new EventId(4305), Exception, "Sandbox execution {RunId}/{StepIndex} failed with {ExceptionType}", Message.RunId, Message.StepIndex, Exception.GetType().Name);
             Result = new("", new(Hash, Settings.ImageId, null, Exception is OperationCanceledException ? "TimedOut" : "InfrastructureFailed",
                 "Sandbox failed; inspect correlated controller logs. Cleanup is retried durably.", Stopwatch.GetElapsedTime(Started).TotalSeconds, SandboxId: Id));
         }
@@ -118,7 +118,7 @@ public sealed class RailwayProgramExecutor(AutomationRuntimeStore Runtime, Autom
                 await Client.CallAsync(new { operation = "destroy", token = Snapshot.Token, environmentId = Settings.EnvironmentId, id = Id }, Finish.Token);
                 await Leases.DestroyedAsync(Message.RunId, Message.StepIndex, Finish.Token);
             }
-            catch (Exception) { Logger.LogError(new EventId(4306), "Sandbox cleanup pending for {RunId}/{StepIndex}", Message.RunId, Message.StepIndex); }
+            catch (Exception Exception) { Logger.LogError(new EventId(4306), Exception, "Sandbox cleanup pending for {RunId}/{StepIndex}", Message.RunId, Message.StepIndex); }
         }
         return Result;
     }
@@ -147,11 +147,11 @@ internal sealed class SandboxReconciler(AutomationRuntimeStore Runtime, Automati
                         Logger.LogInformation("Sandbox lease cleaned for {RunId}/{StepIndex}", Lease.RunId, Lease.Step);
                     }
                     catch (OperationCanceledException) when (StoppingToken.IsCancellationRequested) { return; }
-                    catch (Exception) { Logger.LogError(new EventId(4306), "Sandbox cleanup pending for {RunId}/{StepIndex}", Lease.RunId, Lease.Step); }
+                    catch (Exception Exception) { Logger.LogError(new EventId(4306), Exception, "Sandbox cleanup pending for {RunId}/{StepIndex}", Lease.RunId, Lease.Step); }
                 }
             }
             catch (OperationCanceledException) when (StoppingToken.IsCancellationRequested) { return; }
-            catch (Exception) { Logger.LogError(new EventId(4306), "Sandbox reconciliation failed; retrying on next poll."); }
+            catch (Exception Exception) { Logger.LogError(new EventId(4306), Exception, "Sandbox reconciliation failed; retrying on next poll."); }
         } while (await Timer.WaitForNextTickAsync(StoppingToken));
     }
 }

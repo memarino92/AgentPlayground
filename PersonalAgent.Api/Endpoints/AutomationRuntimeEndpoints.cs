@@ -45,7 +45,7 @@ internal static class AutomationRuntimeEndpoints
             catch (OperationCanceledException) { return Results.StatusCode(504); }
             catch (Exception E)
             {
-                Logger.LogError(new EventId(4307), "Automation gateway {RunId}/{StepIndex} failed with {ExceptionType}", runId, step, E.GetType().Name);
+                Logger.LogError(new EventId(4307), E, "Automation gateway {RunId}/{StepIndex} failed with {ExceptionType}", runId, step, E.GetType().Name);
                 return Results.Problem(statusCode: 502, title: "Automation tool operation failed.");
             }
         }).RequireRateLimiting(PersonalAgentConstants.ApiRateLimiter);

@@ -56,6 +56,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | [0017: Coach recording recency](decisions/0017-coach-recording-recency.md) | Accepted; implemented and evaluated locally | Scope latest calls and return dated utterance evidence |
 | [0018: Coaching model evaluations](decisions/0018-coach-model-evaluations.md) | Accepted; first comparison completed | Repeatable local model checks with private evidence and JUnit |
 | [0019: Service observability](decisions/0019-observability.md) | Accepted; service-side implementation complete | Shared OpenTelemetry, OpenInference and correlated Sentry errors |
+| [0041: Actionable Sentry errors](decisions/0041-actionable-sentry-errors.md) | Accepted; server implementation complete | Detailed errors across API, Web and Worker with credential masking |
 | [0020: Live database telemetry settings](decisions/0020-live-database-telemetry-settings.md) | Accepted; implemented | Database-first OpenTelemetry export, sampling and per-service live reload |
 | [0021: Scheduled jobs](decisions/0021-scheduled-jobs.md) | Accepted; implemented | Durable task identity, current authorization, recovery and job dashboard |
 | [0022: Scheduled notifications](decisions/0022-scheduled-notifications.md) | Accepted; implemented | Notification job identity, attribution, cancellation and push outcomes |
