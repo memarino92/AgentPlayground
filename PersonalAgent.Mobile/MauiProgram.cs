@@ -32,9 +32,9 @@ public static class MauiProgram
 
         var options = new MobileAppOptions
         {
-            ApiBaseUrl = ResolveString("PERSONAL_AGENT_API_BASE_URL", "http://127.0.0.1:5100"),
-            WebAppUrl = ResolveString("PERSONAL_AGENT_WEB_BASE_URL", "http://127.0.0.1:5100"),
-            InternalApiKey = ResolveString("INTERNAL_API_KEY", "dev-internal-api-key"),
+            ApiBaseUrl = ResolveString("PERSONAL_AGENT_API_BASE_URL", BuildDefault("MobileApiBaseUrl", "https://pa-api.michaelmarino.dev")),
+            WebAppUrl = ResolveString("PERSONAL_AGENT_WEB_BASE_URL", BuildDefault("MobileWebBaseUrl", "https://pa.michaelmarino.dev")),
+            InternalApiKey = ResolveString("INTERNAL_API_KEY", string.Empty),
             ProfileId = ResolveString("PERSONAL_AGENT_PROFILE_ID", "mobile-dev"),
             AndroidChannelId = ResolveString("ANDROID_PUSH_CHANNEL_ID", "agent-approval-high")
         };
@@ -42,6 +42,7 @@ public static class MauiProgram
         builder.Services.AddSingleton(Microsoft.Extensions.Options.Options.Create(options));
         builder.Services.AddSingleton<NotificationRoutingService>();
         builder.Services.AddSingleton<FirebaseCloudMessagingBridge>();
+        builder.Services.AddSingleton<IPushTokenStore, PushTokenStore>();
         builder.Services.AddSingleton<IPushTokenProvider, PushTokenProvider>();
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddTransient<MainPage>();
@@ -51,8 +52,6 @@ public static class MauiProgram
                 var appOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<MobileAppOptions>>().Value;
                 client.BaseAddress = new Uri(EnsureTrailingSlash(appOptions.ApiBaseUrl));
                 client.Timeout = TimeSpan.FromSeconds(12);
-                if (!string.IsNullOrWhiteSpace(appOptions.InternalApiKey))
-                    client.DefaultRequestHeaders.Add("X-Internal-Api-Key", appOptions.InternalApiKey);
             })
             .ConfigurePrimaryHttpMessageHandler(() =>
             {
@@ -75,6 +74,11 @@ public static class MauiProgram
         var value = Environment.GetEnvironmentVariable(key);
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
+
+    private static string BuildDefault(string Key, string Fallback) => typeof(MauiProgram).Assembly
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+        .Cast<System.Reflection.AssemblyMetadataAttribute>()
+        .FirstOrDefault(Item => Item.Key == Key)?.Value ?? Fallback;
 
     private static string EnsureTrailingSlash(string value) =>
         value.EndsWith("/", StringComparison.Ordinal) ? value : $"{value}/";

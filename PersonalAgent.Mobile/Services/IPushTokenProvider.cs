@@ -4,4 +4,5 @@ public interface IPushTokenProvider
 {
     Task<string?> GetPushTokenAsync(CancellationToken cancellationToken = default);
     event EventHandler<string>? TokenUpdated;
+    void UpdateToken(string Token);
 }

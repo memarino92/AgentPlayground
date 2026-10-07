@@ -9,11 +9,13 @@ public class FirebaseCloudMessagingBridge
 {
     private readonly NotificationRoutingService _notificationRoutingService;
     private readonly ILogger<FirebaseCloudMessagingBridge> _logger;
+    private readonly IPushTokenProvider _pushTokenProvider;
 
-    public FirebaseCloudMessagingBridge(NotificationRoutingService notificationRoutingService, ILogger<FirebaseCloudMessagingBridge> logger)
+    public FirebaseCloudMessagingBridge(NotificationRoutingService notificationRoutingService, IPushTokenProvider pushTokenProvider, ILogger<FirebaseCloudMessagingBridge> logger)
     {
         _notificationRoutingService = notificationRoutingService;
         _logger = logger;
+        _pushTokenProvider = pushTokenProvider;
 
         if (!CrossFirebaseCloudMessaging.IsSupported) return;
 
@@ -23,18 +25,19 @@ public class FirebaseCloudMessagingBridge
         cloudMessaging.NotificationTapped += OnNotificationTapped;
         cloudMessaging.Error += OnCloudMessagingError;
 
-        _ = InitializeAsync(cloudMessaging);
     }
 
-    private async Task InitializeAsync(IFirebaseCloudMessaging cloudMessaging)
+    public async Task InitializeAsync()
     {
+        if (!CrossFirebaseCloudMessaging.IsSupported) return;
         try
         {
+            var cloudMessaging = CrossFirebaseCloudMessaging.Current;
             await cloudMessaging.CheckIfValidAsync();
             var token = await cloudMessaging.GetTokenAsync();
             if (string.IsNullOrWhiteSpace(token)) return;
 
-            Preferences.Default.Set("PushToken", token);
+            _pushTokenProvider.UpdateToken(token);
             _logger.LogInformation("Firebase token initialized");
         }
         catch (Exception ex)
@@ -46,7 +49,7 @@ public class FirebaseCloudMessagingBridge
     private void OnTokenChanged(object? sender, FCMTokenChangedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(e.Token)) return;
-        Preferences.Default.Set("PushToken", e.Token);
+        _pushTokenProvider.UpdateToken(e.Token);
         _logger.LogInformation("Firebase token updated");
     }
 
@@ -54,25 +57,14 @@ public class FirebaseCloudMessagingBridge
         RouteApprovalNotification(e.Notification);
 
     private void OnNotificationTapped(object? sender, FCMNotificationTappedEventArgs e) =>
-        RouteApprovalNotification(e.Notification);
+        RouteApprovalNotification(e.Notification, true);
 
     private void OnCloudMessagingError(object? sender, FCMErrorEventArgs e) =>
         _logger.LogWarning("Firebase cloud messaging error: {Message}", e.Message);
 
-    private void RouteApprovalNotification(FCMNotification notification)
+    private void RouteApprovalNotification(FCMNotification notification, bool RequestReview = false)
     {
-        var data = notification.Data;
-        if (data is null || !data.TryGetValue("approvalId", out var approvalIdRaw)) return;
-        if (!Guid.TryParse(approvalIdRaw, out var approvalId)) return;
-
-        var sessionId = data.TryGetValue("sessionId", out var parsedSessionId) ? parsedSessionId : string.Empty;
-        var toolName = data.TryGetValue("toolName", out var parsedToolName) ? parsedToolName : "UnknownTool";
-        var actionSummary = data.TryGetValue("actionSummary", out var parsedActionSummary)
-            ? parsedActionSummary
-            : (string.IsNullOrWhiteSpace(notification.Body) ? "Agent requires approval" : notification.Body);
-        var expiresAtRaw = data.TryGetValue("expiresAt", out var parsedExpiresAt) ? parsedExpiresAt : string.Empty;
-        var expiresAt = DateTimeOffset.TryParse(expiresAtRaw, out var parsed) ? parsed : DateTimeOffset.UtcNow.AddMinutes(5);
-
-        _notificationRoutingService.RoutePendingApproval(new PendingApprovalNotification(approvalId, sessionId, toolName, actionSummary, expiresAt));
+        var approval = ApprovalNotificationParser.Parse(notification.Data is null ? null : new Dictionary<string, string>(notification.Data));
+        if (approval is not null) _notificationRoutingService.RoutePendingApproval(approval, RequestReview);
     }
 }

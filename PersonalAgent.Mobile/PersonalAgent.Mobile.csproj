@@ -24,6 +24,24 @@
     <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <MobileWebBaseUrl Condition="'$(MobileWebBaseUrl)' == ''">$(PERSONAL_AGENT_WEB_BASE_URL)</MobileWebBaseUrl>
+    <MobileApiBaseUrl Condition="'$(MobileApiBaseUrl)' == ''">$(PERSONAL_AGENT_API_BASE_URL)</MobileApiBaseUrl>
+    <MobileWebBaseUrl Condition="'$(MobileWebBaseUrl)' == ''">https://pa.michaelmarino.dev</MobileWebBaseUrl>
+    <MobileApiBaseUrl Condition="'$(MobileApiBaseUrl)' == ''">https://pa-api.michaelmarino.dev</MobileApiBaseUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MobileWebBaseUrl</_Parameter1>
+      <_Parameter2>$(MobileWebBaseUrl)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MobileApiBaseUrl</_Parameter1>
+      <_Parameter2>$(MobileApiBaseUrl)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="Microsoft.Extensions.Http" />

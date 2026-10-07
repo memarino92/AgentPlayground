@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- Exercise platform-independent mobile routing on desktop/CI without an Android runtime. -->
+  <ItemGroup>
+    <Compile Include="..\PersonalAgent.Mobile\Models\PendingApprovalNotification.cs" Link="Models\PendingApprovalNotification.cs" />
+    <Compile Include="..\PersonalAgent.Mobile\Services\ApprovalNotificationParser.cs" Link="Services\ApprovalNotificationParser.cs" />
+    <Compile Include="..\PersonalAgent.Mobile\Services\NotificationRoutingService.cs" Link="Services\NotificationRoutingService.cs" />
+    <Compile Include="..\PersonalAgent.Mobile\Services\IPushTokenProvider.cs" Link="Services\IPushTokenProvider.cs" />
+    <Compile Include="..\PersonalAgent.Mobile\Services\IPushTokenStore.cs" Link="Services\IPushTokenStore.cs" />
+    <Compile Include="..\PersonalAgent.Mobile\Services\PushTokenProvider.cs" Link="Services\PushTokenProvider.cs" />
+  </ItemGroup>
+</Project>

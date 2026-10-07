@@ -1,35 +1,22 @@
-using Microsoft.Extensions.Logging;
-
 namespace PersonalAgent.Mobile.Services;
 
-public class PushTokenProvider(ILogger<PushTokenProvider> logger) : IPushTokenProvider
+public class PushTokenProvider(IPushTokenStore Store) : IPushTokenProvider
 {
-    private string? _cachedToken;
-
     public event EventHandler<string>? TokenUpdated;
 
-    public Task<string?> GetPushTokenAsync(CancellationToken cancellationToken = default)
+    public Task<string?> GetPushTokenAsync(CancellationToken CancellationToken = default)
     {
-        var persisted = Preferences.Default.Get("PushToken", string.Empty);
-        if (!string.IsNullOrWhiteSpace(persisted))
-        {
-            if (!string.Equals(_cachedToken, persisted, StringComparison.Ordinal))
-            {
-                _cachedToken = persisted;
-                TokenUpdated?.Invoke(this, persisted);
-            }
-
-            return Task.FromResult<string?>(_cachedToken);
-        }
-
-        if (string.IsNullOrWhiteSpace(_cachedToken))
-        {
-            _cachedToken = $"placeholder-{Guid.NewGuid():N}";
-            Preferences.Default.Set("PushToken", _cachedToken);
-            logger.LogInformation("Generated placeholder push token for local development");
-            TokenUpdated?.Invoke(this, _cachedToken);
-        }
-
-        return Task.FromResult<string?>(_cachedToken);
+        CancellationToken.ThrowIfCancellationRequested();
+        var Token = Store.Read();
+        return Task.FromResult<string?>(IsValid(Token) ? Token : null);
     }
+
+    public void UpdateToken(string Token)
+    {
+        if (!IsValid(Token) || string.Equals(Store.Read(), Token, StringComparison.Ordinal)) return;
+        Store.Write(Token);
+        TokenUpdated?.Invoke(this, Token);
+    }
+
+    private static bool IsValid(string? Token) => !string.IsNullOrWhiteSpace(Token) && !Token.StartsWith("placeholder-", StringComparison.Ordinal);
 }

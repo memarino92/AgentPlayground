@@ -28,14 +28,14 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
 
         try
         {
-            ConfigureClient();
-            using var response = await httpClient.PostAsJsonAsync("api/mobile/devices/register", request, cancellationToken);
+            using var message = CreateRequest(HttpMethod.Post, "api/mobile/devices/register", JsonContent.Create(request));
+            using var response = await httpClient.SendAsync(message, cancellationToken);
             if (response.IsSuccessStatusCode) return ApiCallResult.Success();
 
             var error = await response.Content.ReadAsStringAsync(cancellationToken);
-            var message = $"{(int)response.StatusCode} {response.StatusCode}: {error}";
+            var errorMessage = $"{(int)response.StatusCode} {response.StatusCode}: {error}";
             logger.LogWarning("Device token registration failed: {StatusCode} {Error}", response.StatusCode, error);
-            return ApiCallResult.Failure(message);
+            return ApiCallResult.Failure(errorMessage);
         }
         catch (Exception ex)
         {
@@ -54,35 +54,51 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
             "mobile-debug",
             5);
 
-        ConfigureClient();
-        using var response = await httpClient.PostAsJsonAsync("api/approvals", request, cancellationToken);
-        var payload = await response.Content.ReadFromJsonAsync<ApprovalCreateResponse>(cancellationToken);
+        using var message = CreateRequest(HttpMethod.Post, "api/approvals", JsonContent.Create(request));
+        using var response = await httpClient.SendAsync(message, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Approval request failed: {StatusCode}", response.StatusCode);
             return null;
         }
 
+        var payload = await response.Content.ReadFromJsonAsync<ApprovalCreateResponse>(cancellationToken);
         return payload?.ApprovalId;
     }
 
-    public async Task SubmitApprovalDecisionAsync(Guid approvalId, bool approved, string reason, string decidedBy, CancellationToken cancellationToken = default)
+    public async Task<ApiCallResult> SubmitApprovalDecisionAsync(Guid approvalId, bool approved, string reason, string decidedBy, CancellationToken cancellationToken = default)
     {
         var request = new CompleteAgentApprovalRequest(GetProfileId(), approved, decidedBy, reason);
-        ConfigureClient();
-        using var response = await httpClient.PostAsJsonAsync($"api/approvals/{approvalId}/decision", request, cancellationToken);
-        if (response.IsSuccessStatusCode) return;
+        try
+        {
+            using var message = CreateRequest(HttpMethod.Post, $"api/approvals/{approvalId}/decision", JsonContent.Create(request));
+            using var response = await httpClient.SendAsync(message, cancellationToken);
+            if (response.IsSuccessStatusCode) return ApiCallResult.Success();
+            logger.LogWarning("Approval decision failed: {StatusCode}", response.StatusCode);
+            return ApiCallResult.Failure($"Decision was not accepted ({(int)response.StatusCode}). Refresh and try again.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(ex, "Failed submitting approval {ApprovalId}", approvalId);
+            return ApiCallResult.Failure("Could not confirm the decision. Check your connection and refresh before retrying.");
+        }
+    }
 
-        var error = await response.Content.ReadAsStringAsync(cancellationToken);
-        logger.LogWarning("Approval decision failed: {StatusCode} {Error}", response.StatusCode, error);
+    public async Task<AgentApprovalDetails?> GetApprovalAsync(Guid ApprovalId, CancellationToken CancellationToken = default)
+    {
+        using var Message = CreateRequest(HttpMethod.Get, $"api/approvals/{ApprovalId}");
+        using var Response = await httpClient.SendAsync(Message, CancellationToken);
+        if (!Response.IsSuccessStatusCode) return null;
+        var Approval = await Response.Content.ReadFromJsonAsync<AgentApprovalDetails>(CancellationToken);
+        return Approval is not null && string.Equals(Approval.ProfileId, GetProfileId(), StringComparison.OrdinalIgnoreCase) ? Approval : null;
     }
 
     public async Task<string?> GetApprovalStatusAsync(Guid approvalId, CancellationToken cancellationToken = default)
     {
         try
         {
-            ConfigureClient();
-            using var response = await httpClient.GetAsync($"api/approvals/{approvalId}", cancellationToken);
+            using var message = CreateRequest(HttpMethod.Get, $"api/approvals/{approvalId}");
+            using var response = await httpClient.SendAsync(message, cancellationToken);
             if (!response.IsSuccessStatusCode) return null;
 
             var payload = await response.Content.ReadFromJsonAsync<ApprovalStatusResponse>(cancellationToken);
@@ -105,7 +121,7 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
         return generated;
     }
 
-    public string GetApiBaseUrl() => httpClient.BaseAddress?.ToString() ?? _options.ApiBaseUrl;
+    public string GetApiBaseUrl() => GetEffectiveApiBaseUrl();
 
     public string GetWebAppUrl()
     {
@@ -124,7 +140,6 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
         if (!string.IsNullOrWhiteSpace(apiBaseUrl)) Preferences.Default.Set(ApiBaseUrlPreferenceKey, apiBaseUrl.Trim());
         if (!string.IsNullOrWhiteSpace(webAppUrl)) Preferences.Default.Set(WebAppUrlPreferenceKey, webAppUrl.Trim());
         Preferences.Default.Set(InternalApiKeyPreferenceKey, internalApiKey?.Trim() ?? string.Empty);
-        ConfigureClient();
     }
 
     public void SetProfileId(string profileId)
@@ -145,13 +160,13 @@ public class PersonalAgentApiClient(HttpClient httpClient, IOptions<MobileAppOpt
         return string.IsNullOrWhiteSpace(stored) ? _options.ApiBaseUrl : stored;
     }
 
-    private void ConfigureClient()
+    private HttpRequestMessage CreateRequest(HttpMethod Method, string Path, HttpContent? Content = null)
     {
-        httpClient.BaseAddress = new Uri(EnsureTrailingSlash(GetEffectiveApiBaseUrl()));
-        httpClient.DefaultRequestHeaders.Remove("X-Internal-Api-Key");
+        var Message = new HttpRequestMessage(Method, new Uri(new Uri(EnsureTrailingSlash(GetEffectiveApiBaseUrl())), Path)) { Content = Content };
         var internalApiKey = GetInternalApiKey();
         if (!string.IsNullOrWhiteSpace(internalApiKey))
-            httpClient.DefaultRequestHeaders.Add("X-Internal-Api-Key", internalApiKey);
+            Message.Headers.Add("X-Internal-Api-Key", internalApiKey);
+        return Message;
     }
 
     private static string EnsureTrailingSlash(string value) =>

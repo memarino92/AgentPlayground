@@ -42,9 +42,12 @@ internal class AgentApprovalService(IAgentApprovalStore approvalStore, IBus bus,
             Body = approval.ActionSummary,
             Data = new Dictionary<string, string>
             {
+                ["notificationType"] = "agent-approval",
+                ["profileId"] = approval.ProfileId,
                 ["approvalId"] = approval.ApprovalId.ToString(),
                 ["sessionId"] = approval.SessionId,
                 ["toolName"] = approval.ToolName,
+                ["actionSummary"] = approval.ActionSummary,
                 ["requestedBy"] = approval.RequestedBy,
                 ["expiresAt"] = approval.ExpiresAt.ToString("O")
             }

@@ -4,6 +4,7 @@
   <Project Path="PersonalAgent.Contracts/PersonalAgent.Contracts.csproj" />
   <Project Path="PersonalAgent.Contracts.Tests/PersonalAgent.Contracts.Tests.csproj" />
   <Project Path="PersonalAgent.Mobile/PersonalAgent.Mobile.csproj" />
+  <Project Path="PersonalAgent.Mobile.Tests/PersonalAgent.Mobile.Tests.csproj" />
   <Project Path="PersonalAgent.Web/PersonalAgent.Web.csproj" />
   <Project Path="PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj" />
   <Project Path="PersonalAgent.Worker/PersonalAgent.Worker.csproj" />
