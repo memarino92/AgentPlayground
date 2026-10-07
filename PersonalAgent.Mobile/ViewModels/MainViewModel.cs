@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
+using PersonalAgent.Mobile.Models;
 using PersonalAgent.Mobile.Services;
 
 namespace PersonalAgent.Mobile.ViewModels;
@@ -88,11 +89,11 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         if (_isInitialized) return;
+        _isInitialized = true;
 
-        pushTokenProvider.TokenUpdated += async (_, token) => await RegisterDeviceWithTokenAsync(token, cancellationToken);
+        pushTokenProvider.TokenUpdated += async (_, token) => await MainThread.InvokeOnMainThreadAsync(() => RegisterDeviceWithTokenAsync(token, CancellationToken.None));
 
         await RegisterDeviceAsync(cancellationToken);
-        _isInitialized = true;
     }
 
     public async Task SaveProfileIdAsync(CancellationToken cancellationToken = default)
@@ -108,21 +109,26 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
         await RegisterDeviceAsync(cancellationToken);
     }
 
-    public Task SaveConnectionSettingsAsync(CancellationToken cancellationToken = default)
+    public async Task SaveConnectionSettingsAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(ApiBaseUrl) || string.IsNullOrWhiteSpace(WebAppUrl))
         {
             StatusMessage = "API and Web URLs are required";
-            return Task.CompletedTask;
+            return;
         }
 
         apiClient.SetConnectionSettings(ApiBaseUrl, WebAppUrl, InternalApiKey);
         StatusMessage = "Connection settings saved";
-        return Task.CompletedTask;
+        await RegisterDeviceAsync(cancellationToken);
     }
 
     public async Task RegisterDeviceAsync(CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(InternalApiKey))
+        {
+            StatusMessage = "Push registration needs device connection settings";
+            return;
+        }
         var pushToken = await pushTokenProvider.GetPushTokenAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(pushToken))
         {
@@ -139,7 +145,7 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
         StatusMessage = "Registering device...";
         var result = await apiClient.RegisterDeviceTokenAsync(pushToken, cancellationToken);
         StatusMessage = result.IsSuccess
-            ? $"Device token registered ({Short(pushToken)})"
+            ? "Device registered for push notifications"
             : $"Register failed: {result.Error}";
     }
 
@@ -174,27 +180,19 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
 
     public string GetApiBaseUrl() => apiClient.GetApiBaseUrl();
 
-    private static string Short(string value) => value.Length <= 12 ? value : $"{value[..6]}...{value[^4..]}";
+    public Task<AgentApprovalDetails?> GetApprovalAsync(Guid ApprovalId) => apiClient.GetApprovalAsync(ApprovalId);
 
-    public async Task SubmitApprovalDecisionAsync(Guid approvalId, bool approved, string reason, string decidedBy, CancellationToken cancellationToken = default)
+    public async Task<PersonalAgentApiClient.ApiCallResult> SubmitApprovalDecisionAsync(Guid approvalId, bool approved, string reason, string decidedBy, CancellationToken cancellationToken = default)
     {
-        await apiClient.SubmitApprovalDecisionAsync(approvalId, approved, reason, decidedBy, cancellationToken);
+        var result = await apiClient.SubmitApprovalDecisionAsync(approvalId, approved, reason, decidedBy, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            StatusMessage = result.Error ?? "Decision failed";
+            return result;
+        }
         _lastApprovalId = approvalId;
         await PollLastApprovalStatusAsync(cancellationToken);
-    }
-
-    public async Task TryInjectProfileIntoWebViewAsync(WebView webView)
-    {
-        if (string.IsNullOrWhiteSpace(ProfileId)) return;
-        var js = $"window.localStorage.setItem('personalagent.profileId', '{ProfileId.Replace("'", "\\'")}');";
-        try
-        {
-            _ = await webView.EvaluateJavaScriptAsync(js);
-        }
-        catch (Exception ex)
-        {
-            logger.LogDebug(ex, "Failed to inject profile id into WebView localStorage");
-        }
+        return result;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>

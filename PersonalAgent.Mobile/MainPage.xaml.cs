@@ -2,6 +2,7 @@ using PersonalAgent.Mobile.Models;
 using PersonalAgent.Mobile.Services;
 using PersonalAgent.Mobile.ViewModels;
 using Microsoft.Maui.Controls.Shapes;
+using Microsoft.Extensions.Logging;
 
 namespace PersonalAgent.Mobile;
 
@@ -10,25 +11,76 @@ public partial class MainPage : ContentPage
     private readonly MainViewModel _viewModel;
     private readonly NotificationRoutingService _notificationRoutingService;
     private readonly WebView _agentWebView;
+    private readonly FirebaseCloudMessagingBridge _firebaseBridge;
+    private bool _isVisible;
+    private bool _isReviewingApproval;
+    private bool _hasAppeared;
 
-    public MainPage(MainViewModel viewModel, NotificationRoutingService notificationRoutingService)
+    public MainPage(MainViewModel viewModel, NotificationRoutingService notificationRoutingService, FirebaseCloudMessagingBridge firebaseBridge, ILogger<MainPage> logger)
     {
         _viewModel = viewModel;
         _notificationRoutingService = notificationRoutingService;
+        _firebaseBridge = firebaseBridge;
         BindingContext = _viewModel;
         _notificationRoutingService.PendingApprovalReceived += OnPendingApprovalReceived;
 
         _agentWebView = new WebView();
         _agentWebView.SetBinding(WebView.SourceProperty, nameof(MainViewModel.WebAppUrl));
-        _agentWebView.Navigated += OnWebViewNavigated;
+        _agentWebView.Navigated += (_, Args) =>
+        {
+            logger.LogInformation("PersonalAgent website navigation completed: {NavigationResult}", Args.Result);
+#if ANDROID && DEBUG
+            Android.Util.Log.Info("PersonalAgent.Mobile", $"WebsiteNavigation={Args.Result}");
+#endif
+        };
 
-        Content = BuildContent();
+        var settingsButton = new Button { Text = "Settings", FontSize = 13 };
+        settingsButton.Clicked += async (_, _) =>
+        {
+            var settingsPage = new ContentPage { Title = "Settings", Content = BuildContent() };
+            var closeButton = new ToolbarItem { Text = "Done" };
+            closeButton.Clicked += async (_, _) => await Navigation.PopModalAsync();
+            settingsPage.ToolbarItems.Add(closeButton);
+            await Navigation.PushModalAsync(new NavigationPage(settingsPage));
+        };
+        var approvalsButton = new Button { Text = "Approvals", FontSize = 13 };
+        approvalsButton.Clicked += OnOpenApprovalClicked;
+        var toolbar = new Grid
+        {
+            ColumnDefinitions = [new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto)]
+        };
+        toolbar.Add(approvalsButton, 0);
+        toolbar.Add(settingsButton, 1);
+        var root = new Grid
+        {
+            RowDefinitions = [new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Star)],
+            SafeAreaEdges = SafeAreaEdges.All
+        };
+        root.Add(toolbar, 0, 0);
+        root.Add(_agentWebView, 0, 1);
+        Content = root;
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+        _isVisible = true;
+        _hasAppeared = true;
         await _viewModel.InitializeAsync();
+        await _firebaseBridge.InitializeAsync();
+        await ReviewPendingApprovalsAsync();
+    }
+
+    protected override void OnDisappearing()
+    {
+        _isVisible = false;
+        base.OnDisappearing();
+    }
+
+    public async Task SetActiveAsync(bool Active)
+    {
+        _isVisible = Active;
+        if (Active && _hasAppeared) await ReviewPendingApprovalsAsync();
     }
 
     private void OnReloadClicked(object? sender, EventArgs e)
@@ -37,10 +89,11 @@ public partial class MainPage : ContentPage
         _agentWebView.Source = new UrlWebViewSource { Url = source.Url };
     }
 
-    private async void OnOpenApprovalClicked(object? sender, EventArgs e) => await OpenApprovalSheetAsync();
+    private async void OnOpenApprovalClicked(object? sender, EventArgs e) => await ReviewPendingApprovalsAsync(true);
 
     private async void OnRegisterDeviceClicked(object? sender, EventArgs e)
     {
+        await _firebaseBridge.InitializeAsync();
         await _viewModel.RegisterDeviceAsync();
         await DisplayAlertAsync("Register Device", $"{_viewModel.StatusMessage}\nAPI: {_viewModel.GetApiBaseUrl()}", "OK");
     }
@@ -49,6 +102,7 @@ public partial class MainPage : ContentPage
     {
         await _viewModel.SaveProfileIdAsync();
         await DisplayAlertAsync("Profile", _viewModel.StatusMessage, "OK");
+        await ReviewPendingApprovalsAsync();
     }
 
     private async void OnSaveConnectionClicked(object? sender, EventArgs e)
@@ -59,40 +113,60 @@ public partial class MainPage : ContentPage
 
     private async void OnPendingApprovalReceived(object? sender, PendingApprovalNotification notification)
     {
-        await MainThread.InvokeOnMainThreadAsync(OpenApprovalSheetAsync);
+        await MainThread.InvokeOnMainThreadAsync(() => ReviewPendingApprovalsAsync());
     }
 
-    private async Task OpenApprovalSheetAsync()
+    private async Task ReviewPendingApprovalsAsync(bool ShowEmpty = false)
     {
-        var pendingApproval = _notificationRoutingService.GetLatestPendingApproval();
-        if (pendingApproval is null)
+        if (!_isVisible || _isReviewingApproval) return;
+        _isReviewingApproval = true;
+        try
         {
-            await DisplayAlertAsync("No pending request", "No approval request has been received yet.", "OK");
-            return;
+            var pendingApproval = _notificationRoutingService.GetNextPendingApproval(_viewModel.ProfileId);
+            if (pendingApproval is null && ShowEmpty)
+                await DisplayAlertAsync("No pending request", "No active approval request has been received for this profile.", "OK");
+
+            while (_isVisible && pendingApproval is not null)
+            {
+                // Push data is a navigation hint. Review authoritative server details before deciding.
+                var approval = await _viewModel.GetApprovalAsync(pendingApproval.ApprovalId);
+                if (!_isVisible) return;
+                if (approval is null)
+                {
+                    await DisplayAlertAsync("Approval unavailable", "Could not load this request for your saved profile. Check your connection and try Approve Pending again.", "OK");
+                    return;
+                }
+                if (approval.Status != "pending" || approval.ExpiresAt <= DateTimeOffset.UtcNow)
+                {
+                    _notificationRoutingService.Remove(approval.ApprovalId);
+                    await DisplayAlertAsync("Request closed", "This approval has expired or already been decided.", "OK");
+                }
+                else
+                {
+                    var choice = await DisplayActionSheetAsync(
+                        $"Agent approval\nTool: {approval.ToolName}\nAction: {approval.ActionSummary}\nRequested by: {approval.RequestedBy}\nExpires: {approval.ExpiresAt.ToLocalTime():g}",
+                        "Later", null, "Approve", "Deny");
+                    if (choice is not ("Approve" or "Deny")) return;
+                    if (!string.Equals(approval.ProfileId, _viewModel.ProfileId, StringComparison.OrdinalIgnoreCase)) return;
+                    var approved = choice == "Approve";
+                    var result = await _viewModel.SubmitApprovalDecisionAsync(approval.ApprovalId, approved,
+                        approved ? "Approved from Android app" : "Denied from Android app", _viewModel.ProfileId);
+                    if (!result.IsSuccess)
+                    {
+                        await DisplayAlertAsync("Decision not confirmed", result.Error, "OK");
+                        return;
+                    }
+                    _notificationRoutingService.Remove(approval.ApprovalId);
+                    await DisplayAlertAsync("Decision submitted", approved ? "Approval sent" : "Denial sent", "OK");
+                }
+                pendingApproval = _notificationRoutingService.GetNextPendingApproval(_viewModel.ProfileId);
+            }
         }
-
-        var approved = await DisplayAlertAsync(
-            "Agent Approval Required",
-            $"Tool: {pendingApproval.ToolName}\nAction: {pendingApproval.ActionSummary}",
-            "Approve",
-            "Deny");
-
-        var decisionBy = _viewModel.ProfileId;
-        if (string.IsNullOrWhiteSpace(decisionBy)) decisionBy = "mobile-user";
-
-        await _viewModel.SubmitApprovalDecisionAsync(
-            pendingApproval.ApprovalId,
-            approved,
-            reason: approved ? "Approved from Android app" : "Denied from Android app",
-            decidedBy: decisionBy);
-
-        await DisplayAlertAsync("Decision submitted", approved ? "Approval sent" : "Denial sent", "OK");
-    }
-
-    private async void OnWebViewNavigated(object? sender, WebNavigatedEventArgs e)
-    {
-        if (e.Result is not WebNavigationResult.Success) return;
-        await _viewModel.TryInjectProfileIntoWebViewAsync(_agentWebView);
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            await DisplayAlertAsync("Approval unavailable", "Could not reach the server. Your request is still pending; try Approve Pending when connected.", "OK");
+        }
+        finally { _isReviewingApproval = false; }
     }
 
     private View BuildContent()
@@ -113,20 +187,6 @@ public partial class MainPage : ContentPage
                 }
             }
         };
-
-        var row1 = new Grid
-        {
-            ColumnDefinitions =
-            {
-                new ColumnDefinition { Width = GridLength.Star },
-                new ColumnDefinition { Width = GridLength.Star }
-            },
-            ColumnSpacing = 8
-        };
-        row1.Add(new Button { Text = "Reload", BackgroundColor = Color.FromArgb("#1e293b"), TextColor = Color.FromArgb("#f8fafc"), CornerRadius = 10, Padding = new Thickness(14, 10), FontSize = 13 }, 0);
-        row1.Add(new Button { Text = "Approve Pending", BackgroundColor = Color.FromArgb("#166534"), TextColor = Color.FromArgb("#f0fdf4"), CornerRadius = 10, Padding = new Thickness(14, 10), FontSize = 13 }, 1);
-        ((Button)row1.Children[0]).Clicked += OnReloadClicked;
-        ((Button)row1.Children[1]).Clicked += OnOpenApprovalClicked;
 
         var registerButton = new Button
         {
@@ -235,18 +295,6 @@ public partial class MainPage : ContentPage
         };
         approvalStatusLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LastApprovalStatus), stringFormat: "Last approval: {0}");
 
-        var webFrame = new Border
-        {
-            Stroke = Color.FromArgb("#cbd5e1"),
-            StrokeThickness = 1,
-            StrokeShape = new RoundRectangle { CornerRadius = 12 },
-            BackgroundColor = Colors.White,
-            Padding = 0,
-            HeightRequest = 260,
-            VerticalOptions = LayoutOptions.Start,
-            Content = _agentWebView
-        };
-
         return new ScrollView
         {
             Content = new VerticalStackLayout
@@ -261,11 +309,8 @@ public partial class MainPage : ContentPage
                     webUrlEntry,
                     apiKeyEntry,
                     saveConnectionButton,
-                    row1,
                     row2,
-                    approvalStatusLabel,
-                    new Label { Text = "Web Preview", FontSize = 12, TextColor = Color.FromArgb("#64748b") },
-                    webFrame
+                    approvalStatusLabel
                 }
             }
         };

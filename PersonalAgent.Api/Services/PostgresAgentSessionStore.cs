@@ -492,6 +492,7 @@ internal partial class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> op
             WHERE approval_id = @approvalId
               AND profile_id = @profileId
               AND status = 'pending'
+              AND expires_at > CURRENT_TIMESTAMP
             RETURNING approval_id, profile_id, session_id, tool_name, action_summary, requested_by, requested_at, expires_at, status, decision_at, decided_by, reason;
             """;
         command.Parameters.AddWithValue("approvalId", approvalId);

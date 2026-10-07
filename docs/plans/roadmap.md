@@ -105,6 +105,8 @@ Validation: 53 Web and 218 API tests pass. Synthetic browser checks cover single
 
 **Done when:** device tests cover cold/warm notification launch, correct account routing, logout/re-login, denied permission, offline/reconnect, expired approval, and cross-user rejection. CI builds a release Android artifact without production credentials. Keep WebView authentication in the test matrix; a backend build is insufficient.
 
+2026-10-02: the existing approval push flow now includes typed/profile-bound payloads, Android notification channels and cold/warm intent forwarding, real-token registration/renewal, a deduplicated queue, server-detail refresh before review, Later/retry handling, and atomic rejection of expired decisions. Mobile routing tests run in PR CI without Android dependencies. Local Android Debug build passes with the default Java heap; routing/token and API/PostgreSQL tests cover malformed payloads, account filtering, multiple/duplicate requests, expiry and rejected decisions. Live Firebase delivery and device lifecycle acceptance remain unverified; trusted enrollment/revocation, a persistent approval inbox, automatic approval enforcement and durable continuation remain open.
+
 ## 4. One durable Agent Framework workflow
 
 **Decision follow-up:** the boundary review below adds `DEBT-02` to reassess the proposed orchestration owner before implementing this theme or `FLOW-01`. Agent Framework ownership of the entire coaching lifecycle remains a proposal, not an accepted implementation choice.

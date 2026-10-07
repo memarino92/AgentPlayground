@@ -54,6 +54,9 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Test mobile approval routing without an Android runtime
+        run: dotnet test PersonalAgent.Mobile.Tests/PersonalAgent.Mobile.Tests.csproj --logger "trx;LogFileName=mobile-tests.trx"
+
       - name: Restore test projects
         run: dotnet restore PersonalAgent.Contracts.Tests/PersonalAgent.Contracts.Tests.csproj && dotnet restore PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj && dotnet restore PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj && dotnet restore PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj
 
