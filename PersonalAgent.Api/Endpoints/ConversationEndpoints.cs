@@ -27,7 +27,8 @@ internal static partial class PersonalAgentEndpoints
         {
             var Access = await ResolveAccessAsync(Context, Request.ProfileId, Assignments);
             if (Access is null) return Results.StatusCode(403);
-            return Results.Ok(await Chat.OpenConversationAsync(Access, Request.ModelId, Token));
+            try { return Results.Ok(await Chat.OpenConversationAsync(Access, Request.ModelId, Token)); }
+            catch (PersonalAgent.Integrations.ChatGpt.ChatGptException Exception) { return Results.Problem(Exception.Message, statusCode: 503); }
         });
         Group.MapPost("/{Id:guid}/clear", async (HttpContext Context, Guid Id, CreateSessionRequest Request,
             AgentChatService Chat, ICoachAssignmentStore Assignments, CancellationToken Token) =>
@@ -51,6 +52,7 @@ internal static partial class PersonalAgentEndpoints
                 return Results.Ok(await Chat.ReadConversationAsync(Id, Access, Token));
             }
             catch (UnauthorizedAccessException) { return Results.StatusCode(403); }
+            catch (PersonalAgent.Integrations.ChatGpt.ChatGptException Exception) { return Results.Problem(Exception.Message, statusCode: 503); }
         });
         Group.MapPost("/{Id:guid}/messages/stream", async (HttpContext Context, Guid Id, SendMessageRequest Request,
             AgentChatService Chat, ICoachAssignmentStore Assignments, CancellationToken Token) =>
@@ -79,6 +81,7 @@ internal static partial class PersonalAgentEndpoints
                 await WriteAsync(new { Type = "completed", Conversation = await Chat.ReadConversationAsync(Id, Access, Token) }, Token);
             }
             catch (UnauthorizedAccessException) { await WriteAsync(new { Type = "error", Error = "Access was denied." }, Token); }
+            catch (PersonalAgent.Integrations.ChatGpt.ChatGptException Exception) { await WriteAsync(new { Type = "error", Error = Exception.Message }, Token); }
         });
         Group.MapPost("/{Id:guid}/cards/{Sequence:long}/{CardId}", async (HttpContext Context, Guid Id, long Sequence, string CardId,
             UpdateChatCardRequest Request, AgentChatService Chat, ICoachAssignmentStore Assignments, CancellationToken Token) =>

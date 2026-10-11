@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="scripts/ChatGptConnect/ChatGptConnect.csproj" />
   <Project Path="PersonalAgent.Backup/PersonalAgent.Backup.csproj" />
   <Project Path="PersonalAgent.Integrations/PersonalAgent.Integrations.csproj" />
   <Project Path="PersonalAgent.Contracts/PersonalAgent.Contracts.csproj" />

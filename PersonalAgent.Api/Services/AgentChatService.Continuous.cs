@@ -10,7 +10,10 @@ internal partial class AgentChatService
     {
         ValidateAccess(Access);
         var Model = string.IsNullOrWhiteSpace(ModelId) ? await _chatModelCatalog.GetDefaultModelAsync(Token)
-            : await _chatModelCatalog.FindModelAsync(ModelId, Token) ?? await _chatModelCatalog.GetDefaultModelAsync(Token);
+            : await FindActorModelAsync(Access, ModelId, Token)
+                ?? (ModelId.StartsWith("chatgpt:", StringComparison.Ordinal)
+                    ? throw new PersonalAgent.Integrations.ChatGpt.ChatGptException("The selected ChatGPT model is unavailable for this account. Reconnect in Settings or select another model.")
+                    : await _chatModelCatalog.GetDefaultModelAsync(Token));
         var Id = await _conversationStore!.EnsureConversationAsync(Access, Model.Id, Token);
         return await ReadConversationAsync(Id, Access, Token) ?? throw new UnauthorizedAccessException();
     }

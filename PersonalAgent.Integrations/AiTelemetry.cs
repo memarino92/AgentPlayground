@@ -12,6 +12,11 @@ public static class AiTelemetry
         var activity = Source.StartActivity(Name);
         activity?.SetTag("openinference.span.kind", Kind);
         if (Model is not null) activity?.SetTag(Kind == "EMBEDDING" ? "embedding.model_name" : "llm.model_name", Model);
+        if (Model?.StartsWith("chatgpt:", StringComparison.Ordinal) == true)
+        {
+            activity?.SetTag("llm.provider", "openai");
+            activity?.SetTag("llm.billing_source", "chatgpt_plan");
+        }
         return activity;
     }
 

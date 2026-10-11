@@ -1,0 +1,6 @@
+.chatgpt-settings { margin-block: 1.5rem; padding: 1.5rem; border: 1px solid #718096; border-radius: .75rem; }
+.chatgpt-account, .chatgpt-pairing { padding: 1rem; margin-block: 1rem; border: 1px solid #718096; border-radius: .5rem; }
+.chatgpt-continue { background: #111; color: white; border-radius: .4rem; padding: .65rem 1rem; }
+button { margin: .25rem; }
+code { overflow-wrap: anywhere; }
+pre { white-space: pre-wrap; }
