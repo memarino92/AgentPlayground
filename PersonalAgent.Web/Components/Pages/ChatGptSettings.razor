@@ -1,0 +1,48 @@
+@using PersonalAgent.Integrations.ChatGpt
+
+<section class="chatgpt-settings">
+    <h3>Use your ChatGPT plan</h3>
+    <p>Connect a ChatGPT account to use its eligible Plus or Pro plan for chat. Each account and workspace stays separate.</p>
+    @if (Error is not null) { <p role="alert">@Error</p> }
+    @if (Notice is not null) { <p role="status">@Notice</p> }
+    @if (Connections.FirstOrDefault(Connection => Connection.WelcomeRequired) is { } welcome)
+    {
+        <dialog open>
+            <h4>You’re using your ChatGPT plan</h4>
+            <p>Eligible usage in this app uses your ChatGPT plan or credits. Manage usage in ChatGPT Settings.</p>
+            <button disabled="@Busy" @onclick="() => DismissWelcomeAsync(welcome.Id)">Got it</button>
+        </dialog>
+    }
+    @if (!Loaded)
+    {
+        <p>@(Busy ? "Loading ChatGPT connections…" : "ChatGPT connections could not be loaded.")</p>
+    }
+    else if (Connections.Count == 0) { <p>No ChatGPT accounts connected.</p> }
+    else
+    {
+        @foreach (var connection in Connections)
+        {
+            <div class="chatgpt-account" @key="connection.Id">
+                <strong>@connection.Label</strong>
+                <p>@(!connection.Connected ? "Disconnected" : connection.PlanEnabled ? "ChatGPT plan usage is enabled." : "Connected. Plan usage was not authorized.")</p>
+                <button disabled="@Busy" @onclick="() => StartAsync(connection.Id)">Reconnect</button>
+                @if (connection.Connected) { <button disabled="@Busy" @onclick="() => DisconnectAsync(connection.Id)">Disconnect</button> }
+            </div>
+        }
+    }
+    <button class="chatgpt-continue" disabled="@Busy" @onclick="() => StartAsync(null)">Continue with ChatGPT</button>
+    <button disabled="@Busy" @onclick="RefreshAsync">Refresh connections</button>
+    @if (Pairing is not null)
+    {
+        <div class="chatgpt-pairing">
+            <h4>Finish sign-in on this computer</h4>
+            <p>From your AgentPlayground checkout, run this helper. It opens ChatGPT in your system browser and securely connects this instance.</p>
+            <pre><code>dotnet run --project scripts/ChatGptConnect -- @InstanceUrl</code></pre>
+            <p>Paste this pairing code into the helper when prompted. It expires in ten minutes. Treat it as a temporary secret.</p>
+            <code>@Pairing.Code</code>
+            <p>After the helper completes, refresh connections. Choose a model labelled ChatGPT in the chat model selector.</p>
+        </div>
+    }
+    <p><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">Manage usage</a></p>
+    <small>Eligible chat requests use your ChatGPT plan or available credits. Embeddings, transcription and other configured providers retain their separate billing.</small>
+</section>

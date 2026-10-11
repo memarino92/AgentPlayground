@@ -1,5 +1,11 @@
 # Roadmap
 
+## ChatGPT plan sign-in — 2026-10-10
+
+The local/Railway pairing implementation now includes encrypted per-user connections, OIDC/PKCE validation, isolated account/workspace registrations, cross-instance token refresh, disconnect, account-specific reviewed model discovery and streamed Responses dispatch. Settings provides initial setup and reconnect; the composer identifies plan use. See [decision 0042](../decisions/0042-chatgpt-plan-sign-in.md) and [operations](../runbooks/chatgpt-plan-sign-in.md).
+
+Remaining acceptance criteria: verify real Plus/Pro authorization and model entitlement; verify a complete plain-text and tool-bearing turn against OpenAI; deploy matching API/Web revisions on Railway and check connection refresh/reconnect/disconnect there. Synthetic tests and builds do not establish these live results. Subscription-backed embeddings, transcription and scheduled jobs are outside this slice.
+
 ## Platform improvement jobs — first slice 2026-09-27
 
 Requested outcome: explicit and eventually recurring platform changes produce tested PRs while the maintainer controls merge. See [decision 0038](../decisions/0038-platform-improvement-jobs.md) and [setup/limits](../runbooks/platform-coding.md).

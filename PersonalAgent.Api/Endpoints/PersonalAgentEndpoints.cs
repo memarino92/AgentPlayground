@@ -25,6 +25,7 @@ internal static partial class PersonalAgentEndpoints
 
         apiGroup.AddEndpointFilter(new InternalApiKeyFilter(apiKeyOptions));
         apiGroup.MapIntegrationSettings(securityOptions, app.Configuration);
+        apiGroup.MapChatGpt(securityOptions);
         apiGroup.MapCoachEvidence(securityOptions);
         apiGroup.MapScheduledJobs(securityOptions);
         apiGroup.MapAutomations(securityOptions);
@@ -48,7 +49,10 @@ internal static partial class PersonalAgentEndpoints
             if (string.IsNullOrWhiteSpace(request.ProfileId))
                 return Results.BadRequest(new { error = "ProfileId is required" });
 
-            var models = await chatModelCatalog.GetModelsAsync(cancellationToken);
+            var actor = SignedActorFilter.Get(httpContext);
+            var models = request.ModelId?.StartsWith("chatgpt:", StringComparison.Ordinal) == true && actor.Role == AgentRoles.Owner
+                ? await httpContext.RequestServices.GetRequiredService<ChatGptModelCatalog>().GetModelsAsync(actor.ActorId, cancellationToken)
+                : await chatModelCatalog.GetModelsAsync(cancellationToken);
             if (models.Count is 0) return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "No chat models are available");
             var selectedModel = string.IsNullOrWhiteSpace(request.ModelId)
                 ? models.First(Model => Model.IsDefault)
@@ -68,11 +72,15 @@ internal static partial class PersonalAgentEndpoints
         {
             var access = await ResolveAccessAsync(context, request.ProfileId, assignments);
             if (access is null) return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var models = await catalog.GetModelsAsync(token);
+            var actor = SignedActorFilter.Get(context);
+            var models = request.ModelId?.StartsWith("chatgpt:", StringComparison.Ordinal) == true && actor.Role == AgentRoles.Owner
+                ? await context.RequestServices.GetRequiredService<ChatGptModelCatalog>().GetModelsAsync(actor.ActorId, token)
+                : await catalog.GetModelsAsync(token);
             var model = models.FirstOrDefault(value => value.Id == request.ModelId);
             if (model is null) return Results.BadRequest(new { error = "Model is not available" });
             try { return await chat.SetModelAsync(sessionId, access, model.Id, token) ? Results.NoContent() : Results.NotFound(); }
             catch (UnauthorizedAccessException) { return Results.StatusCode(StatusCodes.Status403Forbidden); }
+            catch (PersonalAgent.Integrations.ChatGpt.ChatGptException Exception) { return Results.Problem(Exception.Message, statusCode: 503); }
         }).AddEndpointFilter(new SignedActorFilter(securityOptions));
 
         apiGroup.MapGet("/sessions", async (HttpContext httpContext, string profileId, int? pageSize, DateTimeOffset? beforeActivityAt, Guid? beforeSessionId, AgentService agentService, ICoachAssignmentStore assignmentStore) =>
@@ -114,6 +122,7 @@ internal static partial class PersonalAgentEndpoints
             string? response;
             try { response = await agentService.SendMessageAsync(sessionId, access, request.Message, httpContext.RequestAborted); }
             catch (UnauthorizedAccessException) { return Results.StatusCode(StatusCodes.Status403Forbidden); }
+            catch (PersonalAgent.Integrations.ChatGpt.ChatGptException Exception) { return Results.Problem(Exception.Message, statusCode: 503); }
             return response is not null
                 ? Results.Ok(new { sessionId, response })
                 : Results.NotFound(new { error = "Session not found" });

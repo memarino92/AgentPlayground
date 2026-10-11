@@ -21,6 +21,10 @@
         }
     </select>
     </details>
+    @if (SelectedModelId.StartsWith("chatgpt:", StringComparison.Ordinal))
+    {
+        <p>Using ChatGPT plan · <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">Manage usage</a></p>
+    }
     @if (IsSending)
     {
         <MudButton Variant="Variant.Outlined" Color="Color.Error" Class="composer__send" OnClick="OnStop">Stop</MudButton>

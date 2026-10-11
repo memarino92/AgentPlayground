@@ -147,7 +147,7 @@ internal partial class PersonalAgentClient : IDisposable
 
     public async Task<ModelCatalogResponse?> GetModelsAsync()
     {
-        var response = await SendAsync(HttpMethod.Get, "/api/models");
+        var response = await SendAsync(HttpMethod.Get, "/api/chatgpt/models");
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load models", response);
 

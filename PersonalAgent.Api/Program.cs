@@ -21,6 +21,12 @@ builder.Services.AddSingleton<IIntegrationSettingsService, IntegrationSettingsSe
 builder.Services.AddSingleton<OtelSettingsService>();
 builder.Services.AddSingleton<DatabaseSettingsStore>();
 builder.Services.AddSingleton<BackupSettingsStore>();
+builder.Services.AddHttpClient("ChatGPT", Client => Client.Timeout = TimeSpan.FromSeconds(20))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton(sp => new PersonalAgent.Integrations.ChatGpt.ChatGptOAuth(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("ChatGPT")));
+builder.Services.AddSingleton<PersonalAgent.Integrations.ChatGpt.ChatGptConnectionStore>();
+builder.Services.AddSingleton<ChatGptModelCatalog>();
 builder.Services.AddSingleton<DatabaseCredentialRuntime>();
 builder.Services.AddHostedService<DatabaseCredentialReloadWorker>();
 if (syntheticDemo) builder.Services.AddSyntheticServices();
@@ -33,6 +39,7 @@ else
 builder.Services.AddHostedService(sp => sp.GetRequiredService<JevRoutingRuntime>());
 
 var app = builder.Build();
+await app.Services.GetRequiredService<PersonalAgent.Integrations.ChatGpt.ChatGptConnectionStore>().InitializeAsync(CancellationToken.None);
 app.UsePersonalAgentPipeline();
 app.MapPersonalAgentEndpoints();
 app.MapGet("/health/ready", () => Results.Ok(new { status = "ready" }));

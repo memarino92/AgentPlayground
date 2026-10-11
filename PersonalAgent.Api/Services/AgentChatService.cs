@@ -62,7 +62,7 @@ internal partial class AgentChatService
     {
         ValidateAccess(access);
 
-        var selectedModel = await _chatModelCatalog.FindModelAsync(modelId, cancellationToken)
+        var selectedModel = await FindActorModelAsync(access, modelId, cancellationToken)
             ?? throw new InvalidOperationException($"Chat model '{modelId}' is not available.");
         return await CreateSessionAsync(access, selectedModel, cancellationToken);
     }
@@ -192,7 +192,7 @@ internal partial class AgentChatService
                 var saved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, directResponse, persistedSession.SessionStateJson, cancellationToken);
                 return saved ? directResponse : null;
             }
-            var agent = CreateSessionAgent(sessionState.ModelId, tools, sessionState.IsContinuous);
+            var agent = CreateSessionAgent(sessionState.ModelId, access.ActorId, tools, sessionState.IsContinuous);
             var session = await agent.CreateSessionAsync(cancellationToken);
             var Context = sessionState.IsContinuous && _contextBuilder is not null
                 ? await _contextBuilder.BuildAsync(access, parsedSessionId, sessionState, message, cancellationToken) : null;
@@ -308,7 +308,7 @@ internal partial class AgentChatService
         _ => ChatRole.User
     }, message.Content);
 
-    private ChatClientAgent CreateSessionAgent(string modelId, IReadOnlyList<BoundAgentTool> tools, bool PresentCards = false)
+    private ChatClientAgent CreateSessionAgent(string modelId, string ActorId, IReadOnlyList<BoundAgentTool> tools, bool PresentCards = false)
     {
         var webToolCount = tools.Count(Tool => Tool.Source == "TavilyMcp");
         _logger.LogInformation("Creating agent for model {ModelId} with {ToolCount} authorized tools, including {WebToolCount} web tools",
@@ -364,7 +364,8 @@ internal partial class AgentChatService
             AIContextProviders = _skillsProvider is null ? [] : [_skillsProvider]
         };
 
-        return _chatClients.Create(modelId)
+        return (modelId.StartsWith("chatgpt:", StringComparison.Ordinal)
+                ? _chatClients.CreateForActor(modelId, ActorId) : _chatClients.Create(modelId))
             .AsBuilder()
             .UseFunctionInvocation()
             .BuildAIAgent(options, _loggerFactory, _serviceProvider);
@@ -375,6 +376,14 @@ internal partial class AgentChatService
         if (string.IsNullOrWhiteSpace(access.ActorId)) throw new InvalidOperationException("Actor id is required.");
         if (!AgentRoles.IsDefined(access.Role)) throw new InvalidOperationException("A defined role is required.");
         if (string.IsNullOrWhiteSpace(access.SubjectProfileId)) throw new InvalidOperationException("Subject profile id is required.");
+    }
+
+    private async Task<AvailableChatModel?> FindActorModelAsync(AgentAccessContext Access, string? ModelId, CancellationToken Token)
+    {
+        if (ModelId?.StartsWith("chatgpt:", StringComparison.Ordinal) != true) return await _chatModelCatalog.FindModelAsync(ModelId, Token);
+        if (Access.Role != AgentRoles.Owner) return null;
+        var catalog = _serviceProvider.GetService<ChatGptModelCatalog>();
+        return catalog is null ? null : (await catalog.GetModelsAsync(Access.ActorId, Token)).FirstOrDefault(Model => Model.Id == ModelId);
     }
 
     private async Task<AgentSessionState> DeserializeSessionStateAsync(string? sessionStateJson, CancellationToken cancellationToken)

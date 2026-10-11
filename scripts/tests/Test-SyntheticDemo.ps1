@@ -88,4 +88,24 @@ foreach ($Persona in @('owner', 'coach', 'other')) {
     $Page = Invoke-WebRequest "$Web/coach-transcripts" -WebSession $DemoSession
     Assert-Demo ($Page.StatusCode -eq 200 -and -not $Page.Content.Contains('Choose a sample account')) "$Persona can load the authenticated transcript page"
 }
+# Exercise the actual public relay without sending credentials to an external provider.
+$UnsignedPairing = Invoke-WebRequest "$Api/api/chatgpt/pairings" -Method POST -ContentType 'application/json' -Body '{}' -Headers @{ 'X-Internal-Api-Key' = 'synthetic-local-internal-key' } -SkipHttpErrorCheck
+Assert-Demo ($UnsignedPairing.StatusCode -eq 401) 'ChatGPT pairing requires a signed actor'
+$CoachPairing = Invoke-DemoApi -Path '/api/chatgpt/pairings' -Actor 'google:synthetic-coach' -Role 'Coach' -Method POST -Body @{}
+Assert-Demo ($CoachPairing.StatusCode -eq 403) 'Coaches cannot pair subscription credentials'
+$Connections = Invoke-DemoApi '/api/chatgpt/connections'
+Assert-Demo ($Connections.StatusCode -eq 200 -and @($Connections.Content | ConvertFrom-Json).Count -eq 0) 'Owner connection metadata starts empty'
+$Pairing = Invoke-DemoApi -Path '/api/chatgpt/pairings' -Method POST -Body @{}
+Assert-Demo ($Pairing.StatusCode -eq 200 -and $Pairing.Headers['Cache-Control'] -contains 'no-store') 'Owner creates a non-cacheable pairing'
+$PairingCode = ($Pairing.Content | ConvertFrom-Json).code
+$HandshakeBody = @{ code = $PairingCode } | ConvertTo-Json
+$Prepared = Invoke-WebRequest "$Web/chatgpt/handshake" -Method POST -ContentType 'application/json' -Body $HandshakeBody -SkipHttpErrorCheck
+$Authorization = $Prepared.Content | ConvertFrom-Json
+Assert-Demo ($Prepared.StatusCode -eq 200 -and $Authorization.hostId.StartsWith('urn:uuid:') -and $Authorization.verifier.Length -eq 43 -and $null -eq $Authorization.clientId) 'Public relay prepares dynamic registration with PKCE'
+$Replay = Invoke-WebRequest "$Web/chatgpt/handshake" -Method POST -ContentType 'application/json' -Body $HandshakeBody -SkipHttpErrorCheck
+Assert-Demo ($Replay.StatusCode -eq 400) 'Public relay rejects pairing preparation replay'
+$Replaced = Invoke-DemoApi -Path '/api/chatgpt/pairings' -Method POST -Body @{}
+Assert-Demo ($Replaced.StatusCode -eq 200) 'Owner can replace an abandoned pairing'
+$Invalid = Invoke-WebRequest "$Web/chatgpt/handshake" -Method POST -ContentType 'application/json' -Body $HandshakeBody -SkipHttpErrorCheck
+Assert-Demo ($Invalid.StatusCode -eq 400) 'A new owner pairing invalidates the abandoned capability'
 Write-Host "Synthetic demo: $Checks checks passed."

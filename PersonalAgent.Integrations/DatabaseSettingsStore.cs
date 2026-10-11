@@ -6,7 +6,8 @@ namespace PersonalAgent.Integrations;
 public sealed record DatabaseSetting(string Scope, string Key, string Version, string? Value, bool IsSecret, bool IsActive)
 {
     public bool SupportsLiveReload => LiveCredentialPolicy.Supports(Scope, Key);
-    public bool IsLiveChatModelPolicy => Scope is "Shared" or "Api" && Key.StartsWith("ChatModels:", StringComparison.OrdinalIgnoreCase);
+    public bool IsLiveChatModelPolicy => Scope is "Shared" or "Api" && (Key.StartsWith("ChatModels:", StringComparison.OrdinalIgnoreCase)
+        || Scope == "Api" && Key == "ChatGpt:ReviewedModels");
     public bool IsLiveJevPolicy => Scope == "Api" && Key is "Jev:Settings" or "Jev:ApiKey";
 }
 public sealed record DatabaseSettingEdit(string Scope, string Key, string Version, string? Value, bool IsActive);
@@ -46,6 +47,14 @@ public sealed class DatabaseSettingsStore(IntegrationDatabase Database)
 
         await using var connection = await Database.OpenAsync(CancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(CancellationToken);
+        foreach (var edit in Request.Changes.Where(Edit => Edit.Scope == "Api" && Edit.Key == "ChatGpt:ReviewedModels" && Edit.Value is not null))
+        {
+            try { _ = ChatGpt.ChatGptModelPolicy.Parse(edit.Value!); }
+            catch (FormatException Exception)
+            {
+                throw new IntegrationValidationException(new() { ["ChatGpt:ReviewedModels"] = [Exception.Message] });
+            }
+        }
         // Older synthetic databases predate the production updated_at column.
         await using var schema = new NpgsqlCommand("""
             SELECT EXISTS(SELECT 1 FROM information_schema.columns
