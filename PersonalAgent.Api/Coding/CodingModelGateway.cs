@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 using PersonalAgent.Contracts.Coding;
 using PersonalAgent.Integrations;
@@ -94,9 +95,11 @@ internal sealed class CodingModelGateway(CodingJobStore Store, CodingJobService 
             Id, Subscription ? "ChatGPT" : "OpenRouter", Subscription ? Slug : CodingJobs.Model,
             (int)Response.StatusCode, Stopwatch.GetElapsedTime(Started).TotalMilliseconds);
         if (!Response.IsSuccessStatusCode)
-            throw new CodingGatewayException(Response.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? 429 : 502,
-                Subscription ? "ChatGPT inference failed. Reconnect for access errors; review plan limits at https://chatgpt.com/settings/usage. No paid fallback was used."
-                    : "OpenRouter coding inference failed. Check provider availability and credentials.");
+        {
+            var Failure = await ProviderFailureAsync(Response, Subscription, Deadline.Token);
+            Logger.LogWarning(new EventId(4406), "Coding inference {JobId} failed with gateway HTTP {Status}: {Reason}", Id, Failure.Status, Failure.Message);
+            throw Failure;
+        }
         Context.Response.ContentType = "text/event-stream";
         if (Subscription)
         {
@@ -112,6 +115,48 @@ internal sealed class CodingModelGateway(CodingJobStore Store, CodingJobService 
             await Context.Response.Body.WriteAsync(Buffer.AsMemory(0, Count), Deadline.Token);
             await Context.Response.Body.FlushAsync(Deadline.Token);
         }
+    }
+
+    internal static async Task<CodingGatewayException> ProviderFailureAsync(HttpResponseMessage Response, bool Subscription, CancellationToken Token)
+    {
+        var Provider = Subscription ? "ChatGPT" : "OpenRouter";
+        var Status = Response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.BadRequest => 400,
+            System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden => 403,
+            System.Net.HttpStatusCode.TooManyRequests => 429,
+            _ => 502
+        };
+        var Parameter = "";
+        if (Status == 400)
+        {
+            // Keep only bounded schema-path metadata, never provider messages, request bodies or tokens.
+            await using var Stream = await Response.Content.ReadAsStreamAsync(Token);
+            using var Reader = new StreamReader(Stream);
+            var Buffer = new char[16384];
+            var Count = await Reader.ReadBlockAsync(Buffer.AsMemory(), Token);
+            try
+            {
+                using var Document = JsonDocument.Parse(new string(Buffer, 0, Count));
+                if (Document.RootElement.ValueKind == JsonValueKind.Object && Document.RootElement.TryGetProperty("error", out var Error) && Error.ValueKind == JsonValueKind.Object
+                    && Error.TryGetProperty("param", out var Field) && Field.ValueKind == JsonValueKind.String)
+                {
+                    var Path = Field.GetString()!;
+                    if (Path.Length <= 160 && Regex.IsMatch(Path,
+                        @"\A(?:input|tools|tool_choice|model|store|stream|include|instructions)(?:\[[0-9]{1,4}\]|\.[A-Za-z_][A-Za-z0-9_]*){0,12}\z"))
+                        Parameter = $" (parameter: {Path})";
+                }
+            }
+            catch (JsonException) { /* Non-JSON or oversized provider bodies retain a safe generic explanation. */ }
+        }
+        var Reason = Status switch
+        {
+            400 => $"{Provider} rejected the coding request format{Parameter}. The provider integration needs attention.",
+            403 => Subscription ? "ChatGPT access is unavailable. Reconnect this account in Settings." : "OpenRouter credentials are unavailable. Check provider settings.",
+            429 => Subscription ? "ChatGPT plan limits reached. Review usage at https://chatgpt.com/settings/usage." : "OpenRouter coding rate or usage limit reached.",
+            _ => $"{Provider} coding inference is temporarily unavailable. Retry later."
+        };
+        return new(Status, Reason + (Subscription ? " No paid fallback was used." : ""));
     }
 
     internal static async Task RelaySubscriptionStreamAsync(HttpResponseMessage Response, HttpContext Context, CancellationToken Token)

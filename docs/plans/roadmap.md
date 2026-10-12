@@ -446,7 +446,9 @@ OpenTelemetry now uses isolated encrypted database revisions and the same admini
 On 2026-10-01, the shared Sentry logger began sending bounded, credential-masked error messages, structured fields, and native exception stacks from API, Web, and Worker; key automation and coding catch sites now pass the original exception. See [decision 0041](../decisions/0041-actionable-sentry-errors.md). API/Web/Worker tests passed 389/79/70, and the three server projects built without warnings. A full solution build remained blocked by Android SDK path access on this machine. Native mobile/browser reporting, deployed issue inspection, and alerts remain open.
 
 
-### Subscription coding models — 2026-10-11
+### Subscription coding models â€” 2026-10-11
+
+Compatibility follow-up: the first live coding attempt completed a plain model request but rejected tool-bearing requests. The API adapter now supplies the required namespace description, preserves non-retryable provider HTTP 400/403 errors, exposes only bounded schema-path diagnostics and emits the Responses streaming error shape. Regression tests reproduce the missing-field and status-mapping failures before the fix. The API must deploy this correction; existing checkpoints remain compatible. Live completion is still unverified.
 
 Implemented locally: Platform coding account-qualified ChatGPT model selection, API-owned OAuth dispatch through Responses, current owner/permission/model checks, storage-free tool-context replay, no paid fallback, and UI request allowances up to 1,000 (250 proposed on selection). Existing OpenRouter settings remain compatible. See [decision 0044](../decisions/0044-subscription-coding-models.md) and [rollout](../runbooks/platform-coding.md#chatgpt-subscription-coding).
 

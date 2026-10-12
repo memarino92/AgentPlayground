@@ -21,6 +21,8 @@ This verifies the pinned OpenCode binary, synthetic Responses inference, a real 
 
 Sources: [OpenAI inference](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference), [preview requirements](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations), [OpenCode providers](https://docs.opencode.ai/docs/providers/).
 
+If a subscription job receives one HTTP 200 followed by HTTP 400s that appear as Cloudflare 502 pages, check the API revision. The initial coding adapter omitted the required tool namespace `description` and converted all upstream request/access errors into retryable 502s. Deploy the namespace/error compatibility fix to the API. It supplies the required description, preserves HTTP 400/403/429 failures, retains only bounded schema-path diagnostics and emits the documented streaming error shape. Existing coding checkpoints remain compatible; this API fix does not require another rebuild. Start a new job after deployment; old failed jobs remain immutable. The fix's tests enforce the required namespace fields with a synthetic provider. Live subscription completion remains a rollout check.
+
 The first slice accepts an explicit owner chat request, runs OpenCode 1.18.32 in a Railway coding sandbox, retains a text diff and validation checks, and opens a draft PR through a separate GitHub App. It is disabled by default. Recurring backlog selection and PR revision are not implemented. See [decision 0038](../decisions/0038-platform-improvement-jobs.md).
 
 ## Setup

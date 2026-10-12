@@ -88,12 +88,14 @@ public sealed class CodingSubscriptionGatewayTests : IAsyncLifetime
         return Job;
     }
 
-    private DefaultHttpContext Context(string? Cap = null)
+    private DefaultHttpContext Context(string? Cap = null, bool WithTools = false)
     {
         var Context = new DefaultHttpContext();
         Context.Request.Headers.Authorization = "Bearer " + (Cap ?? Capability);
         Context.Request.ContentType = "application/json";
-        Context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes("""{"model":"gpt-6-astra","input":[{"role":"user","content":"Implement a feature"}]}"""));
+        var Input = JsonNode.Parse("""{"model":"gpt-6-astra","input":[{"role":"user","content":"Implement a feature"}]}""")!.AsObject();
+        if (WithTools) Input["tools"] = JsonNode.Parse("""[{"type":"function","name":"bash","description":"Run locally","parameters":{"type":"object","properties":{}}}]""");
+        Context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(Input.ToJsonString()));
         Context.Response.Body = new MemoryStream();
         return Context;
     }
@@ -153,9 +155,36 @@ public sealed class CodingSubscriptionGatewayTests : IAsyncLifetime
         Handler.Inferences.Should().Be(1);
     }
 
+    [Fact]
+    public async Task ToolBearingRequestMeetsRequiredNamespaceSchema()
+    {
+        var Job = await CreateAsync();
+        await Gateway.RelayAsync(Job.Id, Context(WithTools: true), default, true);
+        Handler.Inferences.Should().Be(1);
+        Handler.ValidatedNamespace.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, 400)]
+    [InlineData(HttpStatusCode.Unauthorized, 403)]
+    [InlineData(HttpStatusCode.Forbidden, 403)]
+    [InlineData(HttpStatusCode.TooManyRequests, 429)]
+    [InlineData(HttpStatusCode.InternalServerError, 502)]
+    public async Task ProviderFailureKeepsNonRetryableErrorsAndMasksPrivateDetails(HttpStatusCode Status, int Expected)
+    {
+        Handler.Status = Status;
+        var Job = await CreateAsync();
+        var Failure = await FluentActions.Awaiting(() => Gateway.RelayAsync(Job.Id, Context(), default, true)).Should().ThrowAsync<CodingGatewayException>();
+        Failure.Which.Status.Should().Be(Expected);
+        Failure.Which.Message.Should().NotContain("private-provider-body");
+        if (Status == HttpStatusCode.BadRequest) Failure.Which.Message.Should().Contain("tools[0].description");
+        Handler.Inferences.Should().Be(1);
+    }
+
     private sealed class Transport : HttpMessageHandler
     {
         public int Inferences;
+        public bool ValidatedNamespace;
         public HttpStatusCode Status = HttpStatusCode.OK;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Token)
         {
@@ -169,6 +198,15 @@ public sealed class CodingSubscriptionGatewayTests : IAsyncLifetime
             Body["model"]!.GetValue<string>().Should().Be("gpt-6-astra");
             Body["store"]!.GetValue<bool>().Should().BeFalse();
             Body["stream"]!.GetValue<bool>().Should().BeTrue();
+            if (Body["tools"] is JsonArray Tools)
+            {
+                foreach (var Tool in Tools)
+                    if (Tool?["description"] is not JsonValue Description || !Description.TryGetValue<string>(out var Text) || string.IsNullOrWhiteSpace(Text))
+                        return new(HttpStatusCode.BadRequest) { Content = JsonContent.Create(new { error = new { message = "private-provider-body", param = "tools[0].description" } }) };
+                ValidatedNamespace = true;
+            }
+            if (Status != HttpStatusCode.OK)
+                return new(Status) { Content = JsonContent.Create(new { error = new { message = "private-provider-body", param = "tools[0].description" } }) };
             return new(Status) { Content = new StringContent(Status == HttpStatusCode.OK
                 ? "event: response.completed\ndata: {\"type\":\"response.completed\"}\n\n" : "private-provider-body", Encoding.UTF8, "text/event-stream") };
         }

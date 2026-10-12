@@ -69,8 +69,7 @@ internal static class CodingJobEndpoints
             catch (CodingGatewayException E)
             {
                 if (Context.Response.HasStarted)
-                    await Context.Response.WriteAsync("event: error\ndata: " + System.Text.Json.JsonSerializer.Serialize(
-                        new { type = "error", error = new { code = "coding_inference_failed", message = E.Message } }) + "\n\n", Token);
+                    await Context.Response.WriteAsync(StreamingError(E), Token);
                 else
                 {
                     Context.Response.StatusCode = E.Status;
@@ -93,6 +92,9 @@ internal static class CodingJobEndpoints
             }
         }).RequireRateLimiting(PersonalAgentConstants.ApiRateLimiter);
     }
+
+    internal static string StreamingError(CodingGatewayException Error) => "event: error\ndata: " + System.Text.Json.JsonSerializer.Serialize(
+        new { type = "error", code = "coding_inference_failed", message = Error.Message, param = (string?)null, sequence_number = 0 }) + "\n\n";
 
     private static AgentAccessContext Access(HttpContext C, string Profile)
     {
