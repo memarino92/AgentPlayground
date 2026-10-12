@@ -146,6 +146,10 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<ITavilyMcpToolProvider>(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
         services.AddHostedService(sp => sp.GetRequiredService<TavilyMcpToolProvider>());
         services.AddSingleton<IToolAccessStore, PostgresToolAccessStore>();
+        services.AddSingleton<IRailwayLogSettings, DatabaseRailwayLogSettings>();
+        services.AddSingleton<RailwayLogTool>();
+        services.AddHttpClient("RailwayLogs", Client => Client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
         services.AddSingleton<AgentToolBinder>();
         services.AddSingleton<JevRoutingRuntime>();

@@ -9,6 +9,7 @@ public sealed record DatabaseSetting(string Scope, string Key, string Version, s
     public bool IsLiveChatModelPolicy => Scope is "Shared" or "Api" && (Key.StartsWith("ChatModels:", StringComparison.OrdinalIgnoreCase)
         || Scope == "Api" && Key == "ChatGpt:ReviewedModels");
     public bool IsLiveJevPolicy => Scope == "Api" && Key is "Jev:Settings" or "Jev:ApiKey";
+    public bool IsLiveRailwayLogPolicy => Scope == "Api" && Key is "RailwayLogs:Settings" or "RailwayLogs:ProjectToken";
 }
 public sealed record DatabaseSettingEdit(string Scope, string Key, string Version, string? Value, bool IsActive);
 public sealed record SaveDatabaseSettingsRequest(List<DatabaseSettingEdit> Changes);

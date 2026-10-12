@@ -1,5 +1,11 @@
 # Roadmap
 
+## Railway read-only log tool — local implementation, live acceptance pending
+
+`read_railway_logs` now uses documented fixed GraphQL queries, an environment-scoped project token, encrypted Api settings, administrator service aliases and invocation-time Owner/tool authorization. Retrieval has bounded time/line/response/output limits, redaction and no streaming or mutation. See [setup and local validation](../runbooks/railway-logs.md) and [proposed decision 0045](../decisions/0045-railway-log-tool.md).
+
+Acceptance pending: maintainer review, operator configuration of a project token/allowlist, and one read-only live snapshot demonstrating correct service/environment/deployment membership and current Railway query/token support. No live credentials or infrastructure were changed during implementation.
+
 ## ChatGPT plan sign-in — 2026-10-10
 
 The local/Railway pairing implementation now includes encrypted per-user connections, OIDC/PKCE validation, isolated account/workspace registrations, cross-instance token refresh, disconnect, account-specific reviewed model discovery and streamed Responses dispatch. Settings provides initial setup and reconnect; the composer identifies plan use. See [decision 0042](../decisions/0042-chatgpt-plan-sign-in.md) and [operations](../runbooks/chatgpt-plan-sign-in.md).
