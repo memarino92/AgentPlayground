@@ -3,43 +3,66 @@
 @implements IAsyncDisposable
 
 <PageTitle>Platform changes</PageTitle>
-<section class="automations-page">
-    <h1>Platform changes</h1>
-    <p>Ask chat to implement a change. Jobs open draft PRs for your review; they never merge or deploy.</p>
-    <a href="/admin/settings?section=coding">Coding settings</a>
-    <button type="button" disabled="@Busy" @onclick="RefreshAsync">Refresh</button>
-    @if (Error is not null) { <p role="alert">@Error</p> }
-    @if (!Loaded) { <p>Loading jobs…</p> }
-    else if (Items.Count == 0) { <p>No coding jobs yet.</p> }
+<section class="coding-jobs-page">
+    <header class="page-header">
+        <div>
+            <h1>Platform changes</h1>
+            <p>Ask chat to implement a change. Jobs open draft PRs for your review; they never merge or deploy.</p>
+        </div>
+        <div class="page-actions">
+            <a href="/admin/settings?section=coding">Coding settings</a>
+            <button type="button" disabled="@Busy" @onclick="RefreshAsync">Refresh</button>
+        </div>
+    </header>
+    @if (Error is not null) { <p class="job-error" role="alert">@Error</p> }
+    @if (!Loaded) { <p class="page-state">Loading jobs…</p> }
+    else if (Items.Count == 0) { <p class="page-state">No coding jobs yet. Ask chat to implement your first change.</p> }
     else
     {
-        @foreach (var Job in Items)
-        {
-            <article @key="Job.Id">
-                <h2>@Job.Instruction</h2>
-                <p>@Job.Status · @Job.CreatedAt.ToString("u") · Cleanup: @Job.CleanupState</p>
-                <p>Job @Job.Id · @Job.Repository</p>
-                <p>Branch: @Job.Branch</p>
-                @if (!string.IsNullOrWhiteSpace(Job.SandboxId))
-                {
-                    <p>Railway sandbox ID: @Job.SandboxId</p>
-                }
-                <p>@Job.ModelRequests model requests reserved (@((Job.ModelRequests * .40m).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))) upper budget).</p>
-                @if (Job.PullRequestUrl is { } Url) { <a href="@Url" target="_blank" rel="noopener noreferrer">Review pull request</a> }
-                @if (!PersonalAgent.Contracts.Coding.CodingJobs.Terminal(Job.Status) && Job.Status != "Publishing")
-                { <button type="button" disabled="@Busy" @onclick="() => CancelAsync(Job.Id)">Cancel job</button> }
-                @if (Job.Error is not null) { <p role="status">@Job.Error</p> }
-                <button type="button" disabled="@Busy" @onclick="() => LoadArtifactAsync(Job.Id)">Load validation and files</button>
-                @if (Artifacts.TryGetValue(Job.Id, out var Artifact))
-                {
-                    <details><summary>Validation and proposed files</summary>
-                        @foreach (var Check in Artifact.Checks)
-                        { <h3>@Check.Command — exit @Check.ExitCode</h3><pre>@Check.Output</pre> }
-                        @foreach (var File in Artifact.Files)
-                        { <details><summary>@File.Path @(File.Content is null ? "(deleted)" : "")</summary><pre>@File.Content</pre></details> }
+        <div class="jobs-list">
+            @foreach (var Job in Items)
+            {
+                <article class="job-card" @key="Job.Id">
+                    <header class="job-header">
+                        <span class="job-status" data-status="@Job.Status">@(Job.Status == "PrOpened" ? "PR opened" : Job.Status)</span>
+                        <time datetime="@Job.CreatedAt.ToString("O")">@Job.CreatedAt.ToUniversalTime().ToString("MMM d, yyyy · HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture)</time>
+                    </header>
+                    <h2>@(Job.Instruction.Length > 140 ? Job.Instruction[..140].TrimEnd() + "…" : Job.Instruction)</h2>
+                    <p class="job-repository">@Job.Repository</p>
+                    <details class="job-request">
+                        <summary>View full request</summary>
+                        <p class="job-instruction">@Job.Instruction</p>
                     </details>
-                }
-            </article>
-        }
+                    <div class="job-metadata">
+                        <p><span class="metadata-label">Branch:</span> <code>@Job.Branch</code></p>
+                        @if (!string.IsNullOrWhiteSpace(Job.SandboxId))
+                        {
+                            <p><span class="metadata-label">Railway sandbox ID:</span> <code>@Job.SandboxId</code></p>
+                        }
+                        <p><span class="metadata-label">Job ID:</span> <code>@Job.Id</code></p>
+                        <p><span class="metadata-label">Cleanup:</span> @Job.CleanupState</p>
+                    </div>
+                    <footer class="job-footer">
+                        <p class="job-budget">@Job.ModelRequests model requests reserved · @((Job.ModelRequests * .40m).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))) upper budget</p>
+                        <div class="job-actions">
+                            @if (Job.PullRequestUrl is { } Url) { <a class="review-link" href="@Url" target="_blank" rel="noopener noreferrer">Review pull request ↗</a> }
+                            <button type="button" disabled="@Busy" @onclick="() => LoadArtifactAsync(Job.Id)">Load validation and files</button>
+                            @if (!PersonalAgent.Contracts.Coding.CodingJobs.Terminal(Job.Status) && Job.Status != "Publishing")
+                            { <button class="cancel-button" type="button" disabled="@Busy" @onclick="() => CancelAsync(Job.Id)">Cancel job</button> }
+                        </div>
+                    </footer>
+                    @if (Job.Error is not null) { <p class="job-error" role="status">@Job.Error</p> }
+                    @if (Artifacts.TryGetValue(Job.Id, out var Artifact))
+                    {
+                        <details><summary>Validation and proposed files</summary>
+                            @foreach (var Check in Artifact.Checks)
+                            { <h3>@Check.Command — exit @Check.ExitCode</h3><pre>@Check.Output</pre> }
+                            @foreach (var File in Artifact.Files)
+                            { <details><summary>@File.Path @(File.Content is null ? "(deleted)" : "")</summary><pre>@File.Content</pre></details> }
+                        </details>
+                    }
+                </article>
+            }
+        </div>
     }
 </section>
