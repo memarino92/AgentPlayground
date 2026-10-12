@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Xunit;
 
 using PersonalAgent.Api.Coding;
+using PersonalAgent.Api.Endpoints;
 using PersonalAgent.Contracts.Coding;
 using PersonalAgent.Integrations;
 
@@ -48,6 +49,7 @@ public sealed class CodingSubscriptionTests
         Safe["input"]![2]!["output"]!.GetValue<string>().Should().Be("passed");
         Safe["input"]![3]!["encrypted_content"]!.GetValue<string>().Should().Be("encrypted");
         Safe["tools"]![0]!["type"]!.GetValue<string>().Should().Be("namespace");
+        Safe["tools"]![0]!["description"]!.GetValue<string>().Should().NotBeNullOrWhiteSpace();
         Safe["tools"]![0]!["tools"]![0]!["name"]!.GetValue<string>().Should().Be("bash");
         Safe["tool_choice"]!["namespace"]!.GetValue<string>().Should().Be("coding");
         Input["store"]!.GetValue<bool>().Should().BeTrue();
@@ -79,5 +81,60 @@ public sealed class CodingSubscriptionTests
             var Failure = await FluentActions.Awaiting(Relay).Should().ThrowAsync<CodingGatewayException>();
             Failure.Which.Message.Should().NotContain("private-provider-body");
         }
+    }
+
+    [Theory]
+    [InlineData("tools[0].description", true)]
+    [InlineData("input[12].content", true)]
+    [InlineData("private-provider-body", false)]
+    [InlineData("tools[0].description: private-provider-body", false)]
+    public async Task RequestErrorsExposeOnlyAllowlistedSchemaPaths(string Parameter, bool Expected)
+    {
+        using var Response = new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new
+                { error = new { param = Parameter, message = "private-provider-body", request = "private-request" } }), Encoding.UTF8, "application/json")
+        };
+        var Failure = await CodingModelGateway.ProviderFailureAsync(Response, true, default);
+        Failure.Status.Should().Be(400);
+        Failure.Message.Should().NotContain("private-provider-body").And.NotContain("private-request");
+        Failure.Message.Contains("parameter:").Should().Be(Expected);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NonJsonOrOversizedProviderErrorsRemainSafe(bool Oversized)
+    {
+        using var Response = new HttpResponseMessage(HttpStatusCode.BadRequest)
+            { Content = new StringContent(Oversized ? new string('x', 17000) : "<html>private-provider-body</html>") };
+        var Failure = await CodingModelGateway.ProviderFailureAsync(Response, true, default);
+        Failure.Status.Should().Be(400);
+        Failure.Message.Should().NotContain("private-provider-body").And.NotContain("parameter:");
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("true")]
+    public async Task UnexpectedJsonErrorShapePreservesBadRequestStatus(string Body)
+    {
+        using var Response = new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent(Body) };
+        var Failure = await CodingModelGateway.ProviderFailureAsync(Response, true, default);
+        Failure.Status.Should().Be(400);
+        Failure.Message.Should().NotContain("parameter:");
+    }
+
+    [Fact]
+    public void StreamingFailureUsesResponsesErrorEventShape()
+    {
+        var Event = CodingJobEndpoints.StreamingError(new(502, "Safe diagnostic"));
+        Event.Should().StartWith("event: error\ndata: ");
+        var Data = JsonNode.Parse(Event.Split('\n')[1][6..])!;
+        Data["type"]!.GetValue<string>().Should().Be("error");
+        Data["code"]!.GetValue<string>().Should().Be("coding_inference_failed");
+        Data["message"]!.GetValue<string>().Should().Be("Safe diagnostic");
+        Data["sequence_number"]!.GetValue<int>().Should().Be(0);
+        Data.AsObject().ContainsKey("error").Should().BeFalse();
     }
 }

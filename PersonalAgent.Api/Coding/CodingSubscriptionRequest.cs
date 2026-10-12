@@ -68,7 +68,8 @@ internal static class CodingSubscriptionRequest
                 Copy(Function, Safe, "name", "description", "parameters");
                 Functions.Add(Safe);
             }
-            Result["tools"] = new JsonArray(new JsonObject { ["type"] = "namespace", ["name"] = "coding", ["tools"] = Functions });
+            Result["tools"] = new JsonArray(new JsonObject { ["type"] = "namespace", ["name"] = "coding",
+                ["description"] = "Local repository tools executed inside this coding job's isolated sandbox.", ["tools"] = Functions });
             if (Input["tool_choice"] is JsonValue Choice && Choice.TryGetValue<string>(out var Mode) && Mode is "auto" or "required" or "none")
                 Result["tool_choice"] = Mode;
             else if (Input["tool_choice"] is JsonObject Required && Required["type"]?.GetValue<string>() == "function")
