@@ -39,6 +39,7 @@ To roll back provider use, select an existing API/OpenRouter model for the conve
 ## Troubleshooting and verification
 
 - **Older API release:** deploy the matching API/Web revisions and retry. A Web-only deployment cannot create pairings.
+- **API startup fails with a null `configuration_settings.updated_at`:** deploy the configuration seed fix. Production requires an explicit timestamp, which the initial ChatGPT seed omitted; the corrected initializer supplies `now()` when that column exists. Existing settings are preserved. Restarting the original image repeats the failure.
 - **Pairing expired/already used:** create a fresh pairing. A helper consumes preparation once; avoid running two helpers with one code.
 - **Port 1455 unavailable:** stop the other loopback authorization listener and start a fresh pairing. The helper uses Kestrel and does not require a Windows HTTP URL ACL.
 - **Identity or returning-account mismatch:** discard the attempt. Original credentials remain intact; choose the intended account and reconnect.

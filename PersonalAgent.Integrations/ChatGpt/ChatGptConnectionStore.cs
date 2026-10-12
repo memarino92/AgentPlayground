@@ -18,7 +18,12 @@ public sealed class ChatGptConnectionStore(IntegrationDatabase Database, ChatGpt
     {
         await using var connection = await Database.OpenAsync(Token);
         await using var transaction = await connection.BeginTransactionAsync(Token);
-        await using var command = new NpgsqlCommand("""
+        await using var timestamp = new NpgsqlCommand("""
+            SELECT EXISTS(SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'app' AND table_name = 'configuration_settings' AND column_name = 'updated_at')
+            """, connection, transaction);
+        var hasTimestamp = (bool)(await timestamp.ExecuteScalarAsync(Token))!;
+        await using var command = new NpgsqlCommand($"""
             SELECT pg_advisory_xact_lock(947120042);
             CREATE TABLE IF NOT EXISTS app.chatgpt_hosts(id integer PRIMARY KEY CHECK(id = 1), host_id text NOT NULL);
             CREATE TABLE IF NOT EXISTS app.chatgpt_connections(
@@ -28,8 +33,8 @@ public sealed class ChatGptConnectionStore(IntegrationDatabase Database, ChatGpt
             CREATE TABLE IF NOT EXISTS app.chatgpt_pairings(
                 code_hash text PRIMARY KEY, actor_id text NOT NULL, pending text NOT NULL, expires_at timestamptz NOT NULL,
                 prepared boolean NOT NULL DEFAULT false);
-            INSERT INTO app.configuration_settings(scope, key, value, is_secret, is_active)
-                SELECT 'Api', 'ChatGpt:ReviewedModels', '["gpt-6.1-sol","gpt-6-astra"]', false, true
+            INSERT INTO app.configuration_settings(scope, key, value, is_secret, is_active{(hasTimestamp ? ", updated_at" : "")})
+                SELECT 'Api', 'ChatGpt:ReviewedModels', '["gpt-6.1-sol","gpt-6-astra"]', false, true{(hasTimestamp ? ", now()" : "")}
                 WHERE NOT EXISTS(SELECT 1 FROM app.chatgpt_hosts WHERE id = 1)
                 ON CONFLICT(scope, key) DO NOTHING;
             INSERT INTO app.chatgpt_hosts(id, host_id) VALUES(1, @host) ON CONFLICT DO NOTHING;
