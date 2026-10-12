@@ -32,10 +32,44 @@ public sealed class ChatGptResponsesTests(PostgresVectorFixture Fixture) : IClas
             {
                 Transport = new HttpClientPipelineTransport(http), RetryPolicy = new ClientRetryPolicy(0)
             }).AsIChatClient("gpt-6.1-sol"));
-        var response = async () => await client.GetResponseAsync([new ChatMessage(ChatRole.User, "Hello")]);
+        var context = new ChatMessage(ChatRole.System, "Keep account context private.");
+        var options = new ChatOptions { Instructions = "Be helpful.", Temperature = 0.5f, TopP = 0.9f, MaxOutputTokens = 100, AllowBackgroundResponses = false };
+        var response = async () => await client.GetResponseAsync([context, new ChatMessage(ChatRole.User, "Hello")], options);
         if (Interrupted) await response.Should().ThrowAsync<ChatGptException>();
         else (await response()).Text.Should().Be("Hello");
         handler.Called.Should().BeTrue();
+        context.Role.Should().Be(ChatRole.System);
+        options.Temperature.Should().Be(0.5f);
+        options.MaxOutputTokens.Should().Be(100);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, "rejected")]
+    [InlineData(HttpStatusCode.Unauthorized, "Reconnect")]
+    [InlineData(HttpStatusCode.Forbidden, "Reconnect")]
+    [InlineData(HttpStatusCode.TooManyRequests, "usage limit")]
+    public async Task ProviderErrors_ReturnActionableFailures_WithoutPrivateProviderBodies(HttpStatusCode Status, string Expected)
+    {
+        var store = await SeedAsync();
+        using var handler = new ErrorResponsesHandler(Status);
+        using var http = new HttpClient(handler);
+        using var client = new ChatGptChatClient(store, "owner", ConnectionId, "gpt-6.1-sol", Credential =>
+            new ResponsesClient(new ApiKeyCredential(Credential), new OpenAIClientOptions
+            {
+                Transport = new HttpClientPipelineTransport(http), RetryPolicy = new ClientRetryPolicy(0)
+            }).AsIChatClient("gpt-6.1-sol"));
+        var failure = await client.Invoking(Value => Value.GetResponseAsync([new ChatMessage(ChatRole.User, "Hello")]))
+            .Should().ThrowAsync<ChatGptException>();
+        failure.Which.Message.Should().Contain(Expected).And.NotContain("private-provider-body");
+    }
+
+    private sealed class ErrorResponsesHandler(HttpStatusCode Status) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Token)
+            => Task.FromResult(new HttpResponseMessage(Status)
+            {
+                Content = new StringContent("{\"error\":{\"message\":\"private-provider-body\"}}", Encoding.UTF8, "application/json")
+            });
     }
 
     [Fact]
@@ -84,6 +118,10 @@ public sealed class ChatGptResponsesTests(PostgresVectorFixture Fixture) : IClas
             document.RootElement.GetProperty("store").GetBoolean().Should().BeFalse();
             document.RootElement.GetProperty("stream").GetBoolean().Should().BeTrue();
             document.RootElement.TryGetProperty("previous_response_id", out _).Should().BeFalse();
+            var toolNamespace = document.RootElement.GetProperty("tools").EnumerateArray().Should().ContainSingle().Subject;
+            toolNamespace.GetProperty("type").GetString().Should().Be("namespace");
+            toolNamespace.GetProperty("name").GetString().Should().Be("personal_agent");
+            toolNamespace.GetProperty("tools")[0].GetProperty("name").GetString().Should().Be("GetAnswer");
             if (Requests == 2)
             {
                 body.Should().Contain("function_call_output").And.Contain("call_test").And.Contain("42");
@@ -136,6 +174,12 @@ public sealed class ChatGptResponsesTests(PostgresVectorFixture Fixture) : IClas
             document.RootElement.GetProperty("stream").GetBoolean().Should().BeTrue();
             document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6.1-sol");
             document.RootElement.TryGetProperty("previous_response_id", out _).Should().BeFalse();
+            foreach (var field in new[] { "temperature", "top_p", "max_output_tokens", "background", "conversation", "metadata", "user" })
+                document.RootElement.TryGetProperty(field, out _).Should().BeFalse($"ChatGPT plan requests reject {field}");
+            document.RootElement.GetProperty("instructions").GetString().Should().Be("Be helpful.");
+            var context = document.RootElement.GetProperty("input").EnumerateArray().First();
+            context.GetProperty("role").GetString().Should().Be("developer");
+            context.ToString().Should().Contain("Keep account context private.");
             return MessageResponse(Interrupted);
         }
     }
