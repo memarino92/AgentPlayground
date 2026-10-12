@@ -28,6 +28,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Journal sync](runbooks/journal-sync.md): Git blob checkpoints, retries, and reprocessing unchanged files.
 - [Coaching retrieval evaluation](runbooks/coach-retrieval-evaluation.md): synthetic regression baseline and live-model evaluation limits.
 - [Observability](runbooks/observability.md): service tracing, OpenInference, Sentry correlation and OTLP setup.
+- [Railway log inspection](runbooks/railway-logs.md): disabled-by-default scoped read-only runtime snapshots; [proposed decision 0045](decisions/0045-railway-log-tool.md).
 - [Integration settings](runbooks/integration-settings.md): in-app Sentry configuration, encrypted revisions, and runtime reload.
 - [Existing settings editor](decisions/0011-existing-settings-editor.md): edit database configuration with masked secrets and explicit restart requirements.
 - [Live provider credentials](decisions/0012-live-provider-credentials.md): OpenAI/AssemblyAI key rotation for new requests; remaining startup-bound consumers.

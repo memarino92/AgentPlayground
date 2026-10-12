@@ -17,6 +17,19 @@ namespace PersonalAgent.Web.Tests.Components;
 public sealed class DatabaseSettingsTests : TestContext
 {
     [Fact]
+    public void RailwayLogs_ShowInvocationValidationAndNoRestartRequirement()
+    {
+        using var Handler = new SettingsHandler { RailwayLogs = true };
+        Configure(Handler);
+        var Cut = RenderComponent<DatabaseSettings>();
+        Cut.WaitForAssertion(() => Cut.Find(".setting-row").TextContent.Should()
+            .Contain("validated on each log call").And.Contain("Use this database setting").And.NotContain("Restart required"));
+        Cut.Find("textarea").Change("{\"enabled\":false}");
+        Cut.Find("form").Submit();
+        Cut.WaitForAssertion(() => Cut.Find("[role=status]").TextContent.Should().Contain("next log call"));
+    }
+
+    [Fact]
     public void ModelPolicy_ShowsLiveLifecycleAndDatabaseActivityLabel()
     {
         using var Handler = new SettingsHandler { ModelPolicy = true };
@@ -78,10 +91,13 @@ public sealed class DatabaseSettingsTests : TestContext
     private sealed class SettingsHandler : HttpMessageHandler
     {
         public bool ModelPolicy;
+        public bool RailwayLogs;
         public SaveDatabaseSettingsRequest? Saved;
         public HttpStatusCode Status = HttpStatusCode.NoContent;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken CancellationToken)
         {
+            if (Request.Method == HttpMethod.Get && RailwayLogs)
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new[] { new DatabaseSetting("Api", "RailwayLogs:Settings", "1", "{}", false, true) }) };
             if (Request.Method == HttpMethod.Get && ModelPolicy)
                 return new(HttpStatusCode.OK) { Content = JsonContent.Create(new[] { new DatabaseSetting("Api", "ChatModels:Models:0:Id", "1", "model", false, true) }) };
             if (Request.Method == HttpMethod.Get)
