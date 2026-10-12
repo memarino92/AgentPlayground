@@ -1,0 +1,39 @@
+.coding-jobs-page { max-width: 1200px; margin: 0 auto; padding: clamp(1rem, 3vw, 2rem); color: var(--text-primary); }
+.page-header, .page-actions, .job-header, .job-actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.page-header { justify-content: space-between; gap: 1.25rem; margin-bottom: 1.75rem; }
+h1 { font-size: 1.8rem; font-weight: 700; margin: 0 0 .5rem; }
+.page-header p { max-width: 44rem; margin: 0; color: var(--text-secondary); line-height: 1.6; }
+.jobs-list { display: grid; gap: 1.25rem; }
+.job-card { min-width: 0; padding: clamp(1rem, 2.5vw, 1.5rem); border: 1px solid var(--border-color); border-radius: .9rem; background: var(--surface-color); }
+.job-header { justify-content: space-between; }
+.job-status { padding: .3rem .65rem; border-radius: .4rem; background: var(--surface-muted); font-size: .78rem; font-weight: 700; }
+.job-status[data-status=Running], .job-status[data-status=Publishing] { background: light-dark(#e0f2fe, #203b50); color: var(--info-color); }
+.job-status[data-status=PrOpened] { background: var(--accent-soft); color: var(--success-color); }
+.job-status[data-status=Failed] { background: light-dark(#fff1ed, #422b2a); color: var(--error-color); }
+time, .job-repository, .job-budget { color: var(--text-secondary); font-size: .85rem; }
+h2 { margin: 1rem 0 .4rem; font-size: 1.15rem; font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }
+.job-repository { margin: 0 0 1rem; overflow-wrap: anywhere; }
+summary { cursor: pointer; color: var(--accent-color); font-size: .9rem; padding: .3rem 0; }
+.job-instruction { white-space: pre-wrap; line-height: 1.65; font-size: .95rem; overflow-wrap: anywhere; margin: .75rem 0 1rem; }
+.job-metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem 1.5rem; padding: 1rem; margin-top: 1rem; border-radius: .6rem; background: var(--surface-muted); font-size: .85rem; }
+.job-metadata p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+.metadata-label { display: block; color: var(--text-secondary); font-size: .75rem; font-weight: 600; margin-bottom: .15rem; }
+code { color: var(--text-primary); font-size: .82rem; }
+.job-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-top: 1px solid var(--border-color); margin-top: 1.25rem; padding-top: 1rem; }
+.job-budget { margin: 0; }
+button, .review-link { border: 1px solid var(--border-color); border-radius: .5rem; padding: .55rem .8rem; min-height: 2.5rem; background: var(--surface-muted); color: var(--text-primary); font: inherit; font-size: .85rem; cursor: pointer; text-decoration: none; }
+button:hover:not(:disabled), .review-link:hover { border-color: var(--accent-color); background: var(--accent-soft); }
+button:disabled { cursor: default; opacity: .55; }
+.review-link { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent-color); font-weight: 600; }
+.cancel-button { color: var(--error-color); background: transparent; }
+a { color: var(--accent-color); }
+.job-error { padding: .9rem; border-radius: .5rem; background: light-dark(#fff1ed, #422b2a); color: var(--error-color); overflow-wrap: anywhere; }
+.page-state { padding: 2rem; border: 1px dashed var(--border-color); border-radius: .9rem; color: var(--text-secondary); text-align: center; }
+.job-card > details:last-child { margin-top: 1rem; }
+h3 { font-size: .95rem; margin-top: 1rem; overflow-wrap: anywhere; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30rem; overflow: auto; padding: 1rem; background: var(--surface-muted); border-radius: .5rem; font-size: .8rem; }
+@media (max-width: 640px) {
+    .job-metadata { grid-template-columns: minmax(0, 1fr); }
+    .job-actions { width: 100%; }
+    .job-actions button, .review-link { flex: 1 1 auto; text-align: center; }
+}

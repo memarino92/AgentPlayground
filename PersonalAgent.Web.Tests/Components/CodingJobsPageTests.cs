@@ -24,7 +24,7 @@ public sealed class CodingJobsPageTests : TestContext
 
         var Page = RenderComponent<CodingJobsPage>();
 
-        Page.WaitForAssertion(() => Page.Markup.Should().Contain("Branch: feature/coding-dashboard")
+        Page.WaitForAssertion(() => Page.Find(".job-metadata").TextContent.Should().Contain("Branch: feature/coding-dashboard")
             .And.Contain("Railway sandbox ID: sandbox-123"));
     }
 
@@ -36,7 +36,7 @@ public sealed class CodingJobsPageTests : TestContext
 
         var Page = RenderComponent<CodingJobsPage>();
 
-        Page.WaitForAssertion(() => Page.Markup.Should().Contain("Branch: feature/coding-dashboard"));
+        Page.WaitForAssertion(() => Page.Find(".job-metadata").TextContent.Should().Contain("Branch: feature/coding-dashboard"));
         Page.Markup.Should().NotContain("Railway sandbox ID:");
     }
 
