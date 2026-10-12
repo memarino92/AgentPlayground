@@ -1,12 +1,18 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using PersonalAgent.Contracts.Coding;
 using PersonalAgent.Integrations;
+using PersonalAgent.Integrations.ChatGpt;
+using PersonalAgent.Api.Services;
 
 namespace PersonalAgent.Api.Coding;
 
-internal sealed class CodingModelGateway(CodingJobStore Store, CodingJobService Authorization, HttpClient Http)
+internal sealed class CodingModelGateway(CodingJobStore Store, CodingJobService Authorization, HttpClient Http,
+    ChatGptConnectionStore Connections, ChatGptModelCatalog Models, ILogger<CodingModelGateway> Logger)
 {
     internal static JsonObject Sanitize(JsonObject Input)
     {
@@ -43,27 +49,60 @@ internal sealed class CodingModelGateway(CodingJobStore Store, CodingJobService 
         return Clean;
     }
 
-    public async Task RelayAsync(Guid Id, HttpContext Context, CancellationToken Token)
+    public async Task RelayAsync(Guid Id, HttpContext Context, CancellationToken Token, bool Responses = false)
     {
         var Header = Context.Request.Headers.Authorization.ToString();
         if (!Header.StartsWith("Bearer ", StringComparison.Ordinal) || Header.Length != 71) throw new UnauthorizedAccessException();
         var Job = await Store.GetAsync(Id, Token) ?? throw new UnauthorizedAccessException();
+        if (!await Store.AuthorizeModelRequestAsync(Id, Header[7..], Token)) throw new UnauthorizedAccessException();
         await Authorization.RequireAsync(Job.ActorId, Job.Email, Job.Subject, Token);
         var Current = await Store.SettingsAsync(Token);
         if (!Current.View.Settings.Enabled) throw new UnauthorizedAccessException();
+        var Subscription = CodingJobs.TrySubscriptionModel(Job.Settings.ModelId, out var Connection, out var Slug);
+        if (Responses != Subscription) throw new ArgumentException("Use the selected coding provider's protocol.");
         using var Deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
-        Deadline.CancelAfter(TimeSpan.FromMinutes(3));
+        var Remaining = Job.Deadline - DateTimeOffset.UtcNow;
+        if (Remaining <= TimeSpan.Zero) throw new UnauthorizedAccessException();
+        var RequestLimit = TimeSpan.FromMinutes(Subscription ? 10 : 3);
+        Deadline.CancelAfter(Remaining < RequestLimit ? Remaining : RequestLimit);
         var Input = await Context.Request.ReadFromJsonAsync<JsonObject>(Deadline.Token) ?? throw new ArgumentException();
-        var Clean = Sanitize(Input);
-        if (!await Store.ReserveModelRequestAsync(Id, Header[7..], Job.Settings.MaxModelRequests, Deadline.Token)) throw new UnauthorizedAccessException();
+        var Clean = Subscription ? CodingSubscriptionRequest.Sanitize(Input, Slug) : Sanitize(Input);
+        var Credential = Current.Secrets.OpenRouterKey;
+        if (Subscription)
+        {
+            if (!(await Models.GetModelsAsync(Job.ActorId, Deadline.Token)).Any(Model => Model.Id == Job.Settings.ModelId))
+                throw new CodingGatewayException(403, "The selected ChatGPT model is unavailable. Reconnect or review model access in Settings.");
+            var Saved = await Connections.GetCredentialsAsync(Job.ActorId, Connection, Deadline.Token);
+            if (!ChatGptOAuth.PlanEnabled(Saved.Scope)) throw new CodingGatewayException(403, "Reconnect and authorize ChatGPT plan usage in Settings.");
+            Credential = Saved.AccessToken;
+        }
+        if (!await Store.ReserveModelRequestAsync(Id, Header[7..], Job.Settings.MaxModelRequests, Deadline.Token))
+        {
+            var Latest = await Store.GetAsync(Id, Deadline.Token);
+            if (Latest?.Status == "Running" && Latest.Deadline > DateTimeOffset.UtcNow && Latest.ModelRequests >= Job.Settings.MaxModelRequests)
+                throw new CodingGatewayException(429, "Coding model request limit exhausted. Increase the limit in Platform coding settings and start a new job.");
+            throw new UnauthorizedAccessException();
+        }
         // Reserve $0.40 even for failed/uncertain calls, never refund. At capped prices and model's 400k context,
         // max input $0.30 + output $0.036864 is below this reservation. Twelve calls reserve at most $4.80.
-        using var Request = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
-        Request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Current.Secrets.OpenRouterKey);
+        using var Request = new HttpRequestMessage(HttpMethod.Post, Subscription ? ChatGptOAuth.Resource + "/responses" : "https://openrouter.ai/api/v1/chat/completions");
+        Request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Credential);
         Request.Content = JsonContent.Create(Clean);
+        var Started = Stopwatch.GetTimestamp();
         using var Response = await Http.SendAsync(Request, HttpCompletionOption.ResponseHeadersRead, Deadline.Token);
-        if (!Response.IsSuccessStatusCode) { Context.Response.StatusCode = 502; return; }
+        Logger.LogInformation(new EventId(4405), "Coding inference {JobId} via {Provider} model {Model} returned HTTP {Status} after {ElapsedMs}ms",
+            Id, Subscription ? "ChatGPT" : "OpenRouter", Subscription ? Slug : CodingJobs.Model,
+            (int)Response.StatusCode, Stopwatch.GetElapsedTime(Started).TotalMilliseconds);
+        if (!Response.IsSuccessStatusCode)
+            throw new CodingGatewayException(Response.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? 429 : 502,
+                Subscription ? "ChatGPT inference failed. Reconnect for access errors; review plan limits at https://chatgpt.com/settings/usage. No paid fallback was used."
+                    : "OpenRouter coding inference failed. Check provider availability and credentials.");
         Context.Response.ContentType = "text/event-stream";
+        if (Subscription)
+        {
+            await RelaySubscriptionStreamAsync(Response, Context, Deadline.Token);
+            return;
+        }
         await using var Source = await Response.Content.ReadAsStreamAsync(Deadline.Token);
         var Buffer = new byte[8192]; var Total = 0; int Count;
         while ((Count = await Source.ReadAsync(Buffer, Deadline.Token)) > 0)
@@ -73,5 +112,35 @@ internal sealed class CodingModelGateway(CodingJobStore Store, CodingJobService 
             await Context.Response.Body.WriteAsync(Buffer.AsMemory(0, Count), Deadline.Token);
             await Context.Response.Body.FlushAsync(Deadline.Token);
         }
+    }
+
+    internal static async Task RelaySubscriptionStreamAsync(HttpResponseMessage Response, HttpContext Context, CancellationToken Token)
+    {
+        await using var Source = await Response.Content.ReadAsStreamAsync(Token);
+        using var Reader = new StreamReader(Source);
+        var Completed = false;
+        var Total = 0;
+        var Event = new StringBuilder();
+        while (await Reader.ReadLineAsync(Token) is { } Line)
+        {
+            Total += Encoding.UTF8.GetByteCount(Line) + 1;
+            if (Total > 4_000_000) throw new InvalidOperationException("Model response limit exceeded.");
+            Event.AppendLine(Line);
+            if (Line.Length != 0) continue;
+            var Data = Event.ToString().Split('\n').Where(Part => Part.StartsWith("data: ")).Select(Part => Part[6..].TrimEnd('\r'));
+            var Payload = string.Join('\n', Data);
+            if (Payload.Length > 0 && Payload != "[DONE]")
+            {
+                using var Document = JsonDocument.Parse(Payload);
+                var Type = Document.RootElement.GetProperty("type").GetString();
+                if (Type is "response.failed" or "response.incomplete" or "error")
+                    throw new CodingGatewayException(502, "ChatGPT did not complete coding inference. Review plan usage at https://chatgpt.com/settings/usage. No paid fallback was used.");
+                if (Type == "response.completed") Completed = true;
+            }
+            await Context.Response.WriteAsync(Event.ToString(), Token);
+            await Context.Response.Body.FlushAsync(Token);
+            Event.Clear();
+        }
+        if (!Completed) throw new CodingGatewayException(502, "ChatGPT stream ended before completion. Retry the job; no paid fallback was used.");
     }
 }

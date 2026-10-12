@@ -1,7 +1,7 @@
 <section class="settings-editor">
     <h2>Platform coding</h2>
-    <p>Run OpenCode with OpenRouter to propose source changes in draft PRs. You review and merge them.</p>
-    <p>Uses the shared Railway sandbox connection with a separate coding checkpoint. Model calls are capped at $0.40 reserved per request and $5 per job; Railway compute is separate.</p>
+    <p>Run OpenCode with a selected model to propose source changes in draft PRs. You review and merge them.</p>
+    <p>Uses the shared Railway sandbox connection with a separate coding checkpoint. Railway compute is billed separately.</p>
     @if (Error is not null) { <p role="alert">@Error</p> }
     @if (Notice is not null) { <p role="status">@Notice</p> }
     <button type="button" disabled="@Busy" @onclick="LoadAsync">Reload settings</button>
@@ -12,6 +12,18 @@
         <EditForm Model="Model" OnValidSubmit="SaveAsync" FormName="coding-settings">
             <DataAnnotationsValidator /><ValidationSummary />
             <fieldset disabled="@Busy">
+                <div class="settings-editor__field"><label for="coding-model">Coding model and billing account</label>
+                    <InputSelect id="coding-model" @bind-Value="Model.ModelId" @bind-Value:after="SelectModel">
+                        @if (!Models.Any(Choice => Choice.Id == Model.ModelId)) { <option value="@Model.ModelId">Saved model (currently unavailable)</option> }
+                        @foreach (var Choice in Models) { <option value="@Choice.Id">@Choice.DisplayName</option> }
+                    </InputSelect>
+                </div>
+                @if (Subscription)
+                {
+                    <p>Uses your selected ChatGPT account’s plan allowance. No automatic fallback to API billing. <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">Manage plan usage</a>.</p>
+                }
+                else { <p>OpenRouter API billing: $0.40 reserved per request, at most $5 per job.</p> }
+                <p>To add subscription models, connect your account in AI providers using Continue with ChatGPT, then reload these settings.</p>
                 <div class="settings-editor__field"><label for="coding-repo">Repository (owner/name)</label><InputText id="coding-repo" @bind-Value="Model.Repository" /></div>
                 <div class="settings-editor__field"><label for="coding-checkpoint">Coding checkpoint</label><InputText id="coding-checkpoint" @bind-Value="Model.Checkpoint" /></div>
                 <div class="settings-editor__field"><label for="coding-image">Image SHA-256</label><InputText id="coding-image" @bind-Value="Model.ImageId" /></div>
@@ -25,8 +37,8 @@
                 <div class="settings-editor__field"><label for="coding-github-action">GitHub App private key</label><InputSelect id="coding-github-action" @bind-Value="Model.GitHubAction"><option value="keep">Keep saved key</option><option value="replace">Replace key</option><option value="clear">Remove key</option></InputSelect></div>
                 @if (Model.GitHubAction == "replace") { <div class="settings-editor__field"><label for="coding-github">New PEM private key</label><InputTextArea id="coding-github" autocomplete="off" rows="4" @bind-Value="Model.GitHubKey" /></div> }
                 <div class="settings-editor__field"><label for="coding-minutes">Time limit (minutes)</label><InputNumber id="coding-minutes" @bind-Value="Model.Minutes" /></div>
-                <div class="settings-editor__field"><label for="coding-requests">Maximum model requests (1–12)</label><InputNumber id="coding-requests" @bind-Value="Model.Requests" /></div>
-                <div class="settings-editor__field"><label for="coding-budget">Model budget (USD, up to 5)</label><InputNumber id="coding-budget" @bind-Value="Model.Budget" /></div>
+                <div class="settings-editor__field"><label for="coding-requests">Maximum model requests (@(Subscription ? "1–1000" : "1–12"))</label><InputNumber id="coding-requests" @bind-Value="Model.Requests" /></div>
+                @if (!Subscription) { <div class="settings-editor__field"><label for="coding-budget">Model budget (USD, up to 5)</label><InputNumber id="coding-budget" @bind-Value="Model.Budget" /></div> }
                 <div class="settings-editor__field"><label for="coding-tests">Required test project</label><InputText id="coding-tests" @bind-Value="Model.TestProject" /></div>
                 <div class="settings-editor__field"><label for="coding-filter">Test filter (empty for all tests)</label><InputText id="coding-filter" @bind-Value="Model.TestFilter" /></div>
                 <label><InputCheckbox @bind-Value="Model.Enabled" /> Enable coding jobs</label>

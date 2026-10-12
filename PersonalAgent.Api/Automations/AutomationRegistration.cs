@@ -27,7 +27,7 @@ internal static class AutomationRegistration
         Services.AddSingleton<PersonalAgent.Api.Coding.CodingJobTools>();
         Services.AddHttpClient<PersonalAgent.Api.Coding.ICodingPublisher, PersonalAgent.Api.Coding.GitHubCodingPublisher>(C => C.Timeout = TimeSpan.FromSeconds(45))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-        Services.AddHttpClient<PersonalAgent.Api.Coding.CodingModelGateway>(C => C.Timeout = TimeSpan.FromMinutes(3))
+        Services.AddHttpClient<PersonalAgent.Api.Coding.CodingModelGateway>(C => C.Timeout = TimeSpan.FromMinutes(10))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         Services.AddHostedService<PersonalAgent.Api.Coding.CodingJobCoordinator>();
         Services.AddSingleton<PersonalAgent.Integrations.AutomationRuntimeStore>();

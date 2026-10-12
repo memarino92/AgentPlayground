@@ -5,6 +5,16 @@ public static class CodingJobs
     public const string Permission = "Local:start_coding_job";
     public const string Queue = "personal-agent-coding-jobs";
     public const string Model = "openai/gpt-5.4-mini";
+    public const int MaxSubscriptionRequests = 1000;
+    public static bool IsSubscriptionModel(string? ModelId) => TrySubscriptionModel(ModelId, out _, out _);
+    public static bool TrySubscriptionModel(string? ModelId, out Guid Connection, out string Slug)
+    {
+        var Parts = ModelId?.Split(':', 3) ?? [];
+        Connection = default;
+        Slug = Parts.Length == 3 ? Parts[2] : "";
+        return Parts.Length == 3 && Parts[0] == "chatgpt" && Guid.TryParse(Parts[1], out Connection)
+            && System.Text.RegularExpressions.Regex.IsMatch(Slug, @"\A[A-Za-z0-9_.-]{1,100}\z");
+    }
     public const int MaxArtifactBytes = 1_000_000;
     public static bool Terminal(string Status) => Status is "PrOpened" or "Failed" or "Cancelled";
     public static DateTimeOffset? RulesetTimestamp(string? Value) => Value is not null
@@ -34,7 +44,8 @@ public sealed record CodingSettings
     public long VerifiedRulesetId { get; init; }
     public string VerifiedRulesetUpdatedAt { get; init; } = "";
     public int MaxMinutes { get; init; } = 20;
-    // Fixed model, standard text requests, max 8192 output tokens. Gateway enforces provider price ceilings.
+    public string ModelId { get; init; } = CodingJobs.Model;
+    // OpenRouter reserves $0.40/request; subscription jobs use a separate request allowance without API dollar accounting.
     public int MaxModelRequests { get; init; } = 12;
     public decimal ModelBudgetUsd { get; init; } = 5;
     public string TestProject { get; init; } = "PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj";
@@ -42,6 +53,7 @@ public sealed record CodingSettings
 }
 
 public sealed record CodingSettingsView(long Revision, CodingSettings Settings, bool HasOpenRouterKey, bool HasGitHubPrivateKey);
+public sealed record CodingModelOption(string Id, string DisplayName);
 public sealed record SaveCodingSettings(long ExpectedRevision, CodingSettings Settings,
     string OpenRouterKeyAction = "keep", string? OpenRouterKey = null,
     string GitHubPrivateKeyAction = "keep", string? GitHubPrivateKey = null);

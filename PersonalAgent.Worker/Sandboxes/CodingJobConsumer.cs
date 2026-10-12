@@ -41,6 +41,8 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
                 id = Job.SandboxId, imageId = Job.Settings.ImageId, repository = Job.Settings.Repository,
                 baseSha = Job.BaseSha, instruction = Job.Instruction, minutes = Job.Settings.MaxMinutes,
                 testProject = Job.Settings.TestProject, testFilter = Job.Settings.TestFilter,
+                model = CodingJobs.TrySubscriptionModel(Job.Settings.ModelId, out _, out var Slug) ? Slug : CodingJobs.Model,
+                responses = CodingJobs.IsSubscriptionModel(Job.Settings.ModelId),
                 gateway = Railway.Settings.GatewayUrl.TrimEnd('/') + $"/coding-runtime/{Job.Id}/v1", capability = Capability
             }, Deadline.Token);
             var Artifact = Result.GetProperty("artifact").Deserialize<CodingArtifact>(Json) ?? throw new InvalidOperationException("Missing artifact.");

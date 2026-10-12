@@ -8,6 +8,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 
 - [Personal assistant vision](plans/personal-assistant-vision.md): continuous chat, household usefulness, mobile direction, evaluated learning and cloud experiments.
 - [Platform improvement jobs](decisions/0038-platform-improvement-jobs.md): explicit chat-to-PR coding worker; recurring backlog selection remains planned. [Setup and limits](runbooks/platform-coding.md).
+- [Subscription coding models](decisions/0044-subscription-coding-models.md): select your connected ChatGPT account's reviewed models and configure larger request allowances for new coding jobs.
 - [Continuous conversation](runbooks/continuous-conversation.md): one default chat, scoped automatic context, fresh starts and persistent interactive cards.
 
 - [Architecture](architecture.md): current responsibilities and boundaries.

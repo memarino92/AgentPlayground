@@ -64,8 +64,34 @@ public sealed class CodingSettingsTests : TestContext
         public HttpStatusCode Status = HttpStatusCode.OK;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Token)
         {
+            if (Request.RequestUri!.AbsolutePath.EndsWith("/models"))
+                return new(Status) { Content = JsonContent.Create(new[] { new CodingModelOption(CodingJobs.Model, "Mini · OpenRouter"),
+                    new CodingModelOption(SubscriptionModel, "Astra · ChatGPT · owner account") }) };
             if (Request.Method == HttpMethod.Put) Saved = await Request.Content!.ReadFromJsonAsync<SaveCodingSettings>(Token);
             return new(Status) { Content = JsonContent.Create(new CodingSettingsView(Saved is null ? 0 : 1, Saved?.Settings ?? new(), Saved is not null, Saved is not null)) };
         }
+    }
+    private const string SubscriptionModel = "chatgpt:cb8c5a00-985c-4504-9781-deb1a836a500:gpt-6-astra";
+
+    [Fact]
+    public void SubscriptionSelectionSavesAccountAndLargeLimitWithoutRouterCredentials()
+    {
+        using var Handler = new Handler();
+        Services.AddSingleton(new PersonalAgentClient(new HttpClient(Handler) { BaseAddress = new("http://localhost") }, new Anonymous(), Options.Create(new PersonalAgentApiOptions())));
+        var Page = RenderComponent<CodingSettingsPage>();
+        Page.WaitForAssertion(() => Page.Find("#coding-model").TextContent.Should().Contain("Astra · ChatGPT"));
+        Page.Find("#coding-model").Change(SubscriptionModel);
+        Page.Find("#coding-requests").GetAttribute("value").Should().Be("250");
+        Page.FindAll("#coding-budget").Should().BeEmpty();
+        Page.Markup.Should().Contain("No automatic fallback").And.Contain("chatgpt.com/settings/usage");
+        Page.Find("#coding-requests").Change("500");
+        Page.Find("form").Submit();
+        Page.WaitForAssertion(() => Handler.Saved.Should().NotBeNull());
+        Handler.Saved!.Settings.ModelId.Should().Be(SubscriptionModel);
+        Handler.Saved.Settings.MaxModelRequests.Should().Be(500);
+        Handler.Saved.OpenRouterKeyAction.Should().Be("keep");
+        Page.Find("#coding-model").Change(CodingJobs.Model);
+        Page.Find("#coding-requests").GetAttribute("value").Should().Be("12");
+        Page.FindAll("#coding-budget").Should().ContainSingle();
     }
 }

@@ -12,11 +12,22 @@ public partial class CodingSettingsPage : IAsyncDisposable
     [Inject] private PersonalAgentClient Client { get; set; } = default!;
     private readonly CancellationTokenSource Lifetime = new();
     private FormModel Model = new();
+    private CodingModelOption[] Models = [];
+    private bool Subscription => CodingJobs.IsSubscriptionModel(Model.ModelId);
     private long Revision;
     private bool Busy, Loaded, HasOpenRouterKey, HasGitHubKey;
     private string? Error, Notice;
     protected override Task OnInitializedAsync() => LoadAsync();
-    private Task LoadAsync() => RunAsync(async () => Apply(await Client.GetCodingSettingsAsync(Lifetime.Token)));
+    private Task LoadAsync() => RunAsync(async () =>
+    {
+        Apply(await Client.GetCodingSettingsAsync(Lifetime.Token));
+        Models = await Client.GetCodingModelsAsync(Lifetime.Token);
+    });
+    private void SelectModel()
+    {
+        if (Subscription && Model.Requests <= 12) Model.Requests = 250;
+        if (!Subscription && Model.Requests > 12) Model.Requests = 12;
+    }
     private Task SaveAsync() => RunAsync(async () =>
     {
         Apply(await Client.SaveCodingSettingsAsync(new(Revision, new CodingSettings
@@ -24,7 +35,8 @@ public partial class CodingSettingsPage : IAsyncDisposable
             Enabled = Model.Enabled, Repository = Model.Repository.Trim(), Checkpoint = Model.Checkpoint.Trim(), ImageId = Model.ImageId.Trim(),
             GitHubAppId = Model.AppId, InstallationId = Model.InstallationId, MaxMinutes = Model.Minutes, MaxModelRequests = Model.Requests,
             VerifiedRulesetId = Model.RulesetId, VerifiedRulesetUpdatedAt = Model.RulesetUpdatedAt.Trim(),
-            ModelBudgetUsd = Model.Budget, TestProject = Model.TestProject.Trim(), TestFilter = Model.TestFilter.Trim()
+            ModelBudgetUsd = Model.Budget, TestProject = Model.TestProject.Trim(), TestFilter = Model.TestFilter.Trim(),
+            ModelId = Model.ModelId
         }, Model.RouterAction, Model.RouterAction == "replace" ? Model.RouterKey : null,
             Model.GitHubAction, Model.GitHubAction == "replace" ? Model.GitHubKey : null), Lifetime.Token));
         Notice = "Saved. New jobs use these settings; disabling takes effect on current model requests and publication.";
@@ -37,6 +49,7 @@ public partial class CodingSettingsPage : IAsyncDisposable
             AppId = S.GitHubAppId, InstallationId = S.InstallationId, Minutes = S.MaxMinutes, Requests = S.MaxModelRequests,
             RulesetId = S.VerifiedRulesetId, RulesetUpdatedAt = S.VerifiedRulesetUpdatedAt,
             Budget = S.ModelBudgetUsd, TestProject = S.TestProject, TestFilter = S.TestFilter };
+        Model.ModelId = S.ModelId;
     }
     private async Task RunAsync(Func<Task> Action)
     {
@@ -50,7 +63,7 @@ public partial class CodingSettingsPage : IAsyncDisposable
             {
                 HttpStatusCode.Forbidden => "Deployment administrator access is required.",
                 HttpStatusCode.Conflict => "Settings changed. Reload before saving.",
-                HttpStatusCode.BadRequest => "Check repository, checkpoint/image, App IDs, PEM key, test project and limits. Ruleset verification needs both ID and exact timestamp including fractional seconds and timezone; clear it when changing repository or App identity. Budget must cover $0.40 per permitted request. Disable before removing keys.",
+                HttpStatusCode.BadRequest => "Check the selected model belongs to your connected ChatGPT account, repository, checkpoint/image, App IDs, PEM key, test project and limits. ChatGPT allows 1–1000 requests; OpenRouter budget must cover $0.40 per permitted request (1–12). Disable before removing keys.",
                 HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed => "Deploy the matching API version before configuring coding.",
                 _ => "Coding settings are unavailable. Check the API and retry."
             };
@@ -62,6 +75,7 @@ public partial class CodingSettingsPage : IAsyncDisposable
     private sealed class FormModel
     {
         public bool Enabled { get; set; }
+        public string ModelId { get; set; } = CodingJobs.Model;
         public string Repository { get; set; } = "memarino92/AgentPlayground";
         public string Checkpoint { get; set; } = "";
         public string ImageId { get; set; } = "";
