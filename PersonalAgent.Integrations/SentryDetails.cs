@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace PersonalAgent.Integrations;
 
-internal static partial class SentryDetails
+public static partial class SentryDetails
 {
     private const string Hidden = "[redacted]";
     private const int MaxTextLength = 4096;
