@@ -31,9 +31,48 @@ internal sealed class ChatGptChatClient(ChatGptConnectionStore Store, string Act
         var options = Options?.Clone() ?? new ChatOptions();
         options.ModelId = ModelId;
         options.ConversationId = null; // store:false requires replaying context rather than referencing a stored response.
-        options.RawRepresentationFactory = _ => new CreateResponseOptions { StoredOutputEnabled = false };
+        options.ContinuationToken = null;
+        options.AllowBackgroundResponses = null;
+        options.Temperature = options.TopP = null;
+        options.MaxOutputTokens = null;
+        options.AdditionalProperties = null;
+        var rawOptions = new CreateResponseOptions { StoredOutputEnabled = false };
+        if (options.Tools is { Count: > 0 } tools)
+        {
+            if (tools.Any(Tool => Tool is not AIFunctionDeclaration))
+                throw new ChatGptException("This ChatGPT connection supports locally executed function tools only.");
+            var grouped = BinaryData.FromObjectAsJson(new
+            {
+                type = "namespace", name = "personal_agent", description = "Functions authorized by Personal Agent for the current account.",
+                tools = tools.Cast<AIFunctionDeclaration>().Select(Function => new
+                {
+                    type = "function", name = Function.Name, description = Function.Description,
+                    parameters = Function.JsonSchema, strict = false
+                }).ToArray()
+            });
+            rawOptions.Tools.Add(ModelReaderWriter.Read<ResponseTool>(grouped, ModelReaderWriterOptions.Json, OpenAIContext.Default)!);
+            rawOptions.ParallelToolCallsEnabled = options.AllowMultipleToolCalls;
+            rawOptions.ToolChoice = options.ToolMode switch
+            {
+                NoneChatToolMode => ResponseToolChoice.CreateNoneChoice(),
+                RequiredChatToolMode { RequiredFunctionName: null } => ResponseToolChoice.CreateRequiredChoice(),
+                RequiredChatToolMode Required => ModelReaderWriter.Read<ResponseToolChoice>(BinaryData.FromObjectAsJson(
+                    new { type = "function", name = Required.RequiredFunctionName, @namespace = "personal_agent" }), ModelReaderWriterOptions.Json, OpenAIContext.Default),
+                _ => ResponseToolChoice.CreateAutoChoice()
+            };
+            options.Tools = null; // Already grouped; the SDK must not also emit bare top-level function tools.
+        }
+        options.RawRepresentationFactory = _ => rawOptions;
+        var messages = Messages.Select(Message =>
+        {
+            if (Message.Role != ChatRole.System) return Message;
+            var clone = Message.Clone();
+            clone.Role = new ChatRole("developer");
+            clone.RawRepresentation = null;
+            return clone;
+        }).ToArray();
         var completed = false;
-        await using var stream = client.GetStreamingResponseAsync(Messages, options, Token).GetAsyncEnumerator(Token);
+        await using var stream = client.GetStreamingResponseAsync(messages, options, Token).GetAsyncEnumerator(Token);
         while (await MoveNextAsync(stream))
         {
             var update = stream.Current;
@@ -57,6 +96,10 @@ internal sealed class ChatGptChatClient(ChatGptConnectionStore Store, string Act
         catch (ClientResultException Exception) when (Exception.Status == 429)
         {
             throw new ChatGptException("ChatGPT usage limit reached. Review your plan or this app’s limit in ChatGPT Settings → Usage.");
+        }
+        catch (ClientResultException Exception) when (Exception.Status == 400)
+        {
+            throw new ChatGptException("ChatGPT rejected this request. Please retry; if it persists, the provider integration needs attention.");
         }
     }
 
