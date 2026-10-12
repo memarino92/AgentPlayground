@@ -190,7 +190,23 @@ public sealed class ChatGptConnectionStoreTests(PostgresVectorFixture Fixture) :
             });
         }
     }
-    private async Task<ChatGptConnectionStore> ResetAsync(ChatGptOAuth OAuth)
+    [Fact]
+    public async Task Initialize_SeedsRequiredProductionTimestamp_AndPreservesReviewedPolicy()
+    {
+        using var handler = new ChatGptTestTransport();
+        using var http = new HttpClient(handler);
+        try
+        {
+            var store = await ResetAsync(new ChatGptOAuth(http), ProductionSchema: true);
+            (await ExecuteScalarAsync("SELECT updated_at IS NOT NULL FROM app.configuration_settings WHERE scope = 'Api' AND key = 'ChatGpt:ReviewedModels'")).Should().Be(true);
+            await ExecuteScalarAsync("UPDATE app.configuration_settings SET value = '[]' WHERE scope = 'Api' AND key = 'ChatGpt:ReviewedModels'");
+            await store.InitializeAsync(default);
+            (await store.ReadReviewedModelsAsync(default)).Should().BeEmpty();
+        }
+        finally { await ExecuteScalarAsync("ALTER TABLE app.configuration_settings DROP COLUMN IF EXISTS updated_at"); }
+    }
+
+    private async Task<ChatGptConnectionStore> ResetAsync(ChatGptOAuth OAuth, bool ProductionSchema = false)
     {
         await ExecuteScalarAsync("""
             CREATE SCHEMA IF NOT EXISTS app;
@@ -200,6 +216,10 @@ public sealed class ChatGptConnectionStoreTests(PostgresVectorFixture Fixture) :
             DELETE FROM app.configuration_settings WHERE key = 'ChatGpt:ReviewedModels';
             """);
         var store = new ChatGptConnectionStore(Database(), OAuth);
+        if (ProductionSchema) await ExecuteScalarAsync("""
+            ALTER TABLE app.configuration_settings ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+            ALTER TABLE app.configuration_settings ALTER COLUMN updated_at DROP DEFAULT;
+            """);
         await store.InitializeAsync(default);
         return store;
     }
