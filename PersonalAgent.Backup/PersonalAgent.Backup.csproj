@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../PersonalAgent.Contracts/PersonalAgent.Contracts.csproj" />
+    <ProjectReference Include="../PersonalAgent.Integrations/PersonalAgent.Integrations.csproj" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="SSH.NET" />
   </ItemGroup>

@@ -2,7 +2,7 @@
 
 <section class="settings-card">
     <h2>Sentry settings</h2>
-    <p>Report application errors from API, Web, and Worker. Private log contents are excluded.</p>
+    <p>Report application errors from API, Web, Worker, and database backups. Error details are included with access credentials masked. Backup jobs use applied settings on their next run.</p>
     <EditForm Model="Model" OnValidSubmit="SaveAsync" FormName="sentry-settings">
         <DataAnnotationsValidator />
         <ValidationSummary />

@@ -14,6 +14,7 @@ public sealed record IntegrationFrame(string Function, string? FileName, int? Li
 public interface IIntegrationErrorClient : IDisposable
 {
     string? Capture(IntegrationError Error);
+    Task FlushAsync(TimeSpan Timeout) => Task.CompletedTask;
 }
 
 public interface IIntegrationErrorClientFactory
@@ -43,6 +44,8 @@ public sealed class SentryErrorClientFactory(Func<SentryOptions, ISentryClient>?
 
 public sealed class SentryErrorClient(ISentryClient Client, string Service) : IIntegrationErrorClient
 {
+    public Task FlushAsync(TimeSpan Timeout) => Client.FlushAsync(Timeout);
+
     public string? Capture(IntegrationError Error)
     {
         var sentryEvent = CreateEvent(Error, Service);

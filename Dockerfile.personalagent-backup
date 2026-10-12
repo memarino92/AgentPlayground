@@ -2,6 +2,7 @@ FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.1 AS build
 WORKDIR /src
 COPY ["global.json", "Directory.Build.props", "Directory.Packages.props", "."]
 COPY ["PersonalAgent.Contracts/PersonalAgent.Contracts.csproj", "PersonalAgent.Contracts/"]
+COPY ["PersonalAgent.Integrations/PersonalAgent.Integrations.csproj", "PersonalAgent.Integrations/"]
 COPY ["PersonalAgent.Backup/PersonalAgent.Backup.csproj", "PersonalAgent.Backup/"]
 RUN dotnet restore "PersonalAgent.Backup/PersonalAgent.Backup.csproj"
 COPY . .
