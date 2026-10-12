@@ -27,7 +27,7 @@ internal static class WebApplicationPipelineExtensions
         }
 
         app.UseHttpsRedirection();
-        app.UseStaticFiles();
+        app.MapStaticAssets();
         app.UseAntiforgery();
 
         app.UseAuthentication();
