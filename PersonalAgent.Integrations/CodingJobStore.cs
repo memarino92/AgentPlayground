@@ -94,7 +94,8 @@ public sealed class CodingJobStore(IntegrationDatabase Database)
             try { Rsa.ImportFromPem(GitHub); _ = Rsa.ExportParameters(true); }
             catch (Exception E) when (E is ArgumentException or CryptographicException) { throw new ArgumentException("A GitHub App private PEM key is required."); }
         }
-        if (Request.Settings.Enabled && (Key.Length == 0 || GitHub.Length == 0)) throw new ArgumentException("Both provider credentials are required.");
+        if (Request.Settings.Enabled && (GitHub.Length == 0 || (!CodingJobs.IsSubscriptionModel(Request.Settings.ModelId) && Key.Length == 0)))
+            throw new ArgumentException("Enabled coding requires a GitHub App key and credentials for the selected provider.");
         await using var Q = new NpgsqlCommand("""
             INSERT INTO app.coding_settings VALUES(1,@revision,@settings,@key,@github)
             ON CONFLICT(id) DO UPDATE SET revision=EXCLUDED.revision,settings=EXCLUDED.settings,openrouter_key=EXCLUDED.openrouter_key,github_key=EXCLUDED.github_key
@@ -108,12 +109,15 @@ public sealed class CodingJobStore(IntegrationDatabase Database)
 
     public static void ValidateSettings(CodingSettings S)
     {
+        var Subscription = S is not null && CodingJobs.IsSubscriptionModel(S.ModelId);
         if (S is null || !Regex.IsMatch(S.Repository ?? "", @"\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z")
-            || S.BaseBranch != "main" || S.MaxMinutes is < 5 or > 30 || S.MaxModelRequests is < 1 or > 12
-            || S.ModelBudgetUsd is <= 0 or > 5 || S.MaxModelRequests * .40m > S.ModelBudgetUsd
+            || (!Subscription && S.ModelId != CodingJobs.Model)
+            || S.BaseBranch != "main" || S.MaxMinutes is < 5 or > 30 || S.MaxModelRequests < 1
+            || S.MaxModelRequests > (Subscription ? CodingJobs.MaxSubscriptionRequests : 12)
+            || (!Subscription && (S.ModelBudgetUsd is <= 0 or > 5 || S.MaxModelRequests * .40m > S.ModelBudgetUsd))
             || !Regex.IsMatch(S.TestProject ?? "", @"\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.csproj\z")
             || (S.TestProject ?? "").Contains("..", StringComparison.Ordinal) || S.TestFilter is null || S.TestFilter.Length > 500)
-            throw new ArgumentException("Use owner/repository, main, 5–30 minutes, 1–12 model requests covered by a budget of $0.40/request (at most $5), and a repository test project.");
+            throw new ArgumentException("Use a supported coding model, owner/repository, main, 5–30 minutes and a repository test project. ChatGPT allows 1–1000 requests; OpenRouter allows 1–12 covered by $0.40/request (at most $5).");
         if (S.VerifiedRulesetId < 0 || S.VerifiedRulesetUpdatedAt is null
             || (S.VerifiedRulesetId == 0 ? S.VerifiedRulesetUpdatedAt.Length != 0
                 : CodingJobs.RulesetTimestamp(S.VerifiedRulesetUpdatedAt) is null))
@@ -186,6 +190,14 @@ public sealed class CodingJobStore(IntegrationDatabase Database)
         Q.Parameters.AddWithValue("id", Job.Id); Q.Parameters.AddWithValue("state", Job.Status);
         Q.Parameters.AddWithValue("expected", ExpectedState); Q.Parameters.AddWithValue("payload", JsonSerializer.Serialize(Job, Json));
         return await Q.ExecuteNonQueryAsync(Token) == 1;
+    }
+
+    public async Task<bool> AuthorizeModelRequestAsync(Guid Id, string Capability, CancellationToken Token)
+    {
+        await using var C = await Database.OpenAsync(Token);
+        await using var Q = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM app.coding_jobs WHERE id=@id AND capability_hash=@hash AND state='Running' AND deadline>now())", C);
+        Q.Parameters.AddWithValue("id", Id); Q.Parameters.AddWithValue("hash", Hash(Capability));
+        return (bool)(await Q.ExecuteScalarAsync(Token))!;
     }
 
     public async Task<bool> ReserveModelRequestAsync(Guid Id, string Capability, int Maximum, CancellationToken Token)

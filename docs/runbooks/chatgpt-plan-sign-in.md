@@ -26,7 +26,7 @@ Each registration receives a distinct stable label. Identical emails can represe
 
 The account’s live `/v1/models` catalog must report a visible model and its slug must appear in the JSON array at `Api / ChatGpt:ReviewedModels`. The initial reviewed list is `["gpt-6.1-sol","gpt-6-astra"]`. Edit this row in Database settings after reviewing capability compatibility. Changes apply on the next catalog request; malformed arrays are rejected. `[]`, an inactive row, or deleting the row removes all new ChatGPT model choices. Restarting does not recreate a deleted policy. Existing conversations keep their selected provider; unavailable access fails visibly.
 
-The existing OpenAI API key remains required by the application for embeddings and other API-backed features. AssemblyAI, OpenRouter and background-job defaults remain independent. Connecting a plan does not make those operations subscription-backed.
+The existing OpenAI API key remains required by the application for embeddings and other API-backed features. AssemblyAI, OpenRouter and background-job defaults remain independent. Connecting alone does not change billing. Platform coding can explicitly select a connected account's ChatGPT model in its own settings; see [subscription coding](platform-coding.md#chatgpt-subscription-coding).
 
 ## Refresh, disconnect and rollback
 

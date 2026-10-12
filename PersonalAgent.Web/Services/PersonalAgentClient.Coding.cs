@@ -4,6 +4,11 @@ namespace PersonalAgent.Web.Services;
 
 internal partial class PersonalAgentClient
 {
+    public async Task<CodingModelOption[]> GetCodingModelsAsync(CancellationToken Token)
+    {
+        using var Response = await SendAsync(HttpMethod.Get, "/api/admin/coding/models", cancellationToken: Token);
+        Response.EnsureSuccessStatusCode(); return (await Response.Content.ReadFromJsonAsync<CodingModelOption[]>(Token))!;
+    }
     public async Task<CodingSettingsView> GetCodingSettingsAsync(CancellationToken Token)
     {
         using var Response = await SendAsync(HttpMethod.Get, "/api/admin/coding", cancellationToken: Token);

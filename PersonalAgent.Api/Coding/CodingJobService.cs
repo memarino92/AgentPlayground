@@ -10,7 +10,8 @@ using PersonalAgent.Integrations;
 
 namespace PersonalAgent.Api.Coding;
 
-internal sealed class CodingJobService(CodingJobStore Store, ScheduledJobAuthorization Subjects, ToolAccessService Tools, ICodingPublisher Publisher)
+internal sealed class CodingJobService(CodingJobStore Store, ScheduledJobAuthorization Subjects, ToolAccessService Tools, ICodingPublisher Publisher,
+    ChatGptModelCatalog Models)
 {
     public async Task RequireAsync(string Actor, string? Email, string Subject, CancellationToken Token)
     {
@@ -27,6 +28,9 @@ internal sealed class CodingJobService(CodingJobStore Store, ScheduledJobAuthori
             throw new ArgumentException("An instruction of 1–8000 characters and a stable UUID requestKey are required.");
         var Settings = (await Store.SettingsAsync(Token)).View.Settings;
         if (!Settings.Enabled) throw new InvalidOperationException("Configure and enable platform coding in Settings first.");
+        if (CodingJobs.IsSubscriptionModel(Settings.ModelId)
+            && !(await Models.GetModelsAsync(Access.ActorId, Token)).Any(Model => Model.Id == Settings.ModelId))
+            throw new InvalidOperationException("The selected ChatGPT coding model is unavailable to this owner. Connect your account and select a model in Platform coding settings.");
         var BaseSha = await Publisher.PrepareAsync(Settings, Token);
         var Id = Guid.NewGuid(); var Now = DateTimeOffset.UtcNow;
         var Job = await Store.CreateAsync(new()

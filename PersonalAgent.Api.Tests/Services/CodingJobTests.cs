@@ -96,7 +96,7 @@ public sealed class CodingJobTests
         var Registry = new AgentToolRegistry(Mock.Of<ITavilyMcpToolProvider>(P => P.GetTools() == Array.Empty<AIFunction>()));
         var Tools = new ToolAccessService(Permissions.Object, Registry);
         var Subjects = new ScheduledJobAuthorization(Policy.Object, Mock.Of<ICoachAssignmentStore>(), Tools);
-        var Service = new CodingJobService(null!, Subjects, Tools, Mock.Of<ICodingPublisher>());
+        var Service = new CodingJobService(null!, Subjects, Tools, Mock.Of<ICodingPublisher>(), null!);
         await FluentActions.Awaiting(() => Service.RequireAsync("owner", null, "owner", default)).Should().ThrowAsync<UnauthorizedAccessException>();
         Grants[CodingJobs.Permission] = true;
         await Service.RequireAsync("owner", null, "owner", default);

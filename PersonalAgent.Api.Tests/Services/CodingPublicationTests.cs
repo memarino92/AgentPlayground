@@ -36,7 +36,7 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
         Permissions.Setup(P => P.GetRolePermissionsAsync(AgentRoles.Owner, default)).ReturnsAsync(new Dictionary<string, bool> { [CodingJobs.Permission] = true });
         var Registry = new AgentToolRegistry(Mock.Of<ITavilyMcpToolProvider>(P => P.GetTools() == Array.Empty<AIFunction>()));
         var Tools = new ToolAccessService(Permissions.Object, Registry);
-        var Service = new CodingJobService(Store, new(Policy.Object, Mock.Of<ICoachAssignmentStore>(), Tools), Tools, Publisher);
+        var Service = new CodingJobService(Store, new(Policy.Object, Mock.Of<ICoachAssignmentStore>(), Tools), Tools, Publisher, null!);
         var Access = new AgentAccessContext("owner", AgentRoles.Owner, "owner");
         var RequestKey = Guid.NewGuid();
         var Created = await Service.StartAsync(Access, new("Improve feature", RequestKey.ToString("D")), default);

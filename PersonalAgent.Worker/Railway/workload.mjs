@@ -20,15 +20,16 @@ try {
     // Agent runs unprivileged. A writable home/workspace never implies access to the VM controller.
     run('chmod', ['-R', 'a+rwX', '/work'], '/work');
   } else if (phase === 'code') {
+    const model = r.model ?? 'openai/gpt-5.4-mini';
     const config = { $schema: 'https://opencode.ai/config.json', autoupdate: false, share: 'disabled',
-      enabled_providers: ['coding'], model: 'coding/openai/gpt-5.4-mini', small_model: 'coding/openai/gpt-5.4-mini',
+      enabled_providers: ['coding'], model: `coding/${model}`, small_model: `coding/${model}`,
       permission: { '*': 'allow', question: 'deny', external_directory: 'deny' },
-      provider: { coding: { npm: '@ai-sdk/openai-compatible', name: 'Scoped coding gateway',
+      provider: { coding: { npm: r.responses ? '@ai-sdk/openai' : '@ai-sdk/openai-compatible', name: 'Scoped coding gateway',
         options: { baseURL: r.gateway, apiKey: r.capability },
-        models: { 'openai/gpt-5.4-mini': { name: 'Coding', limit: { context: 400000, output: 8192 } } } } } };
+        models: { [model]: { name: 'Coding', limit: { context: 400000, output: r.responses ? 32768 : 8192 } } } } } };
     const prompt = `Implement the following request in this repository. Read AGENTS.md and applicable documentation. Make a focused change and appropriate tests. Do not push, open PRs, deploy, change credentials, or modify .github files. Do not ask questions; if blocked, explain in your final response. Your final response should describe the change and validation.\n\n${r.instruction}`;
     // No actual provider key exists here. The job capability can only make budgeted model requests.
-    const output = run('opencode', ['run', '--format', 'json', '--model', 'coding/openai/gpt-5.4-mini', prompt], root,
+    const output = run('opencode', ['run', '--format', 'json', '--model', `coding/${model}`, prompt], root,
       { OPENCODE_CONFIG_CONTENT: JSON.stringify(config), OPENCODE_DISABLE_AUTOUPDATE: 'true' });
     writeFileSync('/work/agent-output.jsonl', output.slice(-100000));
     if (output.split('\n').filter(Boolean).some(line => { try { return JSON.parse(line).type === 'error'; } catch { return false; } }))
