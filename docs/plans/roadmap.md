@@ -2,7 +2,9 @@
 
 ## Railway read-only log tool — local implementation, live acceptance pending
 
-`read_railway_logs` now uses documented fixed GraphQL queries, an environment-scoped project token, encrypted Api settings, administrator service aliases and invocation-time Owner/tool authorization. Retrieval has bounded time/line/response/output limits, redaction and no streaming or mutation. See [setup and local validation](../runbooks/railway-logs.md) and [proposed decision 0045](../decisions/0045-railway-log-tool.md).
+`read_railway_logs` now uses documented fixed GraphQL queries, an environment-scoped project token, encrypted Api settings, administrator service aliases and invocation-time Owner/tool authorization. Retrieval has bounded time/line/response/output limits, redaction before truncation and no streaming or mutation. Default selection uses the active deployment; explicit recent deployment IDs remain available for failure diagnosis. See [setup and local validation](../runbooks/railway-logs.md) and [proposed decision 0045](../decisions/0045-railway-log-tool.md).
+
+Review fixes validated on 2026-10-13: 54 focused API/registry/database tests and one backup Sentry test passed, including encrypted token rotation and disablement in PostgreSQL.
 
 Acceptance pending: maintainer review, operator configuration of a project token/allowlist, and one read-only live snapshot demonstrating correct service/environment/deployment membership and current Railway query/token support. No live credentials or infrastructure were changed during implementation.
 

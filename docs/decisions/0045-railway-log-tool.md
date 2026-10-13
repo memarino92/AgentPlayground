@@ -23,9 +23,9 @@ Support only environment-scoped **project tokens**, sent as `Project-Access-Toke
 
 ## Consequences
 
-One configured project/environment and up to 20 services per platform deployment. Explicit deployment selection is limited to the 20 most recent deployments; newest does not necessarily mean latest successful/running. Search/severity are local filters over a bounded provider snapshot, not exhaustive provider searches. Limits are 200 lines, a 24-hour window, 1 MiB per response, approximately 32 KiB serialized output and a 15-second overall deadline. No automatic retries/pagination.
+One configured project/environment and up to 20 services per platform deployment. Explicit deployment selection is limited to the 20 most recent deployments. Default selection uses Railway's documented scoped successfulOnly filter before limiting to one active deployment, so newer failed/building replacements do not hide the running service. No active deployment produces an explicit error instead of a fallback. Search/severity are local filters over a bounded provider snapshot, not exhaustive provider searches. Limits are 200 lines, a 24-hour window, 1 MiB per response, approximately 32 KiB serialized output and a 15-second overall deadline. No automatic retries/pagination.
 
-Log data is labeled untrusted and redacted using the existing credential masker, exact Railway-token replacement and connection-URL masking. Arbitrary private content and unlabeled secrets cannot be reliably recognized. Returned evidence can reach the model provider and persisted conversation. No additional log store is created.
+Log data is labeled untrusted and redacted using the existing credential masker, exact Railway-token replacement and connection-URL masking. All credential matching precedes text truncation, including JWTs crossing the output cutoff. Arbitrary private content and unlabeled secrets cannot be reliably recognized. Returned evidence can reach the model provider and persisted conversation. No additional log store is created.
 
 ## Source evidence and verification
 

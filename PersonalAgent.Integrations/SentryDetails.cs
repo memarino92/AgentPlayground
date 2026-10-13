@@ -78,14 +78,15 @@ public static partial class SentryDetails
     private static string Clean(string? Value)
     {
         if (string.IsNullOrEmpty(Value)) return "Application error";
-        var result = Value.Length > MaxTextLength ? Value[..MaxTextLength] : Value;
+        var result = Value;
         result = Authorization().Replace(result, "$1" + Hidden);
         result = SecretAssignment().Replace(result, "$1" + Hidden);
         result = JsonSecret().Replace(result, "$1" + Hidden);
         result = UrlCredential().Replace(result, "$1" + Hidden + "@");
         result = Jwt().Replace(result, Hidden);
         result = PrivateKey().Replace(result, Hidden);
-        return result;
+        // Match complete credentials before bounding the output; a cutoff can invalidate a JWT match.
+        return result.Length > MaxTextLength ? result[..MaxTextLength] : result;
     }
 
     [GeneratedRegex("(?i)(authorization\\s*[:=]\\s*(?:bearer|basic)\\s+)[^\\s,;]+", RegexOptions.NonBacktracking)]
