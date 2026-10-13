@@ -22,6 +22,72 @@ public sealed class RailwayLogToolTests
     private const string Deployment = "44444444-4444-4444-4444-444444444444";
     private static readonly AgentAccessContext Owner = new("owner", AgentRoles.Owner, "owner");
 
+    [Theory]
+    [InlineData(4040)]
+    [InlineData(4080)]
+    public async Task JwtCrossingOutputBoundary_IsRedactedBeforeTruncation(int Padding)
+    {
+        const string Jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJwcml2YXRlLXVzZXIiLCJlbWFpbCI6InByaXZhdGVAZXhhbXBsZS5jb20ifQ.signature";
+        using var Fixture = new Fixture { Messages = [new string('x', Padding) + " " + Jwt] };
+        var Result = await Fixture.Tool.ReadAsync(Owner, "api", default);
+        Result.Truncated.Should().BeTrue();
+        Result.Entries.Should().ContainSingle().Which.Message.Should().Be(new string('x', Padding) + " [redacted]");
+    }
+
+    [Theory]
+    [InlineData("FAILED")]
+    [InlineData("BUILDING")]
+    public async Task DefaultDeployment_UsesScopedActiveLookupDespiteManyNewerReplacements(string Status)
+    {
+        using var Fixture = new Fixture
+        {
+            Deployments = [.. Enumerable.Range(1, 25).Select(Index => ($"55555555-5555-5555-5555-{Index:D12}", Status)), (Deployment, "SUCCESS")]
+        };
+        var Result = await Fixture.Tool.ReadAsync(Owner, "api", default);
+        Result.DeploymentId.Should().Be(Deployment);
+        var Variables = Fixture.Requests[1].GetProperty("variables");
+        Variables.GetProperty("first").GetInt32().Should().Be(1);
+        var Input = Variables.GetProperty("input");
+        Input.GetProperty("status").GetProperty("successfulOnly").GetBoolean().Should().BeTrue();
+        Input.GetProperty("projectId").GetString().Should().Be(Project);
+        Input.GetProperty("environmentId").GetString().Should().Be(EnvironmentId);
+        Input.GetProperty("serviceId").GetString().Should().Be(ServiceId);
+    }
+
+    [Fact]
+    public async Task ExplicitDeployment_CanInspectRecentFailureWithoutActiveFilter()
+    {
+        const string Failed = "55555555-5555-5555-5555-555555555555";
+        using var Fixture = new Fixture { Deployments = [(Failed, "FAILED"), (Deployment, "SUCCESS")] };
+        var Result = await Fixture.Tool.ReadAsync(Owner, "api", default, DeploymentId: Failed);
+        Result.DeploymentId.Should().Be(Failed);
+        var Variables = Fixture.Requests[1].GetProperty("variables");
+        Variables.GetProperty("first").GetInt32().Should().Be(20);
+        Variables.GetProperty("input").TryGetProperty("status", out _).Should().BeFalse();
+        Fixture.Requests[2].GetProperty("variables").GetProperty("deploymentId").GetString().Should().Be(Failed);
+    }
+
+    [Fact]
+    public async Task NoActiveDeployment_DoesNotSilentlyReadFailedDeployment()
+    {
+        using var Fixture = new Fixture { Deployments = [(Deployment, "FAILED")] };
+        await FluentActions.Awaiting(() => Fixture.Tool.ReadAsync(Owner, "api", default))
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*No active*explicit recent deploymentId*");
+        Fixture.Requests.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ExplicitDeployment_OutsideRecentTwenty_IsRejected()
+    {
+        using var Fixture = new Fixture
+        {
+            Deployments = [.. Enumerable.Range(1, 20).Select(Index => ($"55555555-5555-5555-5555-{Index:D12}", "FAILED")), (Deployment, "SUCCESS")]
+        };
+        await FluentActions.Awaiting(() => Fixture.Tool.ReadAsync(Owner, "api", default, DeploymentId: Deployment))
+            .Should().ThrowAsync<UnauthorizedAccessException>();
+        Fixture.Requests.Should().HaveCount(2);
+    }
+
     [Fact]
     public async Task ProviderOverdelivery_AndLongMessages_AreBoundedAndFlagged()
     {
@@ -213,7 +279,7 @@ public sealed class RailwayLogToolTests
     {
         using var Fixture = new Fixture { NoDeployments = true };
         await FluentActions.Awaiting(() => Fixture.Tool.ReadAsync(Owner, "api", default))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*No recent Railway deployment*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*No active Railway deployment*");
         Fixture.Requests.Should().HaveCount(2);
     }
 
@@ -232,6 +298,7 @@ public sealed class RailwayLogToolTests
     {
         public RailwayLogSettings Configuration = new(true, Project, EnvironmentId, "production", [new("api", ServiceId)], "token-value");
         public string[] Messages = ["ordinary log"];
+        public (string Id, string Status)[] Deployments = [(Deployment, "SUCCESS")];
         public List<JsonElement> Requests = [];
         public bool ForeignToken, IncludeOldLog, NetworkFailure, WaitForCancellation, Chunked, NoDeployments;
         public HttpStatusCode Status = HttpStatusCode.OK;
@@ -268,7 +335,11 @@ public sealed class RailwayLogToolTests
             object Data = Query.Contains("projectToken")
                 ? new { projectToken = new { projectId = ForeignToken ? "foreign" : Project, environmentId = EnvironmentId } }
                 : Query.Contains("DeploymentListInput")
-                    ? new { deployments = new { edges = new[] { new { node = new { id = Deployment } } }.Take(NoDeployments ? 0 : 1).ToArray() } }
+                    ? new { deployments = new { edges = Deployments
+                        .Where(Item => !Body.RootElement.GetProperty("variables").GetProperty("input").TryGetProperty("status", out var Status)
+                            || !Status.GetProperty("successfulOnly").GetBoolean() || Item.Status == "SUCCESS")
+                        .Take(NoDeployments ? 0 : Body.RootElement.GetProperty("variables").GetProperty("first").GetInt32())
+                        .Select(Item => new { node = new { id = Item.Id } }).ToArray() } }
                     : new { deploymentLogs = Messages.Select((Message, Index) => new
                     {
                         timestamp = DateTimeOffset.UtcNow.AddMinutes(IncludeOldLog && Index == 0 ? -1500 : -1).ToString("O"),

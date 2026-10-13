@@ -9,6 +9,60 @@ namespace PersonalAgent.Api.Tests.Services;
 public sealed class DatabaseSettingsStoreTests(PostgresVectorFixture Fixture) : IClassFixture<PostgresVectorFixture>
 {
     [Fact]
+    public async Task RailwaySettings_RoundTripEncryptedRotationAndDisablementWithoutFallback()
+    {
+        var Key = Convert.ToBase64String(new byte[32]);
+        var Database = new IntegrationDatabase(Fixture.ConnectionString, Key);
+        var Store = new DatabaseSettingsStore(Database);
+        var Settings = new PersonalAgent.Api.Services.DatabaseRailwayLogSettings(Database);
+        await using var Connection = await Database.OpenAsync(default);
+        await using var Initialize = new NpgsqlCommand("""
+            CREATE SCHEMA IF NOT EXISTS app;
+            DROP TABLE IF EXISTS app.configuration_settings;
+            CREATE TABLE app.configuration_settings(scope text, key text, value text NOT NULL,
+                is_secret boolean NOT NULL, is_active boolean NOT NULL,
+                updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(scope,key));
+            INSERT INTO app.configuration_settings(scope,key,value,is_secret,is_active) VALUES
+                ('Api','RailwayLogs:Settings',
+                 '{"enabled":true,"projectId":"11111111-1111-1111-1111-111111111111","environmentId":"22222222-2222-2222-2222-222222222222","environment":"production","services":[{"name":"api","id":"33333333-3333-3333-3333-333333333333"}]}',false,true),
+                ('Api','RailwayLogs:ProjectToken','',true,false),
+                ('Shared','RailwayLogs:ProjectToken',@shared,true,true);
+            """, Connection);
+        Initialize.Parameters.AddWithValue("shared", PostgresConfigurationCrypto.Encrypt("shared-token", "Shared", "RailwayLogs:ProjectToken", Key));
+        await Initialize.ExecuteNonQueryAsync();
+        await FluentActions.Awaiting(() => Settings.ReadAsync(default)).Should().ThrowAsync<InvalidOperationException>();
+
+        foreach (var Token in new[] { "first-project-token", "rotated-project-token" })
+        {
+            var Row = (await Store.ReadAsync(default)).Single(Item => Item.Scope == "Api" && Item.Key == "RailwayLogs:ProjectToken");
+            Row.Value.Should().BeNull();
+            await Store.SaveAsync(new([new(Row.Scope, Row.Key, Row.Version, Token, true)]), default);
+            await using var Read = new NpgsqlCommand("SELECT value FROM app.configuration_settings WHERE scope='Api' AND key='RailwayLogs:ProjectToken'", Connection);
+            var Ciphertext = (string)(await Read.ExecuteScalarAsync())!;
+            Ciphertext.Should().StartWith("v1:").And.NotContain(Token);
+            PostgresConfigurationCrypto.Decrypt(Ciphertext, Row.Scope, Row.Key, Key).Should().Be(Token);
+            var Current = await Settings.ReadAsync(default);
+            Current.Token.Should().Be(Token);
+            Current.Environment.Should().Be("production");
+            Current.Services.Should().ContainSingle().Which.Name.Should().Be("api");
+        }
+
+        var Credential = (await Store.ReadAsync(default)).Single(Item => Item.Scope == "Api" && Item.Key == "RailwayLogs:ProjectToken");
+        await Store.SaveAsync(new([new(Credential.Scope, Credential.Key, Credential.Version, null, false)]), default);
+        await FluentActions.Awaiting(() => Settings.ReadAsync(default)).Should().ThrowAsync<InvalidOperationException>();
+
+        var Configuration = (await Store.ReadAsync(default)).Single(Item => Item.Key == "RailwayLogs:Settings");
+        await Store.SaveAsync(new([new(Configuration.Scope, Configuration.Key, Configuration.Version, "{\"enabled\":false}", true)]), default);
+        var Disabled = await Settings.ReadAsync(default);
+        Disabled.Enabled.Should().BeFalse();
+        Disabled.Token.Should().BeEmpty();
+
+        Configuration = (await Store.ReadAsync(default)).Single(Item => Item.Key == "RailwayLogs:Settings");
+        await Store.SaveAsync(new([new(Configuration.Scope, Configuration.Key, Configuration.Version, null, false)]), default);
+        await FluentActions.Awaiting(() => Settings.ReadAsync(default)).Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task BackupSettings_AreCreatedEncryptedAndPasswordCanBeRetained()
     {
         var key = Convert.ToBase64String(new byte[32]);

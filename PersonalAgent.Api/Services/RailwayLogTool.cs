@@ -66,12 +66,22 @@ internal sealed partial class RailwayLogTool(IRailwayLogSettings Settings, IHttp
             if (Identity.GetProperty("projectId").GetString() != Configuration.ProjectId
                 || Identity.GetProperty("environmentId").GetString() != Configuration.EnvironmentId)
                 throw new UnauthorizedAccessException("Railway project token does not match the configured project/environment.");
+            // Filter before applying first so an active deployment is found even after many failed replacements.
+            var Input = new Dictionary<string, object>
+            {
+                ["projectId"] = Configuration.ProjectId,
+                ["environmentId"] = Configuration.EnvironmentId,
+                ["serviceId"] = Target.Id
+            };
+            if (DeploymentId is null) Input["status"] = new { successfulOnly = true };
             using var Deployments = await QueryAsync(Client, Configuration.Token, DeploymentsQuery,
-                new { input = new { projectId = Configuration.ProjectId, environmentId = Configuration.EnvironmentId, serviceId = Target.Id }, first = 20 }, Deadline.Token);
+                new { input = Input, first = DeploymentId is null ? 1 : 20 }, Deadline.Token);
             var Ids = Deployments.RootElement.GetProperty("data").GetProperty("deployments").GetProperty("edges")
                 .EnumerateArray().Take(20).Select(Item => Item.GetProperty("node").GetProperty("id").GetString()).ToArray();
             var Selected = DeploymentId ?? Ids.FirstOrDefault();
-            if (Selected is null) throw new RailwayLogQueryException("No recent Railway deployment exists for the configured service/environment.");
+            if (Selected is null) throw new RailwayLogQueryException(DeploymentId is null
+                ? "No active Railway deployment exists for the configured service/environment. Supply an explicit recent deploymentId to inspect a failed or crashed deployment."
+                : "No recent Railway deployment exists for the configured service/environment.");
             if (!Guid.TryParseExact(Selected, "D", out _)) throw new RailwayLogQueryException("Railway returned an invalid deployment identity.");
             if (!Ids.Contains(Selected, StringComparer.Ordinal))
                 throw new UnauthorizedAccessException("Deployment is not among the 20 recent deployments of the configured service/environment; older or arbitrary deployments are unsupported.");
