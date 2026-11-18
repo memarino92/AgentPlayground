@@ -188,8 +188,8 @@ internal partial class AgentChatService
                 ? await _requestRouter.RouteAsync(message, tools, cancellationToken) : new PreChatRoute();
             if (route.Response is { } directResponse)
             {
-                if (OnDelta is not null) await OnDelta(directResponse, cancellationToken);
-                var saved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, directResponse, persistedSession.SessionStateJson, cancellationToken);
+                var saved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, directResponse, persistedSession.SessionStateJson, CancellationToken.None);
+                if (saved && OnDelta is not null) await OnDelta(directResponse, cancellationToken);
                 return saved ? directResponse : null;
             }
             var agent = CreateSessionAgent(sessionState.ModelId, access.ActorId, tools, sessionState.IsContinuous);
@@ -224,14 +224,24 @@ internal partial class AgentChatService
             {
                 var Builder = new StringBuilder();
                 var Results = new List<string>();
-                await foreach (var Update in agent.RunStreamingAsync(messages, session, options: null, cancellationToken))
+                try
                 {
-                    foreach (var Result in Update.Contents.OfType<FunctionResultContent>())
-                        Results.Add(Result.Result?.ToString() ?? string.Empty);
-                    var Delta = Update.ToString();
-                    if (string.IsNullOrEmpty(Delta)) continue;
-                    Builder.Append(Delta);
-                    await OnDelta(Delta, cancellationToken);
+                    await foreach (var Update in agent.RunStreamingAsync(messages, session, options: null, cancellationToken))
+                    {
+                        foreach (var Result in Update.Contents.OfType<FunctionResultContent>())
+                            Results.Add(Result.Result?.ToString() ?? string.Empty);
+                        var Delta = Update.ToString();
+                        if (string.IsNullOrEmpty(Delta)) continue;
+                        Builder.Append(Delta);
+                        await OnDelta(Delta, cancellationToken);
+                    }
+                }
+                catch (Exception) when (sessionState.IsContinuous && _conversationStore is not null)
+                {
+                    Builder.Append("\n\n[Response interrupted. Check any scheduled jobs before repeating this request.]");
+                    await _conversationStore.SavePresentedInteractionAsync(parsedSessionId, message, Builder.ToString().Trim(),
+                        persistedSession.SessionStateJson, new PersonalAgent.Contracts.ChatPresentation(), CancellationToken.None);
+                    throw;
                 }
                 responseText = CoachEvidenceLinks.Normalize(Builder.ToString(), Results);
             }
@@ -243,7 +253,7 @@ internal partial class AgentChatService
                 Presentation = Presentation with { Cards = Parsed.Cards };
             }
             var wasSaved = sessionState.IsContinuous && _conversationStore is not null
-                ? await _conversationStore.SavePresentedInteractionAsync(parsedSessionId, message, responseText, persistedSession.SessionStateJson, Presentation, cancellationToken)
+                ? await _conversationStore.SavePresentedInteractionAsync(parsedSessionId, message, responseText, persistedSession.SessionStateJson, Presentation, CancellationToken.None)
                 : await _sessionStore.SaveInteractionAsync(parsedSessionId, message, responseText, persistedSession.SessionStateJson);
             var citedUrlCount = CountUrls(responseText);
 
@@ -319,7 +329,7 @@ internal partial class AgentChatService
             You are a helpful personal assistant.
             When the user asks you to send a notification to their mobile device, call the publish_mobile_notification tool once with a short title and concise body text.
 
-            When the user asks for a reminder later (for example "in 5 minutes" or "at 6pm"), call schedule_notification with title, body, and exactly one timing input.
+            When the user asks for a reminder later (for example "in 5 minutes" or "at 6pm"), call schedule_notification with title, body, and exactly one timing input. For a finite set of reminders, use additionalReminders in the same call, with explicit dates and offsets. Check the current time once per batch.
 
             When the user asks you to do work later and then notify them, call schedule_agent_task with instruction and exactly one timing input.
 

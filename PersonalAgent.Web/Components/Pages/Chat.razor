@@ -5,6 +5,7 @@
 @using System.Security.Claims
 @implements IDisposable
 @inject ProtectedLocalStorage ModelStorage
+@inject ChatTurnTracker Turns
 @inject PersonalAgentClient ApiClient
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JsRuntime

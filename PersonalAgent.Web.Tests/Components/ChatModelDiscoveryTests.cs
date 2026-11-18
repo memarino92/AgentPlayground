@@ -138,6 +138,23 @@ public sealed class ChatModelDiscoveryTests : TestContext
         Navigation.Uri.Should().EndWith("/jobs", "leaving chat must not rewrite the destination");
     }
 
+    [Fact]
+    public void ReturningToChatReattachesToTheOriginalSend()
+    {
+        using var handler = new CatalogHandler { ReleaseSend = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        Configure(handler);
+        var first = RenderComponent<Chat>();
+        first.WaitForElement("textarea").Input("Schedule the week");
+        first.FindAll("button").Single(button => button.TextContent == "Send").Click();
+        first.WaitForAssertion(() => handler.SendCount.Should().Be(1));
+        first.Dispose();
+        var returned = RenderComponent<Chat>();
+        returned.WaitForAssertion(() => returned.Markup.Should().Contain("Schedule the week"));
+        handler.ReleaseSend.SetResult();
+        returned.WaitForAssertion(() => returned.Markup.Should().Contain("Synthetic reply"));
+        handler.SendCount.Should().Be(1);
+    }
+
     private void Configure(CatalogHandler Handler)
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
@@ -149,6 +166,7 @@ public sealed class ChatModelDiscoveryTests : TestContext
             new Claim(ClaimTypes.Role, "Owner"), new Claim("urn:github:login", "owner")], "test"))));
         Services.AddCascadingAuthenticationState();
         Services.AddSingleton<AuthenticationStateProvider>(Auth.Object);
+        Services.AddScoped<ChatTurnTracker>();
         Services.AddSingleton(new PersonalAgentClient(new HttpClient(Handler) { BaseAddress = new("http://localhost") }, Auth.Object,
             Options.Create(new PersonalAgentApiOptions { ActorSigningKey = "test-signing-key" })));
     }
@@ -158,6 +176,8 @@ public sealed class ChatModelDiscoveryTests : TestContext
         public Guid FirstId = Guid.NewGuid(), SecondId = Guid.NewGuid();
         public string? ChangedModel;
         public bool FailMessage;
+        public TaskCompletionSource? ReleaseSend;
+        public int SendCount;
         public int CatalogReads { get; private set; }
         public int OpenCount { get; private set; }
         public int ClearCount { get; private set; }
@@ -210,6 +230,8 @@ public sealed class ChatModelDiscoveryTests : TestContext
             }
             if (Request.Method == HttpMethod.Post && Request.RequestUri.AbsolutePath.EndsWith("/messages/stream"))
             {
+                SendCount++;
+                if (ReleaseSend is not null) await ReleaseSend.Task.WaitAsync(CancellationToken);
                 if (FailMessage) return new(HttpStatusCode.InternalServerError);
                 var Payload = await Request.Content!.ReadFromJsonAsync<JsonElement>(CancellationToken);
                 Conversation.Add(new("user", Payload.GetProperty("message").GetString()!));
