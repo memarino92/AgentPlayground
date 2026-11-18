@@ -75,6 +75,7 @@ internal static partial class PersonalAgentEndpoints
             }
             try
             {
+                await WriteAsync(new { Type = "started" }, Token);
                 var Reply = await Chat.SendMessageStreamingAsync(Id.ToString(), Access, Request.Message,
                     (Delta, CancellationToken) => WriteAsync(new { Type = "delta", Delta }, CancellationToken), Token);
                 if (Reply is null) { await WriteAsync(new { Type = "error", Error = "Conversation was not found." }, Token); return; }

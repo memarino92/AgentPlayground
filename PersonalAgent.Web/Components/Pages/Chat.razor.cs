@@ -44,7 +44,8 @@ public partial class Chat
     private bool isUpdatingCard;
     private bool hasInitialized;
     private string? notice;
-    private CancellationTokenSource? sendCancellation;
+    private ChatTurn? activeTurn;
+    private bool disposed;
 
     private bool isBusy => !hasInitialized || isLoadingHistory || isSendingMessage || isCreatingSession || isChangingModel || isUpdatingCard;
 
@@ -117,54 +118,53 @@ public partial class Chat
         var sendingProfileId = profileId;
         var userMessage = currentMessage;
         currentMessage = string.Empty;
-        messages.Add(new ConversationMessage("user", userMessage));
-        messages.Add(new ConversationMessage("assistant", string.Empty));
-        shouldScrollToBottom = true;
-        sendCancellation = new CancellationTokenSource();
-        isSendingMessage = true;
-        await InvokeAsync(StateHasChanged);
+        var turn = Turns.Start(sendingSessionId, userMessage, ApiClient, sendingProfileId);
+        await ObserveTurnAsync(sendingSessionId, turn);
+    }
 
+    private async Task ObserveTurnAsync(string sendingSessionId, ChatTurn turn)
+    {
+        activeTurn = turn;
+        messages.Add(new ConversationMessage("user", turn.Message));
+        messages.Add(new ConversationMessage("assistant", turn.Reply));
+        shouldScrollToBottom = true;
+        isSendingMessage = true;
+        turn.Changed += RefreshTurnAsync;
         try
         {
-            var response = await ApiClient.SendConversationMessageStreamingAsync(sendingSessionId, sendingProfileId, userMessage, async Delta =>
-            {
-                if (sessionId != sendingSessionId || messages.Count == 0 || messages[^1].Role != "assistant") return;
-                messages[^1] = messages[^1] with { Content = messages[^1].Content + Delta };
-                shouldScrollToBottom = true;
-                await InvokeAsync(StateHasChanged);
-            }, sendCancellation.Token);
-            if (sessionId == sendingSessionId)
-            {
-                messages = [.. response.Messages];
-                UpdateSessionSummary(sessionId, userMessage, DateTimeOffset.UtcNow);
-                shouldScrollToBottom = true;
-            }
-        }
-        catch (OperationCanceledException) when (sendCancellation?.IsCancellationRequested == true)
-        {
-            if (sessionId == sendingSessionId && messages.Count > 0 && messages[^1].Role == "assistant" && string.IsNullOrEmpty(messages[^1].Content))
-                messages.RemoveAt(messages.Count - 1);
-            notice = "Response stopped.";
+            await InvokeAsync(StateHasChanged);
+            var response = await turn.Completion;
+            if (activeTurn != turn || sessionId != sendingSessionId) return;
+            messages = [.. response.Messages];
+            UpdateSessionSummary(sendingSessionId, turn.Message, DateTimeOffset.UtcNow);
+            shouldScrollToBottom = true;
         }
         catch (Exception ex)
         {
-            if (sessionId == sendingSessionId)
-            {
-                if (messages.Count > 0 && messages[^1].Role == "assistant") messages.RemoveAt(messages.Count - 1);
-                if (messages.Count > 0 && messages[^1].Role == "user") messages.RemoveAt(messages.Count - 1);
-                currentMessage = userMessage;
-                errorMessage = ex.Message;
-            }
+            if (activeTurn != turn || sessionId != sendingSessionId) return;
+            if (ex is PersonalAgentApiException && string.IsNullOrEmpty(turn.Reply)) currentMessage = turn.Message;
+            errorMessage = ex is OperationCanceledException ? "Response stopped or timed out. Check Scheduled tasks before repeating a reminder request." : ex.Message;
         }
         finally
         {
-            sendCancellation?.Dispose();
-            sendCancellation = null;
+            turn.Changed -= RefreshTurnAsync;
+            if (activeTurn == turn) activeTurn = null;
             isSendingMessage = false;
         }
     }
 
-    private void StopResponse() => sendCancellation?.Cancel();
+    private Task RefreshTurnAsync()
+    {
+        if (activeTurn is null || messages.Count == 0 || messages[^1].Role != "assistant") return Task.CompletedTask;
+        messages[^1] = messages[^1] with { Content = activeTurn.Reply };
+        shouldScrollToBottom = true;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void StopResponse()
+    {
+        if (activeTurn is { Completion.IsCompleted: false } turn) turn.Cancellation.Cancel();
+    }
 
     private Task ResetSelectionAsync()
     {
@@ -310,7 +310,7 @@ public partial class Chat
             ["sessionId"] = isContinuous ? null : sessionId, ["profileId"] = profileId, ["drawer"] = isSessionDrawerOpen ? "1" : null,
             ["message"] = isContinuous ? null : RequestedMessage
         });
-        if (uri != NavigationManager.Uri) NavigationManager.NavigateTo(uri);
+        if (!disposed && uri != NavigationManager.Uri) NavigationManager.NavigateTo(uri);
     }
 
     private void CloseSessionDrawer() { isSessionDrawerOpen = false; SaveChatQuery(); }
@@ -341,8 +341,9 @@ public partial class Chat
 
     public void Dispose()
     {
-        sendCancellation?.Cancel();
-        sendCancellation?.Dispose();
+        disposed = true;
+        if (activeTurn is not null) activeTurn.Changed -= RefreshTurnAsync;
+        activeTurn = null;
         NavigationManager.LocationChanged -= HandleLocationChanged;
     }
 

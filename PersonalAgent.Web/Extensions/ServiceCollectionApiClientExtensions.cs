@@ -39,12 +39,13 @@ internal static class ServiceCollectionApiClientExtensions
             .Validate(opts => !string.IsNullOrWhiteSpace(opts.ActorSigningKey), $"{PersonalAgentApiOptions.SectionName}:ActorSigningKey is required")
             .ValidateOnStart();
 
+        services.AddScoped<ChatTurnTracker>();
         services.AddHttpClient<PersonalAgentClient>((serviceProvider, client) =>
         {
             var personalAgentApiOptions = serviceProvider.GetRequiredService<IOptions<PersonalAgentApiOptions>>().Value;
 
             client.BaseAddress = new Uri(personalAgentApiOptions.BaseUrl);
-            client.Timeout = TimeSpan.FromSeconds(30);
+            client.Timeout = Timeout.InfiniteTimeSpan;
 
             if (!string.IsNullOrWhiteSpace(personalAgentApiOptions.InternalApiKey))
                 client.DefaultRequestHeaders.Add("X-Internal-Api-Key", personalAgentApiOptions.InternalApiKey);

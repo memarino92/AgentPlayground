@@ -73,6 +73,9 @@ internal partial class PersonalAgentClient : IDisposable
     public async Task<HistoryResponse> SendConversationMessageStreamingAsync(string Id, string ProfileId, string Message,
         Func<string, Task> OnDelta, CancellationToken CancellationToken)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromMinutes(10));
+        CancellationToken = deadline.Token;
         using var Response = await SendAsync(HttpMethod.Post, $"/api/conversation/{Id}/messages/stream",
             JsonContent.Create(new { ProfileId, Message }, options: JsonOptions), CancellationToken, streamResponse: true);
         if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("send message", Response);
@@ -465,8 +468,11 @@ internal partial class PersonalAgentClient : IDisposable
                 request.Headers.Add("X-Agent-Signature", signature);
             }
         }
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var chat = streamResponse || uri.EndsWith("/messages", StringComparison.OrdinalIgnoreCase) && method == HttpMethod.Post;
+        deadline.CancelAfter(chat ? TimeSpan.FromMinutes(10) : TimeSpan.FromSeconds(30));
         return await httpClient.SendAsync(request, streamResponse || requestUser is not null
-            ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead, cancellationToken);
+            ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead, deadline.Token);
     }
 }
 

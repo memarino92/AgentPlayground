@@ -22,7 +22,9 @@ public partial class Chat
         isLoadingHistory = true;
         try
         {
+            var pending = Turns.Snapshot();
             var History = await ApiClient.OpenConversationAsync(profileId, selectedModelId);
+            if (disposed) return;
             sessionId = History.SessionId;
             activeModelId = selectedModelId = History.ModelId;
             messages = [.. History.Messages];
@@ -30,6 +32,7 @@ public partial class Chat
             isReadOnly = false;
             shouldScrollToBottom = true;
             SaveChatQuery();
+            if ((Turns.Find(sessionId) ?? pending.GetValueOrDefault(sessionId)) is { } turn) await ObserveTurnAsync(sessionId, turn);
         }
         finally { isLoadingHistory = false; }
     }
