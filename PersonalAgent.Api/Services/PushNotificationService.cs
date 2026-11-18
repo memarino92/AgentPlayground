@@ -7,29 +7,30 @@ using PersonalAgent.Api.Models;
 
 namespace PersonalAgent.Api.Services;
 
-internal class PushNotificationService(IOptions<PushNotificationsOptions> options, ILogger<PushNotificationService> logger)
+internal class PushNotificationService(IOptions<PushNotificationsOptions> options, ILogger<PushNotificationService> logger, IAgentApprovalStore devices)
 {
     private readonly PushNotificationsOptions _options = options.Value;
     private FirebaseMessaging? _messaging;
 
     public bool IsEnabled => _options.Enabled;
 
-    public async Task<int> SendToDevicesAsync(string profileId, string title, string body, IReadOnlyDictionary<string, string>? data, IReadOnlyList<PersistedMobileDeviceToken> deviceTokens, CancellationToken cancellationToken = default)
+    public async Task<(int Accepted, int Unregistered)> SendToDevicesAsync(string profileId, string title, string body, IReadOnlyDictionary<string, string>? data, IReadOnlyList<PersistedMobileDeviceToken> deviceTokens, CancellationToken cancellationToken = default)
     {
         if (!_options.Enabled)
         {
             logger.LogInformation("Push notifications are disabled. Skipping send for profile {ProfileId}", profileId);
-            return 0;
+            return (0, 0);
         }
 
         if (deviceTokens.Count is 0)
         {
             logger.LogInformation("No device tokens found for profile {ProfileId}", profileId);
-            return 0;
+            return (0, 0);
         }
 
         var messaging = GetOrCreateMessagingClient();
         var sentCount = 0;
+        var unregistered = 0;
 
         foreach (var device in deviceTokens)
         {
@@ -59,6 +60,13 @@ internal class PushNotificationService(IOptions<PushNotificationsOptions> option
                 _ = await messaging.SendAsync(message, cancellationToken);
                 sentCount++;
             }
+            catch (FirebaseMessagingException ex) when (ex.MessagingErrorCode == MessagingErrorCode.Unregistered)
+            {
+                await devices.RemoveRejectedTokenAsync(profileId, device.DeviceId, device.PushToken, cancellationToken);
+                unregistered++;
+                logger.LogInformation("Firebase registration expired for device {DeviceId}", device.DeviceId);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 logger.LogWarning(
@@ -74,7 +82,7 @@ internal class PushNotificationService(IOptions<PushNotificationsOptions> option
             sentCount,
             profileId);
 
-        return sentCount;
+        return (sentCount, unregistered);
     }
 
     private FirebaseMessaging GetOrCreateMessagingClient()

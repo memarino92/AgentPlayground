@@ -66,8 +66,8 @@ public partial class MainPage : ContentPage
         base.OnAppearing();
         _isVisible = true;
         _hasAppeared = true;
-        await _viewModel.InitializeAsync();
-        await _firebaseBridge.InitializeAsync();
+        var hasCurrentToken = await _firebaseBridge.InitializeAsync();
+        await _viewModel.InitializeAsync(hasCurrentToken);
         await ReviewPendingApprovalsAsync();
     }
 
@@ -93,7 +93,11 @@ public partial class MainPage : ContentPage
 
     private async void OnRegisterDeviceClicked(object? sender, EventArgs e)
     {
-        await _firebaseBridge.InitializeAsync();
+        if (!await _firebaseBridge.InitializeAsync())
+        {
+            await DisplayAlertAsync("Register Device", "Firebase could not provide a current push token. Check your connection and notification permission, then try again.", "OK");
+            return;
+        }
         await _viewModel.RegisterDeviceAsync();
         await DisplayAlertAsync("Register Device", $"{_viewModel.StatusMessage}\nAPI: {_viewModel.GetApiBaseUrl()}", "OK");
     }

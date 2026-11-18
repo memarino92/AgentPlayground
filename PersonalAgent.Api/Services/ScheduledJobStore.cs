@@ -68,10 +68,18 @@ internal sealed class ScheduledJobStore(IOptions<AgentMemoryOptions> Options)
         return await Command.ExecuteScalarAsync(Token) is string Json ? JsonSerializer.Deserialize<ScheduledJob>(Json) : null;
     }
 
-    public async Task CreateAsync(ScheduledJob Job, CancellationToken Token)
+    public Task CreateAsync(ScheduledJob Job, CancellationToken Token) => CreateBatchAsync([Job], Token);
+
+    public async Task CreateBatchAsync(IReadOnlyList<ScheduledJob> Jobs, CancellationToken Token)
     {
         await using var Connection = await OpenAsync(Token);
         await using var Transaction = await Connection.BeginTransactionAsync(Token);
+        foreach (var Job in Jobs) await InsertAsync(Job, Connection, Transaction, Token);
+        await Transaction.CommitAsync(Token);
+    }
+
+    private async Task InsertAsync(ScheduledJob Job, NpgsqlConnection Connection, NpgsqlTransaction Transaction, CancellationToken Token)
+    {
         await using var Command = new NpgsqlCommand($"""
             INSERT INTO {Table}(task_id, subject_id, actor_id, execute_at, created_at, next_dispatch_at, status, data)
             VALUES (@id, @subject, @actor, @due, @created, @due, @status, @data::jsonb)
@@ -94,7 +102,6 @@ internal sealed class ScheduledJobStore(IOptions<AgentMemoryOptions> Options)
                 RequestedAtUtc = Job.CreatedAt, ExecuteAtUtc = Job.ExecuteAt, Instruction = "", NotifyOnCompletion = false
             }, Token);
         }
-        await Transaction.CommitAsync(Token);
     }
 
     // The caller holds the session advisory lock. State, attempt outcome and notification commit together.

@@ -386,6 +386,17 @@ internal partial class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> op
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task RemoveRejectedTokenAsync(string profileId, string deviceId, string pushToken, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"DELETE FROM {MobileDeviceTokensTable} WHERE profile_id = @profile AND device_id = @device AND push_token = @token";
+        command.Parameters.AddWithValue("profile", profileId);
+        command.Parameters.AddWithValue("device", deviceId);
+        command.Parameters.AddWithValue("token", pushToken);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<PersistedMobileDeviceToken>> GetMobileDeviceTokensAsync(string profileId, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
