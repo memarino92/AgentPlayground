@@ -163,7 +163,7 @@ AgentPlayground/
 
 - `TreatWarningsAsErrors` is **enabled** - never add `<NoWarn>` without approval
 - Package versions are **centrally managed** in `Directory.Packages.props`
-- **.NET**: 11.0 RC1; SDK pinned in `global.json`
+- **.NET**: 11.0; SDK pinned in `global.json`
 - **Framework**: Microsoft Agent Framework; pinned versions live in `Directory.Packages.props`.
 
 ## Decisions and Plans

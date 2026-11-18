@@ -4,13 +4,13 @@ Android companion app for PersonalAgent focused on agent approval review.
 
 ## Build prerequisites
 
-Use SDK `11.0.100-rc.1.26425.128` from the repository's `global.json` and install the matching RC1 Android workload from the repository root:
+Use SDK `11.0.100` from the repository's `global.json` and install the matching Android workload from the repository root:
 
 ```powershell
-dotnet workload install maui-android --version 11.0.100-rc.1.26460.1
+dotnet workload install maui-android --version 11.0.100
 ```
 
-The Android workload requires JDK 21 (`>=21.0` and `<22.0`); JDK 11 from older Visual Studio installations will fail. Use Microsoft OpenJDK. The installed workload's `WorkloadDependencies.json` is the source for matching Java and Android SDK versions.
+The stable Android workload supports JDK 21 through 25 and recommends JDK 21. Use Microsoft OpenJDK. The installed workload's `WorkloadDependencies.json` is the source for matching Java and Android SDK versions.
 
 Install the project-specific dependencies from PowerShell:
 
@@ -26,7 +26,7 @@ For a user-local JDK installation, set the user environment variable `JavaSdkDir
 
 Local validation on 2026-10-02: the pinned .NET 11 RC1 Android Debug build succeeded with zero warnings and errors and produced `bin/Debug/net11.0-android/com.personalagent.mobile-Signed.apk`. Microsoft OpenJDK 21.0.8 was installed, Android platform/emulator tools were updated, and the `PersonalAgent_API_36_1` emulator was created with Windows hypervisor acceleration available. After memory-heavy WSL/editor processes were closed, the temporary Java heap override was removed and the build passed with the default heap. The emulator/app was not launched and device flows remain unverified.
 
-MAUI Controls is centrally pinned to `11.0.0-rc.1.26451.6`. Keep the workload and package release aligned. Android SDK and Java are also required; Android API 24 remains the minimum supported device version. This upgrade does not change the existing mobile identity/release limitations in the roadmap.
+MAUI Controls is centrally pinned to `11.0.0`. Keep the workload and package release aligned. Android SDK and Java are also required; Android API 24 remains the minimum supported device version. This upgrade does not change the existing mobile identity/release limitations in the roadmap.
 
 ## Current Scope
 

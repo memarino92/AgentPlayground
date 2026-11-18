@@ -32,7 +32,7 @@ The API owns AI provider adapters, including AssemblyAI transcription behind a n
 
 ## Build and test
 
-Install .NET 11 RC1 SDK `11.0.100-rc.1.26425.128`, pinned in `global.json`. Backend projects can be built without Android workloads:
+Install .NET 11 SDK `11.0.100`, pinned in `global.json`. Backend projects can be built without Android workloads:
 
 ```powershell
 dotnet build PersonalAgent.Api/PersonalAgent.Api.csproj
