@@ -35,7 +35,8 @@ public partial class CodingJobsPage
     {
         var Job = await Client.GetCodingJobAsync(Profile, Id, Lifetime.Token);
         if (Job.Artifact is { } Artifact) Artifacts[Id] = Artifact;
-        else Error = "No artifact is available for this job yet.";
+        else Error = PersonalAgent.Contracts.Coding.CodingJobs.Terminal(Job.Status)
+            ? "This job ended without a validation artifact." : "No artifact is available for this job yet.";
     });
     private async Task RunAsync(Func<Task> Action)
     {
