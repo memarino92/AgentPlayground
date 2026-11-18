@@ -3,8 +3,13 @@ export async function codingDispatch(request, api) {
   const options = { token: request.token, environmentId: request.environmentId, authType: 'bearer', verbose: false };
   if (request.operation === 'coding-create') {
     if (!/^[A-Za-z0-9_.-]{1,128}$/.test(request.checkpoint)) throw new Error('Invalid checkpoint');
-    const sandbox = await api.create(request.checkpoint, { ...options, networkIsolation: 'ISOLATED', idleTimeoutMinutes: 35 });
-    return { id: sandbox.id };
+    try {
+      const sandbox = await api.create(request.checkpoint, { ...options, networkIsolation: 'ISOLATED', idleTimeoutMinutes: 5 });
+      return { id: sandbox.id };
+    } catch (error) {
+      // Provider messages may contain credentials. Only return controller-authored descriptions.
+      return { provisioningError: provisioningError(error) };
+    }
   }
   validateRequest(request);
   const sandbox = await api.connect(request.id, options);
@@ -46,6 +51,20 @@ export async function codingDispatch(request, api) {
   }
   artifact.checks = checks;
   return { success: checks.length === 3 && checks.every(c => c.exitCode === 0), artifact };
+}
+
+function provisioningError(error) {
+  if (error?.name === 'RailwayAuthError' || [401, 403].includes(error?.status) || /unauthori[sz]ed|forbidden|permission denied/i.test(error?.message))
+    return 'Railway denied access. Check the automation runner credential and environment.';
+  if (/(checkpoint|template).*(not found|does not exist)/i.test(error?.message))
+    return 'Railway could not find the coding checkpoint. Check its name in the configured environment.';
+  if (error?.status === 429 || /too many sandboxes|sandbox limit/i.test(error?.message))
+    return 'Railway reported a sandbox or request limit.';
+  if (error?.name === 'SandboxTimeoutError') return 'Railway timed out waiting for the sandbox to start.';
+  if (error?.name === 'SandboxFailedError') return 'Railway reported that the sandbox failed during startup.';
+  if (Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599)
+    return `Railway returned a provisioning error (HTTP ${error.status}).`;
+  return 'The Railway SDK could not provision the coding sandbox.';
 }
 
 export function validateRequest(r) {

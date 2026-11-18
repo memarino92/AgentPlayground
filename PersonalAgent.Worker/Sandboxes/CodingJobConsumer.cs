@@ -31,6 +31,13 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
         {
             var Created = await Client.CallAsync(new { operation = "coding-create", token = Railway.Token,
                 environmentId = Railway.Settings.EnvironmentId, checkpoint = Job.Settings.Checkpoint }, Deadline.Token);
+            if (Created.TryGetProperty("provisioningError", out var Error))
+            {
+                var Reason = Error.GetString();
+                Logger.LogWarning(new EventId(4403), "Coding sandbox provisioning failed for {JobId}: {Reason}", Job.Id, Reason);
+                await Store.SaveAsync(Job with { Status = "Failed", Error = Reason }, "Running", CancellationToken.None);
+                return;
+            }
             Job = Job with { SandboxId = Created.GetProperty("id").GetString(), CleanupState = "Pending" };
             // Persist identity before any candidate code runs, even if cancellation raced with provisioning.
             phase = "saving the sandbox identity";
