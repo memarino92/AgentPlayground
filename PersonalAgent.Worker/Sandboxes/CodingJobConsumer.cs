@@ -26,15 +26,18 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
         Deadline.CancelAfter(TimeSpan.FromMinutes(Job.Settings.MaxMinutes));
         var Monitor = MonitorAsync(Job.Id, Deadline);
         Job = Job with { Status = "Running" };
+        var phase = "sandbox provisioning";
         try
         {
             var Created = await Client.CallAsync(new { operation = "coding-create", token = Railway.Token,
                 environmentId = Railway.Settings.EnvironmentId, checkpoint = Job.Settings.Checkpoint }, Deadline.Token);
             Job = Job with { SandboxId = Created.GetProperty("id").GetString(), CleanupState = "Pending" };
             // Persist identity before any candidate code runs, even if cancellation raced with provisioning.
+            phase = "saving the sandbox identity";
             await Store.AttachSandboxAsync(Job.Id, Job.SandboxId!, CancellationToken.None);
             var Current = (await Store.GetAsync(Job.Id, CancellationToken.None))!;
             if (Current.Status != "Running") return;
+            phase = "sandbox execution";
             var Result = await Client.CallAsync(new
             {
                 operation = "coding-execute", token = Railway.Token, environmentId = Railway.Settings.EnvironmentId,
@@ -45,16 +48,19 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
                 responses = CodingJobs.IsSubscriptionModel(Job.Settings.ModelId),
                 gateway = Railway.Settings.GatewayUrl.TrimEnd('/') + $"/coding-runtime/{Job.Id}/v1", capability = Capability
             }, Deadline.Token);
+            phase = "reading validation results";
             var Artifact = Result.GetProperty("artifact").Deserialize<CodingArtifact>(Json) ?? throw new InvalidOperationException("Missing artifact.");
             var Success = Result.GetProperty("success").GetBoolean();
             Job = Job with { Artifact = Artifact, Status = Success ? "ReadyToPublish" : "Failed",
                 Error = Success ? null : "Coding or validation failed. Inspect retained checks." };
+            phase = "saving validation results";
             await Store.SaveAsync(Job, "Running", CancellationToken.None);
         }
         catch (Exception E)
         {
             Logger.LogError(new EventId(4403), E, "Coding execution {JobId} failed with {ExceptionType}", Job.Id, E.GetType().Name);
-            await Store.SaveAsync(Job with { Status = "Failed", Error = E is OperationCanceledException ? "Coding stopped or timed out." : "Coding infrastructure failed; inspect controller diagnostics." }, "Running", CancellationToken.None);
+            await Store.SaveAsync(Job with { Status = "Failed", Error = E is OperationCanceledException
+                ? $"Coding stopped or timed out during {phase}." : $"Coding failed during {phase} ({E.GetType().Name})." }, "Running", CancellationToken.None);
         }
         finally
         {
