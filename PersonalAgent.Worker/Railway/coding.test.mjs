@@ -13,6 +13,22 @@ test('coding preparation loads the repository Dockerfile and immutable workload 
 const request = { operation: 'coding-execute', imageId: 'sha256:' + 'a'.repeat(64), repository: 'owner/repo',
   baseSha: 'b'.repeat(40), minutes: 20, capability: 'c'.repeat(64), gateway: 'https://api.example.test/coding-runtime/1234/v1',
   instruction: 'Do not execute $(payload)', testProject: 'Tests/Tests.csproj', testFilter: 'FullyQualifiedName~Unit', token: 'controller-secret' };
+test('coding provisioning uses a supported idle timeout and keeps provider details private', async () => {
+  const create = { operation: 'coding-create', checkpoint: 'coding-v1' };
+  assert.deepEqual(await codingDispatch(create, { create: async (checkpoint, options) => {
+    assert.equal(checkpoint, create.checkpoint);
+    assert.equal(options.idleTimeoutMinutes, 5);
+    assert.equal(options.networkIsolation, 'ISOLATED');
+    return { id: 'sandbox-id' };
+  } }), { id: 'sandbox-id' });
+  for (const [status, message, expected] of [[200, 'Checkpoint private-name not found', /checkpoint/],
+    [403, 'secret-token', /denied access/], [503, 'secret-token', /HTTP 503/]]) {
+    const result = await codingDispatch(create, { create: async () => { throw Object.assign(new Error(message), { status }); } });
+    assert.match(result.provisioningError, expected);
+    assert.ok(!result.provisioningError.includes(message));
+  }
+});
+
 test('rejects shell interpolation in controller parameters', () => {
   for (const [key, value] of [['imageId', 'image;id'], ['repository', 'owner/repo;id'], ['minutes', '20;id'], ['baseSha', 'HEAD;id'], ['testProject', '../Tests.csproj']]) {
     assert.throws(() => validateRequest({ ...request, [key]: value }));
