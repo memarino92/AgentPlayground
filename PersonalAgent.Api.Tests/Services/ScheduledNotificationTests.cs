@@ -103,6 +103,24 @@ public class ScheduledNotificationTests(PostgresVectorFixture Database) : IClass
     }
 
     [Fact]
+    public async Task BatchValidatesEveryReminderBeforeWritingAny()
+    {
+        var (store, _) = await new ScheduledJobTests(Database).SetupAsync();
+        var events = new AgentEventService(Mock.Of<MassTransit.IBus>(),
+            new SchedulingService(NullLogger<SchedulingService>.Instance, store, Authorization()), NullLogger<AgentEventService>.Instance);
+        var access = new AgentAccessContext("owner", "Owner", "owner");
+        var tomorrow = DateTimeOffset.UtcNow.AddDays(1);
+        await Assert.ThrowsAsync<ArgumentException>(() => events.ScheduleNotificationToolAsync(access, "First", "One", delay: "PT1H",
+            additionalReminders: [new("Second", "", tomorrow)]));
+        (await store.ListAsync("owner", null, null, null, default)).Should().BeEmpty();
+        var result = await events.ScheduleNotificationToolAsync(access, "First", "One", delay: "PT1H",
+            additionalReminders: [new("Second", "Two", tomorrow)]);
+        var jobs = await store.ListAsync("owner", null, null, null, default);
+        jobs.Should().HaveCount(2);
+        foreach (var job in jobs) result.Should().Contain(job.TaskId.ToString());
+    }
+
+    [Fact]
     public async Task AgentToolCreatesRecurringNotificationSeries()
     {
         var (Store, _) = await new ScheduledJobTests(Database).SetupAsync();
@@ -192,7 +210,7 @@ public class ScheduledNotificationTests(PostgresVectorFixture Database) : IClass
     {
         var Devices = new Mock<IAgentApprovalStore>();
         Devices.Setup(D => D.GetMobileDeviceTokensAsync("owner", It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        var Push = new PushNotificationService(Options.Create(new PushNotificationsOptions { Enabled = Enabled }), NullLogger<PushNotificationService>.Instance);
+        var Push = new PushNotificationService(Options.Create(new PushNotificationsOptions { Enabled = Enabled }), NullLogger<PushNotificationService>.Instance, Devices.Object);
         var Job = ScheduledJobTests.Job() with { JobType = "Notification", Notification = new("Title", "Body", null) };
         var Result = await new ScheduledNotificationSender(Devices.Object, Push).SendAsync(Job, default);
         Result.Status.Should().Be("Failed");

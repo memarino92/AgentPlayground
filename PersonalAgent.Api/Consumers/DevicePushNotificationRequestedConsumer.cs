@@ -11,7 +11,7 @@ internal class DevicePushNotificationRequestedConsumer(IAgentApprovalStore appro
         var message = context.Message;
         var tokens = await approvalStore.GetMobileDeviceTokensAsync(message.ProfileId, context.CancellationToken);
 
-        var sentCount = await pushNotificationService.SendToDevicesAsync(
+        var (sentCount, _) = await pushNotificationService.SendToDevicesAsync(
             message.ProfileId,
             message.Title,
             message.Body,

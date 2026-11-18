@@ -13,9 +13,12 @@ internal class PushNotificationConsumer(IAgentApprovalStore approvalStore, PushN
         var tokens = await approvalStore.GetMobileDeviceTokensAsync(profileId, context.CancellationToken);
 
         if (tokens.Count is 0 && !string.IsNullOrWhiteSpace(message.TenantId))
-            tokens = await approvalStore.GetMobileDeviceTokensAsync(message.UserId, context.CancellationToken);
+        {
+            profileId = message.UserId;
+            tokens = await approvalStore.GetMobileDeviceTokensAsync(profileId, context.CancellationToken);
+        }
 
-        var sentCount = await pushNotificationService.SendToDevicesAsync(
+        var (sentCount, _) = await pushNotificationService.SendToDevicesAsync(
             profileId,
             message.Title,
             message.Body,

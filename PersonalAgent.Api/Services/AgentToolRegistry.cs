@@ -65,10 +65,10 @@ internal sealed class AgentToolRegistry(ITavilyMcpToolProvider TavilyProvider) :
             (Services, Access) => (string query, CancellationToken token, string? exerciseTag = null, string? fileName = null, string? recency = null) =>
                 Services.GetRequiredService<CoachCheckinService>().SearchCoachCheckinsAsync(query, Access.SubjectProfileId, exerciseTag, token, fileName, recency)),
         Local(AgentToolKeys.ScheduleNotification, "Schedule notification", "Notifications",
-            "Schedule a mobile notification for the current user using delay, absolute executeAt datetime, or natural when text like 'tonight'. Set repeatEvery to an ISO-8601 duration such as P1D or P7D to make it recurring.",
+            "Schedule a mobile notification for the current user using delay, absolute executeAt datetime, or natural when text like 'tonight'. For multiple one-time reminders, pass up to 31 additionalReminders with individual titles, bodies and ISO datetimes including offsets. The batch commits together. Set repeatEvery to an ISO-8601 duration such as P1D or P7D to make it recurring.",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,
-            (Services, Access) => (string title, string body, string? delay, string? executeAt, string? when, string? timeZoneId, string? repeatEvery, CancellationToken token) =>
-                Services.GetRequiredService<AgentEventService>().ScheduleNotificationToolAsync(Access, title, body, delay, executeAt, when, timeZoneId, repeatEvery, token)),
+            (Services, Access) => (string title, string body, string? delay, string? executeAt, string? when, string? timeZoneId, string? repeatEvery, CancellationToken token, AgentEventService.AdditionalReminder[]? additionalReminders = null) =>
+                Services.GetRequiredService<AgentEventService>().ScheduleNotificationToolAsync(Access, title, body, delay, executeAt, when, timeZoneId, repeatEvery, token, additionalReminders)),
         Local(AgentToolKeys.ScheduleAgentTask, "Schedule agent task", "Scheduling",
             "Schedule a future agent task. Required: instruction and exactly one timing field (delay, executeAt, or when). Set repeatEvery to an ISO-8601 duration such as P1D or P7D to make it recurring.",
             OwnerDefault: true, CoachDefault: false, HasSideEffects: true,

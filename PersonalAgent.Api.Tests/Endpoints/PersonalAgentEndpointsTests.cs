@@ -762,6 +762,13 @@ public class PersonalAgentEndpointsTests
             return Task.CompletedTask;
         }
 
+        public Task RemoveRejectedTokenAsync(string profileId, string deviceId, string pushToken, CancellationToken cancellationToken)
+        {
+            if (_deviceTokens.TryGetValue(profileId, out var tokens))
+                tokens.RemoveAll(device => device.DeviceId == deviceId && device.PushToken == pushToken);
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<PersistedMobileDeviceToken>> GetMobileDeviceTokensAsync(string profileId, CancellationToken cancellationToken = default)
         {
             var tokens = _deviceTokens.TryGetValue(profileId, out var stored)

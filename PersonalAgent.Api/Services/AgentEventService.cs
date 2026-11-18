@@ -51,7 +51,9 @@ internal class AgentEventService
         return $"Published mobile notification for profile {payload.ProfileId}";
     }
 
-    public async Task<string> ScheduleNotificationToolAsync(AgentAccessContext access, string title, string body, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, string? repeatEvery = null, CancellationToken cancellationToken = default)
+    public sealed record AdditionalReminder(string Title, string Body, DateTimeOffset ExecuteAt);
+
+    public async Task<string> ScheduleNotificationToolAsync(AgentAccessContext access, string title, string body, string? delay = null, string? executeAt = null, string? when = null, string? timeZoneId = null, string? repeatEvery = null, CancellationToken cancellationToken = default, AdditionalReminder[]? additionalReminders = null)
     {
         var profileId = access.SubjectProfileId;
         if (string.IsNullOrWhiteSpace(profileId)) return "Unable to schedule notification: profileId is required.";
@@ -61,7 +63,8 @@ internal class AgentEventService
 
         var (tenantId, userId) = ParseTenantAndUser(profileId);
         var parsedExecuteAt = DateTimeOffset.TryParse(executeAt, out var value) ? value : (DateTimeOffset?)null;
-        var result = await _schedulingService.ScheduleNotificationAsync(new ScheduleNotificationRequest
+        if (!string.IsNullOrWhiteSpace(executeAt) && parsedExecuteAt is null) return "Invalid executeAt datetime.";
+        var first = new ScheduleNotificationRequest
         {
             TenantId = tenantId,
             UserId = userId,
@@ -72,8 +75,19 @@ internal class AgentEventService
             When = when,
             TimeZoneId = timeZoneId,
             RepeatEvery = repeatEvery
-        }, access, cancellationToken);
-
+        };
+        if (additionalReminders is { Length: > 0 })
+        {
+            if (repeatEvery is not null || additionalReminders.Length > 31)
+                return "Use up to 32 one-time reminders per batch.";
+            var requests = additionalReminders.Select(item => new ScheduleNotificationRequest
+            {
+                TenantId = tenantId, UserId = userId, Title = item.Title, Body = item.Body, ExecuteAt = item.ExecuteAt
+            }).Prepend(first).ToList();
+            var results = await _schedulingService.ScheduleNotificationsAsync(requests, access, cancellationToken);
+            return string.Join("\n", results.Select(item => $"Scheduled notification {item.Id} at {item.ExecuteAtUtc:O}"));
+        }
+        var result = await _schedulingService.ScheduleNotificationAsync(first, access, cancellationToken);
         return string.IsNullOrWhiteSpace(repeatEvery)
             ? $"Scheduled notification {result.Id} at {result.ExecuteAtUtc:O}"
             : $"Scheduled recurring notification {result.Id} starting at {result.ExecuteAtUtc:O}, repeating every {repeatEvery}.";

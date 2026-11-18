@@ -52,6 +52,25 @@ public class AgentApprovalPushTests
 public class AgentApprovalPersistenceTests(PostgresVectorFixture Fixture) : IClassFixture<PostgresVectorFixture>
 {
     [Fact]
+    public async Task ExpiredTokenRemovalPreservesNewRegistrationAndOtherProfile()
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new PersonalAgent.Api.Configuration.AgentMemoryOptions
+        {
+            ConnectionString = Fixture.ConnectionString, Schema = "devices_" + Guid.NewGuid().ToString("N"), EnableSemanticMemory = false
+        });
+        await new AgentMemorySchemaInitializer(options, NullLogger<AgentMemorySchemaInitializer>.Instance).StartAsync(default);
+        var store = new PostgresAgentSessionStore(options, NullLogger<PostgresAgentSessionStore>.Instance);
+        await store.RegisterMobileDeviceTokenAsync("owner", "phone", "android", "old", null);
+        await store.RegisterMobileDeviceTokenAsync("other", "phone", "android", "old", null);
+        await store.RegisterMobileDeviceTokenAsync("owner", "phone", "android", "new", null);
+        await store.RemoveRejectedTokenAsync("owner", "phone", "old", default);
+        Assert.Equal("new", Assert.Single(await store.GetMobileDeviceTokensAsync("owner")).PushToken);
+        await store.RemoveRejectedTokenAsync("owner", "phone", "new", default);
+        Assert.Empty(await store.GetMobileDeviceTokensAsync("owner"));
+        Assert.Equal("old", Assert.Single(await store.GetMobileDeviceTokensAsync("other")).PushToken);
+    }
+
+    [Fact]
     public async Task ExpiredAndCrossProfileRequestsCannotBeDecidedAndDuplicatesKeepTheFirstDecision()
     {
         var Options = Microsoft.Extensions.Options.Options.Create(new PersonalAgent.Api.Configuration.AgentMemoryOptions

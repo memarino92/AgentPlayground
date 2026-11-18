@@ -27,22 +27,24 @@ public class FirebaseCloudMessagingBridge
 
     }
 
-    public async Task InitializeAsync()
+    public async Task<bool> InitializeAsync()
     {
-        if (!CrossFirebaseCloudMessaging.IsSupported) return;
+        if (!CrossFirebaseCloudMessaging.IsSupported) return false;
         try
         {
             var cloudMessaging = CrossFirebaseCloudMessaging.Current;
             await cloudMessaging.CheckIfValidAsync();
             var token = await cloudMessaging.GetTokenAsync();
-            if (string.IsNullOrWhiteSpace(token)) return;
+            if (string.IsNullOrWhiteSpace(token)) return false;
 
             _pushTokenProvider.UpdateToken(token);
             _logger.LogInformation("Firebase token initialized");
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to initialize Firebase cloud messaging");
+            return false;
         }
     }
 

@@ -86,14 +86,14 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
         }
     }
 
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public async Task InitializeAsync(bool hasCurrentToken, CancellationToken cancellationToken = default)
     {
         if (_isInitialized) return;
         _isInitialized = true;
 
         pushTokenProvider.TokenUpdated += async (_, token) => await MainThread.InvokeOnMainThreadAsync(() => RegisterDeviceWithTokenAsync(token, CancellationToken.None));
 
-        await RegisterDeviceAsync(cancellationToken);
+        if (hasCurrentToken) await RegisterDeviceAsync(cancellationToken);
     }
 
     public async Task SaveProfileIdAsync(CancellationToken cancellationToken = default)
