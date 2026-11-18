@@ -22,7 +22,7 @@ flowchart LR
     API --> FCM[Firebase push]
 ```
 
-The projects now target .NET 11 RC1 with a pinned SDK and matching service images. See [migration evidence and Android limits](decisions/0024-dotnet-11-rc1.md).
+The projects now target .NET 11 with a pinned SDK and matching service images. See [migration evidence and Android limits](decisions/0024-dotnet-11-rc1.md).
 
 ## Boundaries worth keeping
 

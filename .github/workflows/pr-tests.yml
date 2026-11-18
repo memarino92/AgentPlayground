@@ -49,7 +49,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup .NET 11 RC1
+      - name: Setup .NET 11
         uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
