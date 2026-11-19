@@ -7,7 +7,7 @@ flowchart LR
     Browser --> Web[Blazor Web]
     Web -->|Internal key + signed actor| API[PersonalAgent API]
     Mobile[Android companion] -->|Legacy internal-key calls| API
-    Mobile -->|WebView| Web
+    Mobile -->|Account-bound native screens| Web
     API --> Models[Chat / parsing / embeddings]
     API --> MCP[Tavily MCP]
     API <--> DB[(PostgreSQL + pgvector)]

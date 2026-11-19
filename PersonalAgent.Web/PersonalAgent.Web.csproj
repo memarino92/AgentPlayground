@@ -29,4 +29,7 @@
         <PackageReference Include="MassTransit" />
         <PackageReference Include="MassTransit.SqlTransport.PostgreSQL" />
     </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PersonalAgent.Presentation\PersonalAgent.Presentation.csproj" />
+  </ItemGroup>
 </Project>

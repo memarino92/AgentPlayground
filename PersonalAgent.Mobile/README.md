@@ -28,17 +28,13 @@ Local validation on 2026-10-02: the pinned .NET 11 RC1 Android Debug build succe
 
 MAUI Controls is centrally pinned to `11.0.0`. Keep the workload and package release aligned. Android SDK and Java are also required; Android API 24 remains the minimum supported device version. This upgrade does not change the existing mobile identity/release limitations in the roadmap.
 
-## Current Scope
+## Native Android experience
 
-- Loads the existing `PersonalAgent.Web` experience in a native `WebView`.
-- Registers this device's push token with `PersonalAgent` API.
-- Handles incoming approval notifications and submits approve/deny decisions.
+Tap **Sign in** and authorize Android in the system browser. The native chat opens the same continuous conversation as Web. It supports streamed replies, history search, model changes, fresh starts, interactive cards and recording citations. Use **Menu** for scheduled jobs, automations, recordings and the offline check-in preview. Owners also have coding jobs and all administration sections. Coaches with multiple assigned profiles can switch from Menu. Tap **Refresh** to check an uncertain send before retrying.
 
-The app opens `https://pa.michaelmarino.dev` automatically in the full-height WebView. Sign in using the website's existing social-login flow; the website owns account identity and its login cookies remain in the WebView. Connection fields are under Settings. The default native API URL is `https://pa-api.michaelmarino.dev`. Website sign-in does not yet enroll the native push client; native approval registration still uses the connection settings described below.
+Deploy the matching Web service for authenticated Android screens. The service defaults to `https://pa.michaelmarino.dev` and requires HTTPS. Web issues a one-day account credential bound to a random proof generated on the phone. Android secure storage holds the credential and proof together. Signing out removes both. Web verifies the proof, checks role and assignments, and calls the existing API through its signed actor client. The API retains its deployment-administrator checks on sensitive configuration.
 
-URLs are compiled into the APK through assembly metadata. Override them at build time with MSBuild properties `MobileWebBaseUrl` / `MobileApiBaseUrl`, or set `PERSONAL_AGENT_WEB_BASE_URL` / `PERSONAL_AGENT_API_BASE_URL` in the build shell. Those environment values are consumed while building; phone runtime environment variables are not needed. Saved in-app settings take precedence. Internal API credentials are not baked into this URL configuration.
-
-2026-10-03 verification: the personal-instance build passed with zero warnings/errors, was installed on the connected Pixel, and its app-only navigation log confirmed the initial website load succeeded. GitHub account sign-in remains a user interaction; no login credentials or phone screenshots were captured.
+Push registration and approval review use the separate API connection (default `https://pa-api.michaelmarino.dev`). Existing saved URLs take precedence over the build defaults. Use the MSBuild properties `MobileWebBaseUrl` (chat service origin) and `MobileApiBaseUrl` to override them when packaging the app.
 
 ## Environment Variables
 
@@ -57,7 +53,7 @@ You can override `PERSONAL_AGENT_PROFILE_ID` directly inside the app using the
 preferences and used for token registration + approvals, so you do not need to
 hardcode your username in source.
 
-You can also set `API base URL`, `Web URL`, and `Internal API key` in-app with
+You can also set `API base URL`, `Chat service URL`, and `Internal API key` in-app with
 `Save Connection`. These values are persisted in device preferences and override
 environment defaults.
 
@@ -65,7 +61,6 @@ Recommended Android emulator defaults for local dev:
 
 ```text
 PERSONAL_AGENT_API_BASE_URL=http://127.0.0.1:5100
-PERSONAL_AGENT_WEB_BASE_URL=http://127.0.0.1:5100
 INTERNAL_API_KEY=dev-internal-api-key
 PERSONAL_AGENT_PROFILE_ID=mobile-dev
 ANDROID_PUSH_CHANNEL_ID=agent-approval-high
@@ -75,7 +70,6 @@ For physical devices, use your host machine LAN IP, for example:
 
 ```text
 PERSONAL_AGENT_API_BASE_URL=http://192.168.1.10:5100
-PERSONAL_AGENT_WEB_BASE_URL=http://192.168.1.10:5100
 INTERNAL_API_KEY=dev-internal-api-key
 ```
 
@@ -100,7 +94,6 @@ adb reverse --list
 
 ```text
 PERSONAL_AGENT_API_BASE_URL=http://127.0.0.1:5100
-PERSONAL_AGENT_WEB_BASE_URL=http://127.0.0.1:5100
 ```
 
 This avoids LAN firewall issues and works consistently for local testing.

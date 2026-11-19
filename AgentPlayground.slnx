@@ -13,4 +13,5 @@
   <Project Path="PersonalAgent.Worker.Tests/PersonalAgent.Worker.Tests.csproj" />
   <Project Path="PersonalAgent.Api/PersonalAgent.Api.csproj" />
   <Project Path="PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj" />
+  <Project Path="PersonalAgent.Presentation/PersonalAgent.Presentation.csproj" />
 </Solution>

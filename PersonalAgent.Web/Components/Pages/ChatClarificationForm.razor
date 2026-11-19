@@ -18,7 +18,7 @@
         <label class="garden-card__field">Your answer
             <input type="text" @bind="Answer" @bind:event="oninput" maxlength="1000" disabled="@Disabled" placeholder="Choose above or write your own…" />
         </label>
-        <button type="button" disabled="@(Disabled || string.IsNullOrWhiteSpace(Answer))" @onclick='() => OnAction.InvokeAsync(new(Card.Revision, "answer", Answer))'>Send answer</button>
+        <button type="button" disabled="@(Disabled || string.IsNullOrWhiteSpace(Answer))" @onclick='() => OnAction.InvokeAsync(Card.Respond(Answer))'>Send answer</button>
     }
 </article>
 @code {

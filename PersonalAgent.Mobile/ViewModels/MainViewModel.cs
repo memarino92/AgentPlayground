@@ -54,6 +54,8 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
             OnPropertyChanged();
         }
     }
+    public string SavedProfileId => apiClient.ProfileId;
+
     public string ProfileId
     {
         get => _profileId;
@@ -111,9 +113,11 @@ public class MainViewModel(PersonalAgentApiClient apiClient, IPushTokenProvider 
 
     public async Task SaveConnectionSettingsAsync(CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(ApiBaseUrl) || string.IsNullOrWhiteSpace(WebAppUrl))
+        if (!Uri.TryCreate(ApiBaseUrl, UriKind.Absolute, out var api) || api.Scheme is not ("http" or "https") ||
+            !Uri.TryCreate(WebAppUrl, UriKind.Absolute, out var chat) || chat.Scheme != "https" ||
+            chat.PathAndQuery != "/" || !string.IsNullOrEmpty(chat.Fragment) || !string.IsNullOrEmpty(chat.UserInfo))
         {
-            StatusMessage = "API and Web URLs are required";
+            StatusMessage = "Enter an API URL and an HTTPS chat service origin (for example, https://app.example.com).";
             return;
         }
 

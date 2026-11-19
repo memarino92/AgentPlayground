@@ -3,25 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace PersonalAgent.Contracts;
 
-public sealed record ChatContextSource(Guid SessionId, long Sequence, DateTimeOffset CreatedAt, string Excerpt);
-public sealed record ChatCardItem(string Id, string Text, bool Done = false);
-public sealed record ChatCard(string Id, string Kind, string Title)
-{
-    public string? Detail { get; init; }
-    public string Status { get; init; } = "proposed";
-    public List<ChatCardItem> Items { get; init; } = [];
-    public List<string> Options { get; init; } = [];
-    public string? Answer { get; init; }
-    public int Revision { get; init; }
-}
-
-public sealed record ChatCardAction(int Revision, string Action, string? Value = null);
-public sealed record ChatPresentation
-{
-    public List<ChatCard> Cards { get; init; } = [];
-    public List<ChatContextSource> Sources { get; init; } = [];
-}
-
 // Only a tiny, data-only vocabulary crosses the model/UI boundary. Unknown or invalid blocks remain text.
 public static partial class ChatCardParser
 {

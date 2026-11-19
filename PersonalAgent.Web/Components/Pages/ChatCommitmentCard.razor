@@ -3,13 +3,9 @@
     <span class="garden-card__eyebrow">@(Card.Status == "proposed" ? "Proposed commitment" : Card.Status == "done" ? "Completed" : "Your commitment")</span>
     <h3>@Card.Title</h3>
     @if (!string.IsNullOrWhiteSpace(Card.Detail)) { <p>@Card.Detail</p> }
-    @if (Card.Status == "proposed")
+    @if (Card.CommitmentAction() is { } action)
     {
-        <button type="button" disabled="@Disabled" @onclick='() => OnAction.InvokeAsync(new(Card.Revision, "confirm"))'>Track this</button>
-    }
-    else if (Card.Status == "active")
-    {
-        <button type="button" disabled="@Disabled" @onclick='() => OnAction.InvokeAsync(new(Card.Revision, "complete"))'>Mark done</button>
+        <button type="button" disabled="@Disabled" @onclick="() => OnAction.InvokeAsync(action)">@(action.Action == "confirm" ? "Track this" : "Mark done")</button>
     }
     <small>Tracked in this conversation. This card does not schedule a reminder.</small>
 </article>

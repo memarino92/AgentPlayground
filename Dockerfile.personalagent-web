@@ -6,6 +6,7 @@ COPY ["Directory.Build.props", "."]
 COPY ["Directory.Packages.props", "."]
 COPY ["PersonalAgent.Contracts/PersonalAgent.Contracts.csproj", "PersonalAgent.Contracts/"]
 COPY ["PersonalAgent.Integrations/PersonalAgent.Integrations.csproj", "PersonalAgent.Integrations/"]
+COPY ["PersonalAgent.Presentation/PersonalAgent.Presentation.csproj", "PersonalAgent.Presentation/"]
 COPY ["PersonalAgent.Web/PersonalAgent.Web.csproj", "PersonalAgent.Web/"]
 
 RUN dotnet restore "PersonalAgent.Web/PersonalAgent.Web.csproj"
