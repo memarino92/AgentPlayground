@@ -1,0 +1,14 @@
+<button type="button" @onclick="() => Open = !Open">@(Open ? "Close interactive result" : "Open interactive result")</button>
+@if (Open)
+{
+    <iframe title="Interactive sandbox result" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="@Content"></iframe>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Document { get; set; } = "";
+    private bool Open;
+    private const string Header = """
+        <!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1">
+        """;
+    private string Content => Header + Document.TrimStart()["<!doctype html>".Length..];
+}

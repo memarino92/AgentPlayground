@@ -41,6 +41,7 @@ app.UseRateLimiter();
 app.MapMobileChat();
 app.MapNativeWorkspace();
 app.MapNativeRecordings();
+app.MapSandboxArtifacts();
 app.Use(async (Context, Next) =>
 {
     if (Context.Request.Path == "/chatgpt/handshake")

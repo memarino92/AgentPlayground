@@ -28,6 +28,10 @@ public sealed class AutomationsTests : TestContext
         Cut.FindAll("button").Single(B => B.TextContent == "Inspect run").Click();
         Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("Synthetic saved content").And.Contain("trace-synthetic")
             .And.Contain("C# build and execution").And.Contain("sha256:compiler"));
+        Cut.Find("a[download]").GetAttribute("href").Should().Contain($"/runs/{Handler.RunId}/artifacts/0?profileId=owner");
+        Cut.FindAll("a[download]").Last().TextContent.Should().Be("report/data.bin");
+        Cut.FindAll("a[download]").Last().GetAttribute("href").Should().EndWith("&file=1");
+        Cut.Find("img.scratchpad-chart").GetAttribute("src").Should().EndWith("&file=0&preview=true");
         Cut.FindAll("button").Single(B => B.TextContent == "Pause future runs").Click();
         Cut.WaitForAssertion(() => Handler.Paused.Should().BeTrue());
         Cut.WaitForAssertion(() => Cut.FindAll("button").Should().Contain(B => B.TextContent == "Resume"));
@@ -46,6 +50,20 @@ public sealed class AutomationsTests : TestContext
         Cut.Find(".automation-header button").Click();
         Cut.WaitForElement("[role=alert]");
         Cut.Markup.Should().NotContain("Versions and source").And.NotContain("Private server detail");
+    }
+
+    [Fact]
+    public void InteractiveOutputRunsOnlyAfterOpeningAnIsolatedFrame()
+    {
+        const string Document = "<!doctype html><button onclick='this.textContent=2'>1</button>";
+        var Cut = RenderComponent<SandboxDisplay>(P => P.Add(C => C.Document, Document));
+        Cut.FindAll("iframe").Should().BeEmpty();
+        Cut.Find("button").Click();
+        var Frame = Cut.Find("iframe");
+        Frame.GetAttribute("sandbox").Should().Be("allow-scripts");
+        Frame.GetAttribute("srcdoc").Should().Contain("default-src 'none'").And.Contain("onclick=");
+        Cut.Find("button").Click();
+        Cut.FindAll("iframe").Should().BeEmpty();
     }
 
     private void Configure(AutomationHandler Handler)
@@ -78,7 +96,7 @@ public sealed class AutomationsTests : TestContext
             var Run = new AutomationRunResponse(RunId, 1, "Completed", Date, Date, Date, null, "trace-synthetic");
             object Body = Request.RequestUri!.AbsolutePath.Contains("/runs/")
                 ? new AutomationRunDetail(Run, [new(0, "program", "csharp", "Completed", "Synthetic saved content", null, Date,
-                    "{\"ImageId\":\"sha256:compiler\",\"StandardError\":\"<script>untrusted</script>\"}")], [])
+                    "{\"ImageId\":\"sha256:compiler\",\"StandardError\":\"<script>untrusted</script>\"}")], [], Sandboxes: [new(0, "vm", "Destroyed", Date, [new("plot.png", 128), new("report/data.bin", 8)])])
                 : Request.RequestUri.AbsolutePath == "/api/automations/" ? new[] { Definition }
                 : new AutomationDetail(Definition, [new(2, "{\"steps\":[]}", "hash", Date), new(1, "{\"steps\":[]}", "old-hash", Date)], [Run], Paused ? [] : [Date.AddDays(1)]);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(Body, Body.GetType()) });

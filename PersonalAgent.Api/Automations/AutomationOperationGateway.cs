@@ -32,7 +32,7 @@ internal sealed class AutomationOperationGateway(AutomationDbContext Db, Automat
         var Version = await Db.Versions.AsNoTracking().SingleAsync(V => V.AutomationId == Run.AutomationId && V.Version == Run.Version, Token);
         var Step = Recipes.Parse(Version.Source).Steps[StepIndex];
         await Recipes.ValidateToolsAsync(new([Step]), Services, Access, Permissions, Token);
-        if (Step.Action != "csharp" || !Step.Arguments.TryGetProperty("tools", out var Tools)
+        if (!AutomationPrograms.IsProgram(Step.Action) || !Step.Arguments.TryGetProperty("tools", out var Tools)
             || !Tools.EnumerateArray().Any(T => T.GetString() == Request.Tool) || !AutomationRecipes.AllowedTools.Contains(Request.Tool)) throw new UnauthorizedAccessException();
         var ToolStep = new AutomationStep("runtime", "tool", JsonSerializer.SerializeToElement(new { tool = Request.Tool, inputs = Request.Inputs }));
         await Recipes.ValidateToolsAsync(new([ToolStep]), Services, Access, Permissions, Token);

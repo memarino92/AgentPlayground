@@ -28,28 +28,30 @@ internal sealed class AutomationStepConsumer(AutomationDbContext Db, AutomationA
             var Run = await Db.Runs.AsNoTracking().SingleOrDefaultAsync(R => R.CorrelationId == Message.RunId, Token);
             if (Run is null || Run.CurrentState != "Running" || Run.StepIndex != Message.StepIndex) return;
             var Definition = await Db.Automations.AsNoTracking().SingleAsync(D => D.Id == Run.AutomationId, Token);
-            var Access = await Authorization.ForRunAsync(Definition, Token);
             var Version = await Db.Versions.AsNoTracking().SingleAsync(V => V.AutomationId == Run.AutomationId && V.Version == Run.Version, Token);
             var Recipe = Recipes.Parse(Version.Source);
             var Step = Recipe.Steps[Message.StepIndex];
             Action = Step.Action;
             Span?.SetTag("automation.action", Action);
-            await Recipes.ValidateToolsAsync(new([Step]), Services, Access, Permissions, Token);
+            var Interactive = Step.Action == "python" && await Services.GetRequiredService<ScratchpadStore>().ScopeAsync(Run.CorrelationId, Token) is not null;
+            var Access = await Authorization.ForRunAsync(Definition, Token, Interactive);
+            await Recipes.ValidateToolsAsync(new([Step]), Services, Access, Permissions, Token, Interactive);
             var Earlier = await Db.Steps.AsNoTracking().Where(S => S.RunId == Run.CorrelationId && S.Index < Run.StepIndex).ToListAsync(Token);
             var Skip = Step.When is { } Condition && Earlier.Single(S => S.StepId == Condition.Step).Output != Condition.Expected;
             var Arguments = AutomationRecipes.Resolve(Step, Run, Earlier);
             var Output = "";
             if (!Skip)
             {
-                if (Action == "csharp")
+                if (AutomationPrograms.IsProgram(Action))
                 {
                     var Input = Arguments.GetProperty("input").GetString()!;
                     if (Input.Length > AutomationPrograms.MaxInput) throw new ArgumentException("Program input exceeds 64 KiB.");
                     if (AutomationRecipes.Packages(Arguments).Length > 0)
                         await Services.GetRequiredService<AutomationOperationGateway>().ApprovePackagesAsync(Run.CorrelationId, Run.StepIndex, Step, Token);
-                    await (await Context.GetSendEndpoint(new Uri("queue:" + AutomationPrograms.Queue))).Send(
+                    await (await Context.GetSendEndpoint(new Uri("queue:" + (Interactive ? AutomationPrograms.ScratchQueue : AutomationPrograms.Queue)))).Send(
                         new ExecuteAutomationProgram(Run.CorrelationId, Run.StepIndex, Arguments.GetProperty("source").GetString()!, Input, DateTimeOffset.UtcNow.AddMinutes(3),
-                            AutomationRecipes.Packages(Arguments), Arguments.TryGetProperty("packageLock", out var Lock) ? Lock.GetString() : null), Token);
+                            AutomationRecipes.Packages(Arguments), Arguments.TryGetProperty("packageLock", out var Lock) ? Lock.GetString() : null, Action,
+                            Arguments.TryGetProperty("imageId", out var Image) ? Image.GetString() : null, AutomationRecipes.InputFiles(Arguments)), Token);
                     Status = "Dispatched";
                     return; // The isolated runner reports completion; dispatch is not successful execution.
                 }

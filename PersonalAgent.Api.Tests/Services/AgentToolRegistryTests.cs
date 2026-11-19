@@ -95,7 +95,7 @@ public class AgentToolRegistryTests
         catalog.Tools.Where(Tool => Tool.HasSideEffects).Select(Tool => Tool.Key).Should().BeEquivalentTo(
             [AgentToolKeys.PublishMobileNotification, AgentToolKeys.SyncWorkJournal, AgentToolKeys.ScheduleNotification, AgentToolKeys.ScheduleAgentTask,
                 AgentToolKeys.UpdateScheduledJob, AgentToolKeys.CancelScheduledJob, "Local:save_automation", "Local:control_automation",
-                "Local:start_coding_job", "Local:inspect_coding_job", "Local:run_railway_sandbox"]);
+                "Local:start_coding_job", "Local:inspect_coding_job", "Local:run_railway_sandbox", "Local:run_python", "Local:schedule_python"]);
     }
 
     [Fact]

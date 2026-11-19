@@ -4,6 +4,8 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 
 ## Start here
 
+- [Interactive Python scratchpads](decisions/0050-interactive-python.md) and [runtime setup](runbooks/automation-programs.md#live-python-in-chat).
+
 - [ChatGPT plan connections](runbooks/chatgpt-plan-sign-in.md): connect eligible subscriptions locally or on Railway; [decision 0042](decisions/0042-chatgpt-plan-sign-in.md)
 
 - [Personal assistant vision](plans/personal-assistant-vision.md): continuous chat, household usefulness, mobile direction, evaluated learning and cloud experiments.

@@ -1,0 +1,9 @@
+# 0050. Conversation-scoped Python
+
+Accepted on 2026-11-19. Implemented locally and exercised on Railway. App deployment and phone latency verification are pending.
+
+Reuse the Worker, isolated Railway checkpoint, durable run history and artifact downloads. A foreground chat tool submits a Python cell and waits for its output. Only interactive cells share an interpreter. The trusted conversation, actor and profile determine its scope. Fresh scheduled runs execute saved Python in the prepared environment. A lost or expired interpreter starts a new generation. Cells with uncertain outcomes are never automatically replayed to reconstruct memory.
+
+The owner selected Railway as the single provider. Keeping an interpreter warm consumes memory between calls, so use ten minutes of idle lifetime. A prewarmed pool needs measured demand. The final checkpoint restore proof completed 20 warm DataFrame calculations with 901 ms CLI round-trip p95. The first cell including container startup took 3.352 s, excluding VM provisioning. Chart creation and PNG verification took 3.472 s. Earlier attempts saw Railway WebSocket timeouts. These measurements cover the CLI and hosted runtime. The app uses its own database transport, SDK adapter and browser/native presentation, which require a separate device measurement.
+
+The foreground queue has its own Worker concurrency limit. Durable cell results and request-key deduplication protect retries. Saved schedules pin the checkpoint image digest and replay the successful cells through the selected run in a fresh interpreter. PostgreSQL stores exported charts and files. The live interpreter is a private CPython process with a Unix socket inside an unprivileged container. A plain Python exception preserves variables for correction. Timeouts and uncertain execution discard the session.

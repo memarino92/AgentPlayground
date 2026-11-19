@@ -15,4 +15,5 @@ public sealed record AutomationRuntimeView(long Revision, AutomationRuntimeSetti
 public sealed record SaveAutomationRuntime(long ExpectedRevision, AutomationRuntimeSettings Settings, string TokenAction = "keep", string? Token = null);
 public sealed record AutomationOperationRequest(string OperationId, string Tool, System.Text.Json.JsonElement Inputs);
 public sealed record AutomationOperationEvidence(string OperationId, string Kind, string Target, string Outcome, string Policy, DateTimeOffset CreatedAt);
-public sealed record AutomationSandboxStatus(int Step, string? SandboxId, string State, DateTimeOffset ExpiresAt);
+public sealed record AutomationSandboxStatus(int Step, string? SandboxId, string State, DateTimeOffset ExpiresAt, IReadOnlyList<SandboxArtifact>? Artifacts = null);
+public sealed record SandboxArtifact(string Path, long Bytes);
