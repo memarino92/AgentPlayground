@@ -68,6 +68,10 @@
                 }
                 else
                 {
+                @if (role == "Owner" && profileId is not null)
+                {
+                    <label>Attach sandbox input <InputFile OnChange="AttachInputAsync" disabled="@isBusy" /></label>
+                }
                 <ChatComposer CurrentMessage="@currentMessage"
                               CurrentMessageChanged="HandleCurrentMessageChanged"
                               SelectedModelId="@(selectedModelId ?? string.Empty)"

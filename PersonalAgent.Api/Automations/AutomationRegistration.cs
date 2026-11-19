@@ -22,6 +22,8 @@ internal static class AutomationRegistration
         Services.AddSingleton<AutomationAuthorization>();
         Services.AddSingleton<AutomationRecipes>();
         Services.AddSingleton<AutomationTools>();
+        Services.AddSingleton<PersonalAgent.Integrations.ScratchpadStore>();
+        Services.AddSingleton<PersonalAgent.Integrations.SandboxInputStore>();
         Services.AddSingleton<PersonalAgent.Integrations.CodingJobStore>();
         Services.AddScoped<PersonalAgent.Api.Coding.CodingJobService>();
         Services.AddSingleton<PersonalAgent.Api.Coding.CodingJobTools>();
@@ -127,12 +129,15 @@ internal sealed class AutomationScheduler(IServiceScopeFactory Scopes, TimeProvi
                 .OrderBy(D => D.NextRunAt).Select(D => D.Id).Take(50).ToListAsync(Token);
             // A durable timeout prevents a permanently faulted consumer from leaving a run invisible in Running.
             var Cutoff = Now.AddMinutes(-5);
+            var ImageCutoff = Now.AddMinutes(-18);
             var Stale = await Db.Runs.Where(R => R.CurrentState == "Running" && R.StartedAt < Cutoff
-                && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.CompletedAt > Cutoff)).Take(50).ToListAsync(Token);
+                && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.CompletedAt > Cutoff)
+                && (!Db.Steps.Any(S => S.RunId == R.CorrelationId && S.Index == R.StepIndex && S.Action == "dockerfile")
+                    || (R.StartedAt < ImageCutoff && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.CompletedAt > ImageCutoff)))).Take(50).ToListAsync(Token);
             var Sender = Scope.ServiceProvider.GetRequiredService<ISendEndpointProvider>();
             foreach (var Run in Stale)
                 await (await Sender.GetSendEndpoint(AutomationRegistration.SagaAddress)).Send(
-                    new AutomationStepFailed(Run.CorrelationId, Run.StepIndex, "No step progress for five minutes. The automation was paused."), Token);
+                    new AutomationStepFailed(Run.CorrelationId, Run.StepIndex, "Step progress deadline expired. The automation was paused."), Token);
             await Db.SaveChangesAsync(Token);
         }
         foreach (var Id in Due)

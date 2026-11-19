@@ -182,7 +182,7 @@ internal partial class AgentChatService
             if (!string.Equals(persistedSession.Role, access.Role, StringComparison.OrdinalIgnoreCase)) return null;
             if (sessionState.ScheduledTaskId is { } JobId && access.ScheduledTaskId != JobId)
                 throw new UnauthorizedAccessException("Scheduled job conversations are read-only.");
-            var tools = await _toolBinder.BindAsync(access with { SessionId = sessionId }, cancellationToken);
+            var tools = await _toolBinder.BindAsync(access with { SessionId = sessionId, ScratchOutput = OnDelta }, cancellationToken);
             // Scheduled runs keep their existing execution path. Routing is for interactive user turns only.
             var route = _requestRouter is not null && access.ScheduledTaskId is null
                 ? await _requestRouter.RouteAsync(message, tools, cancellationToken) : new PreChatRoute();

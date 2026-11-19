@@ -11,7 +11,7 @@ namespace PersonalAgent.Api.Automations;
 internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthorization Authorization,
     AutomationRecipes Recipes, ToolAccessService Permissions, IServiceProvider Services, TimeProvider Clock)
 {
-    public async Task<AutomationSummary> SaveAsync(AgentAccessContext Access, Guid? Id, SaveAutomationRequest Request, CancellationToken Token)
+    public async Task<AutomationSummary> SaveAsync(AgentAccessContext Access, Guid? Id, SaveAutomationRequest Request, CancellationToken Token, Guid? CreationKey = null)
     {
         Access = await Authorization.RequireAsync(Access, Token);
         if (string.IsNullOrWhiteSpace(Request.Name) || Request.Name.Length > 160) throw new ArgumentException("Name must contain 1–160 characters.");
@@ -22,6 +22,16 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
         catch (InvalidOperationException E) { throw new ArgumentException(E.Message); }
         var Now = Clock.GetUtcNow();
         await using var Transaction = await Db.Database.BeginTransactionAsync(Token);
+        if (CreationKey is { } Key)
+        {
+            await Db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({BitConverter.ToInt64(Key.ToByteArray())})", Token);
+            if (await LockedAsync(Key, Token) is { } Prior)
+            {
+                if (!AutomationAuthorization.Owns(Access, Prior) || Prior.SourceSessionId != Access.SessionId)
+                    throw new KeyNotFoundException();
+                return Summary(Prior);
+            }
+        }
         AutomationDefinition Definition;
         if (Id is { } Existing)
         {
@@ -34,7 +44,7 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
         }
         else
         {
-            Definition = new() { Id = Guid.NewGuid(), ActorId = Access.ActorId, ActorEmail = Access.Email,
+            Definition = new() { Id = CreationKey ?? Guid.NewGuid(), ActorId = Access.ActorId, ActorEmail = Access.Email,
                 SubjectProfileId = Access.SubjectProfileId, SourceSessionId = Access.SessionId, Version = 1, CreatedAt = Now };
             Db.Automations.Add(Definition);
         }
@@ -50,16 +60,18 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
     }
 
     public async Task<(AutomationSummary Automation, Guid RunId)> StartOneShotAsync(AgentAccessContext Access, Guid RequestKey,
-        string Name, string Source, CancellationToken Token)
+        string Name, string Source, CancellationToken Token, string? ScratchScope = null)
     {
-        Access = await Authorization.RequireAsync(Access, Token);
-        if (Access.Role != AgentRoles.Owner || !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.RunSandboxPermissionKey, Token))
-            throw new UnauthorizedAccessException("Current owner access and sandbox-run permission are required.");
+        var Scratch = ScratchScope is not null;
+        Access = await Authorization.RequireAsync(Access, Token, Write: !Scratch);
+        if (Access.Role != AgentRoles.Owner || !await Permissions.IsAllowedAsync(Access.Role,
+            Scratch ? AutomationPrograms.ScratchPermission : AutomationPrograms.RunSandboxPermissionKey, Token))
+            throw new UnauthorizedAccessException("Current owner access and permission to run this sandbox are required.");
         if (RequestKey == Guid.Empty) throw new ArgumentException("A nonempty UUID requestKey is required.");
         if (string.IsNullOrWhiteSpace(Name) || Name.Length > 160) throw new ArgumentException("Name must contain 1–160 characters.");
         var Recipe = Recipes.Parse(Source);
-        if (Recipe.Steps.Count != 1 || Recipe.Steps[0].Action != "csharp") throw new ArgumentException("One-shot sandbox jobs require one C# step.");
-        await Recipes.ValidateToolsAsync(Recipe, Services, Access, Permissions, Token);
+        if (Recipe.Steps.Count != 1 || !AutomationPrograms.IsProgram(Recipe.Steps[0].Action)) throw new ArgumentException("One-shot sandbox jobs require one program step.");
+        await Recipes.ValidateToolsAsync(Recipe, Services, Access, Permissions, Token, Scratch);
         var Hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Source)));
         await using var Transaction = await Db.Database.BeginTransactionAsync(Token);
         await Db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({BitConverter.ToInt64(RequestKey.ToByteArray())})", Token);
@@ -69,7 +81,9 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
             var Version = await Db.Versions.SingleAsync(V => V.AutomationId == RequestKey && V.Version == 1, Token);
             if (Existing.ActorId != Access.ActorId || Existing.SubjectProfileId != Access.SubjectProfileId || Version.Hash != Hash)
                 throw new InvalidOperationException("requestKey already identifies a different sandbox job.");
-            var ExistingRun = await Db.Runs.SingleAsync(R => R.AutomationId == RequestKey, Token);
+            var ExistingRun = await Db.Runs.Where(R => R.AutomationId == RequestKey).OrderBy(R => R.ScheduledAt).FirstAsync(Token);
+            var SavedScope = await Services.GetRequiredService<PersonalAgent.Integrations.ScratchpadStore>().ScopeAsync(ExistingRun.CorrelationId, Token);
+            if (SavedScope != ScratchScope) throw new InvalidOperationException("requestKey belongs to another execution context.");
             return (Summary(Existing), ExistingRun.CorrelationId);
         }
         var Now = Clock.GetUtcNow();
@@ -80,7 +94,13 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
         Db.Automations.Add(Definition);
         Db.Versions.Add(new() { AutomationId = RequestKey, Version = 1, Source = Source, Hash = Hash, CreatedAt = Now });
         Db.Runs.Add(Run);
-        Db.Steps.Add(new() { RunId = Run.CorrelationId, Index = 0, StepId = Recipe.Steps[0].Id, Action = "csharp" });
+        if (ScratchScope is not null)
+        {
+            var Cell = Recipe.Steps[0].Arguments.GetProperty("source").GetString()!;
+            var Files = System.Text.Json.JsonSerializer.Serialize(AutomationRecipes.InputFiles(Recipe.Steps[0].Arguments));
+            await Db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO app.scratch_cells(run_id, scope, source, input_files) VALUES ({Run.CorrelationId}, {ScratchScope}, {Cell}, {Files}::jsonb)", Token);
+        }
+        Db.Steps.Add(new() { RunId = Run.CorrelationId, Index = 0, StepId = Recipe.Steps[0].Id, Action = Recipe.Steps[0].Action });
         await (await Services.GetRequiredService<ISendEndpointProvider>().GetSendEndpoint(AutomationRegistration.SagaAddress))
             .Send(new StartAutomation(Run.CorrelationId), Token);
         await Db.SaveChangesAsync(Token);
@@ -121,8 +141,27 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
             .Select(R => new AutomationReportResponse(R.Id, R.Title, R.Content, R.CreatedAt)).ToListAsync(Token);
         var Gateway = Services.GetService<AutomationOperationGateway>();
         var Sandboxes = Services.GetService<PersonalAgent.Integrations.AutomationSandboxStore>();
+        var Statuses = Sandboxes is null ? [] : await Sandboxes.StatusAsync(RunId, Token);
+        var Completed = Steps.Where(S => S.Status == "Completed").Select(S => S.Index).ToHashSet();
         return new(RunResponse(Run), Steps, Reports, Gateway is null ? [] : await Gateway.EvidenceAsync(RunId, Token),
-            Sandboxes is null ? [] : await Sandboxes.StatusAsync(RunId, Token));
+            Statuses.Select(S => Completed.Contains(S.Step) ? S : S with { Artifacts = null }).ToArray());
+    }
+
+    public async Task RequireScratchOutputAsync(AgentAccessContext Access, CancellationToken Token)
+    {
+        Access = await Authorization.RequireAsync(Access, Token, Write: false);
+        if (Access.Role != AgentRoles.Owner || !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.ScratchPermission, Token))
+            throw new UnauthorizedAccessException("Scratchpad access was revoked.");
+    }
+
+    public async Task<byte[]> ReadArtifactArchiveAsync(AgentAccessContext Access, Guid Id, Guid RunId, int Step, CancellationToken Token)
+    {
+        await AccessibleAsync(Access, Id, Token);
+        if (!await Db.Runs.AnyAsync(R => R.AutomationId == Id && R.CorrelationId == RunId, Token)
+            || !await Db.Steps.AnyAsync(S => S.RunId == RunId && S.Index == Step && S.Status == "Completed", Token))
+            throw new KeyNotFoundException();
+        return await Services.GetRequiredService<PersonalAgent.Integrations.AutomationSandboxStore>().ReadArchiveAsync(RunId, Step, Token)
+            ?? throw new KeyNotFoundException();
     }
 
     public async Task SetStatusAsync(AgentAccessContext Access, Guid Id, bool Paused, CancellationToken Token)

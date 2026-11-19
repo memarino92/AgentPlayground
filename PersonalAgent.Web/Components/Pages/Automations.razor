@@ -73,10 +73,15 @@
                             @if (Execution.Run.TraceId is not null) { <p class="automation-muted">Trace ID: <code>@Execution.Run.TraceId</code></p> }
                             @foreach (var Step in Execution.Steps)
                             {
+                                @if (Step.Status == "Completed" && PersonalAgent.Contracts.Automations.AutomationPrograms.IsProgram(Step.Action)
+                                    && Step.Output?.TrimStart().StartsWith("<!doctype html>", StringComparison.OrdinalIgnoreCase) == true)
+                                {
+                                    <SandboxDisplay @key="(Execution.Run.Id, Step.Index)" Document="@Step.Output" />
+                                }
                                 <details @key="Step.Index"><summary>@(Step.Index + 1). @Step.Id · @Step.Action · @Step.Status</summary>
                                     @if (Step.Error is not null) { <p class="automation-error">@Step.Error</p> }
                                     <pre>@Step.Output</pre>
-                                    @if (Step.ProgramEvidence is not null) { <h5>C# build and execution</h5><pre>@Pretty(Step.ProgramEvidence)</pre> }
+                                    @if (Step.ProgramEvidence is not null) { <h5>@(Step.Action == "csharp" ? "C# build and execution" : "Sandbox execution")</h5><pre>@Pretty(Step.ProgramEvidence)</pre> }
                                 </details>
                             }
                             @foreach (var Report in Execution.Reports) { <article @key="Report.Id"><h4>@Report.Title</h4><pre>@Report.Content</pre></article> }
@@ -93,6 +98,22 @@
                                 <h4>Railway sandboxes</h4>
                                 @foreach (var Sandbox in Sandboxes)
                                 {
+                                    @if (Sandbox.Artifacts is { Count: > 0 } Files && Execution.Steps.Any(S => S.Index == Sandbox.Step && S.Status == "Completed"))
+                                    {
+                                        var Download = $"/automations/{Detail.Automation.Id}/runs/{Execution.Run.Id}/artifacts/{Sandbox.Step}?profileId={Uri.EscapeDataString(Profile)}";
+                                        <h5>Step @(Sandbox.Step + 1) artifacts</h5>
+                                        <a href="@Download" download>Download all as ZIP</a>
+                                        <ul>
+                                            @for (var Index = 0; Index < Files.Count; Index++)
+                                            {
+                                                @if (Files[Index].Path == "plot.png")
+                                                {
+                                                    <li><img class="scratchpad-chart" src="@($"{Download}&file={Index}&preview=true")" alt="Python plot" loading="lazy" /></li>
+                                                }
+                                                <li><a href="@($"{Download}&file={Index}")" download>@Files[Index].Path</a> (@Files[Index].Bytes.ToString("N0") bytes)</li>
+                                            }
+                                        </ul>
+                                    }
                                     <p>Step @(Sandbox.Step + 1) · @Sandbox.State · <code>@Sandbox.SandboxId</code> · Cleanup deadline @Format(Sandbox.ExpiresAt)</p>
                                 }
                             }

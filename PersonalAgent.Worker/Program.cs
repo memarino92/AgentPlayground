@@ -44,6 +44,8 @@ if (sandboxProgramsEnabled)
 {
     builder.Services.AddSingleton<AutomationRuntimeStore>();
     builder.Services.AddSingleton<AutomationSandboxStore>();
+    builder.Services.AddSingleton<ScratchpadStore>();
+        builder.Services.AddSingleton<SandboxInputStore>();
     builder.Services.AddSingleton<CodingJobStore>();
     if (syntheticDemo)
     {
@@ -90,7 +92,10 @@ builder.Services.AddMassTransit(x =>
     {
         x.AddConsumer<ProgramConsumer>().Endpoint(e => { e.Name = PersonalAgent.Contracts.Automations.AutomationPrograms.Queue; e.ConcurrentMessageLimit = 2; });
         if (!syntheticDemo)
+        {
+            x.AddConsumer<ScratchpadConsumer>().Endpoint(e => { e.Name = PersonalAgent.Contracts.Automations.AutomationPrograms.ScratchQueue; e.ConcurrentMessageLimit = 2; });
             x.AddConsumer<CodingJobConsumer>().Endpoint(e => { e.Name = PersonalAgent.Contracts.Coding.CodingJobs.Queue; e.ConcurrentMessageLimit = 1; });
+        }
     }
     x.AddRequestClient<GenerateEmbeddingsRequest>();
     x.AddRequestClient<TranscriptionRequest>(RequestTimeout.After(m: 3));

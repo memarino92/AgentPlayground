@@ -15,6 +15,7 @@ public partial class Automations
     [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
     [SupplyParameterFromQuery(Name = "automationId")] public Guid? AutomationId { get; set; }
     [SupplyParameterFromQuery(Name = "profileId")] public string? QueryProfile { get; set; }
+    [SupplyParameterFromQuery(Name = "runId")] public Guid? QueryRun { get; set; }
     private readonly CancellationTokenSource Lifetime = new();
     private IReadOnlyList<string> Profiles = [];
     private IReadOnlyList<AutomationSummary> Items = [];
@@ -60,15 +61,15 @@ public partial class Automations
         if (string.IsNullOrEmpty(Profile)) return;
         Items = await Api.GetAutomationsAsync(Profile, Offset, Lifetime.Token);
         Selected = AutomationId is { } Id ? await Api.GetAutomationAsync(Profile, Id, RunOffset, Lifetime.Token) : null;
-        if (SelectedRun is not null && Selected is not null)
-            SelectedRun = await Api.GetAutomationRunAsync(Profile, Selected.Automation.Id, SelectedRun.Run.Id, Lifetime.Token);
+        if (Selected is not null && (SelectedRun?.Run.Id ?? QueryRun) is { } RunId)
+            SelectedRun = await Api.GetAutomationRunAsync(Profile, Selected.Automation.Id, RunId, Lifetime.Token);
         else SelectedRun = null;
     }
     private Task RefreshAsync() => LoadAsync(ReadAsync);
     private Task SelectAsync(Guid Id) => LoadAsync(async () =>
     {
-        AutomationId = Id; SelectedRun = null; RunOffset = 0;
-        LoadedQuery = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["automationId"] = Id, ["profileId"] = Profile });
+        AutomationId = Id; QueryRun = null; SelectedRun = null; RunOffset = 0;
+        LoadedQuery = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["automationId"] = Id, ["runId"] = null, ["profileId"] = Profile });
         Navigation.NavigateTo(LoadedQuery, replace: true);
         await ReadAsync();
     });
@@ -85,8 +86,8 @@ public partial class Automations
     });
     private async Task ChangeProfileAsync(ChangeEventArgs Args)
     {
-        Profile = Args.Value?.ToString() ?? ""; AutomationId = null; Selected = null; SelectedRun = null; Offset = RunOffset = 0;
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["automationId"] = null, ["profileId"] = Profile }), replace: true);
+        Profile = Args.Value?.ToString() ?? ""; AutomationId = null; QueryRun = null; Selected = null; SelectedRun = null; Offset = RunOffset = 0;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["automationId"] = null, ["runId"] = null, ["profileId"] = Profile }), replace: true);
         await RefreshAsync();
     }
     private async Task PageAsync(int Delta) { Offset = Math.Max(0, Offset + Delta); await RefreshAsync(); }

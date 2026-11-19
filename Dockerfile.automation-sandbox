@@ -1,5 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:11.0.100@sha256:65f3c7c6a25a239ab3e6719f2896147e7b68242ff2d8818dd70498bde6ef8bea
 ENV HOME=/work DOTNET_CLI_HOME=/work DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_NOLOGO=1 DOTNET_EnableDiagnostics=0 NUGET_PACKAGES=/work/packages MSBUILDDISABLENODEREUSE=1
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-numpy python3-pandas python3-matplotlib && rm -rf /var/lib/apt/lists/*
+ENV MPLBACKEND=Agg MPLCONFIGDIR=/tmp/matplotlib
 COPY automation-sandbox /template
 RUN sed -i 's/\r$//' /template/run.sh
 USER 65532:65532

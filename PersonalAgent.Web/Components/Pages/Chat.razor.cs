@@ -27,6 +27,27 @@ public partial class Chat
     private List<ConversationMessage> messages = new();
     private List<AvailableChatModelResponse> availableModels = new();
     private string currentMessage = string.Empty;
+    private bool uploadingInput;
+
+    private async Task AttachInputAsync(InputFileChangeEventArgs Args)
+    {
+        if (profileId is not { } Profile || uploadingInput) return;
+        var Session = sessionId;
+        uploadingInput = true;
+        try
+        {
+            var File = Args.File;
+            using var Stream = File.OpenReadStream(PersonalAgent.Contracts.Automations.SandboxInputFile.MaxBytes);
+            using var Buffer = new MemoryStream();
+            await Stream.CopyToAsync(Buffer);
+            var Id = await ApiClient.UploadSandboxInputAsync(Profile, Buffer.ToArray());
+            if (profileId == Profile && sessionId == Session)
+                currentMessage = (currentMessage + $"\nAttached file {File.Name} (attachment:{Id})").TrimStart();
+        }
+        catch (Exception Error) { errorMessage = Error.Message; }
+        finally { uploadingInput = false; }
+    }
+
     private bool isChangingModel;
     private bool isLoadingHistory;
     private bool isSendingMessage;
@@ -47,7 +68,7 @@ public partial class Chat
     private ChatTurn? activeTurn;
     private bool disposed;
 
-    private bool isBusy => !hasInitialized || isLoadingHistory || isSendingMessage || isCreatingSession || isChangingModel || isUpdatingCard;
+    private bool isBusy => uploadingInput || !hasInitialized || isLoadingHistory || isSendingMessage || isCreatingSession || isChangingModel || isUpdatingCard;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

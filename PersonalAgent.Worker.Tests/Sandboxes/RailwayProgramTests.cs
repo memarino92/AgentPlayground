@@ -1,3 +1,5 @@
+using System.Formats.Tar;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -18,11 +20,12 @@ public sealed class RailwayProgramTests : IAsyncLifetime
     private readonly PostgreSqlContainer Database = new PostgreSqlBuilder("postgres:18").Build();
     private AutomationRuntimeStore Runtime = null!;
     private AutomationSandboxStore Leases = null!;
+    private ScratchpadStore Cells = null!;
     public async Task InitializeAsync()
     {
         await Database.StartAsync();
         var Storage = new IntegrationDatabase(Database.GetConnectionString(), Convert.ToBase64String(new byte[32]));
-        Runtime = new(Storage); Leases = new(Storage, Runtime);
+        Runtime = new(Storage); Leases = new(Storage, Runtime); Cells = new(Storage);
         await Runtime.InitializeAsync(default);
         await Runtime.SaveAsync(new(0, new() { Enabled = true, EnvironmentId = Guid.NewGuid().ToString(), Checkpoint = "base-v1",
             ImageId = "sha256:" + new string('a', 64), GatewayUrl = "https://api.example.test" }, "replace", "controller-secret"), default);
@@ -37,6 +40,10 @@ public sealed class RailwayProgramTests : IAsyncLifetime
         {
             if (Request.GetProperty("operation").GetString() == "execute")
             {
+                using var Transfer = File.Create(Request.GetProperty("artifactDestination").GetString()!);
+                using var Tar = new TarWriter(Transfer);
+                using var Binary = new MemoryStream([0, 255, 0, 128]);
+                Tar.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "./nested/data.bin") { DataStream = Binary });
                 var Capability = Request.GetProperty("gatewayToken").GetString()!;
                 var Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Capability)));
                 (await Leases.AuthorizeAsync(Message.RunId, 0, Hash, default)).Should().BeTrue();
@@ -48,6 +55,60 @@ public sealed class RailwayProgramTests : IAsyncLifetime
         (await Executor.ExecuteAsync(Message, default)).Should().Be(Result);
         Client.Operations.Should().Equal("create", "execute", "destroy");
         (await Leases.CleanupAsync(default)).Should().BeEmpty();
+        var Status = (await Leases.StatusAsync(Message.RunId, default)).Single();
+        Status.Artifacts.Should().ContainSingle().Which.Should().Be(new SandboxArtifact("nested/data.bin", 4));
+        using var Bytes = new MemoryStream((await Leases.ReadArchiveAsync(Message.RunId, 0, default))!);
+        using var Zip = new ZipArchive(Bytes);
+        using var Entry = Zip.GetEntry("nested/data.bin")!.Open();
+        using var Copy = new MemoryStream();
+        await Entry.CopyToAsync(Copy);
+        Copy.ToArray().Should().Equal(0, 255, 0, 128);
+    }
+
+    [Fact]
+    public async Task ScratchpadReuseSurvivesWorkerRestartAndSeparatesConversations()
+    {
+        var Previous = new List<string?>();
+        var Client = new FakeClient(Request =>
+        {
+            if (Request.GetProperty("operation").GetString() == "scratch-open")
+                Previous.Add(Request.GetProperty("previousId").GetString());
+            return Task.CompletedTask;
+        });
+        foreach (var Scope in new[] { "conversation-a", "conversation-a", "conversation-b" })
+        {
+            var Run = Guid.NewGuid();
+            await using var Connection = new NpgsqlConnection(Database.GetConnectionString());
+            await Connection.OpenAsync();
+            await using var Insert = new NpgsqlCommand("INSERT INTO app.scratch_cells(run_id,scope,source) VALUES ($1,$2,'1')", Connection);
+            Insert.Parameters.AddWithValue(Run); Insert.Parameters.AddWithValue(Scope);
+            await Insert.ExecuteNonQueryAsync();
+            var Executor = new RailwayProgramExecutor(Runtime, Leases, Client, NullLogger<RailwayProgramExecutor>.Instance, Cells);
+            var Request = new ExecuteAutomationProgram(Run, 0, "1", "", DateTimeOffset.UtcNow.AddMinutes(3), Language: "python");
+            var Result = await Executor.ExecuteAsync(Request, default);
+            Result.Evidence.Status.Should().Be("Completed");
+            (await Executor.ExecuteAsync(Request, default)).Should().Be(Result);
+            (await Leases.StatusAsync(Run, default)).Single().State.Should().Be("Released");
+        }
+        Previous.Should().Equal(new string?[] { null, "test-sandbox", null });
+        Client.Operations.Should().NotContain("destroy");
+    }
+
+    [Theory]
+    [InlineData("../escape.txt", 1)]
+    [InlineData("too-many", 513)]
+    public async Task InvalidExportsAreRejectedInFull(string Name, int Count)
+    {
+        var Path = System.IO.Path.GetTempFileName();
+        try
+        {
+            using (var File = System.IO.File.Create(Path))
+            using (var Tar = new TarWriter(File))
+                for (var Index = 0; Index < Count; Index++)
+                    Tar.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, Name + Index));
+            await FluentActions.Awaiting(() => SandboxArtifactBundle.ReadAsync(Path, default)).Should().ThrowAsync<InvalidDataException>();
+        }
+        finally { File.Delete(Path); }
     }
 
     [Fact]
@@ -91,8 +152,9 @@ public sealed class RailwayProgramTests : IAsyncLifetime
             if (Operation == "execute" && FailExecution || Operation == "destroy" && FailDestroy) throw new InvalidOperationException("Private provider error that must not escape");
             return Operation switch
             {
-                "create" => JsonSerializer.SerializeToElement(new { id = "test-sandbox" }),
-                "execute" => JsonSerializer.SerializeToElement(new { stdout = "1", stderr = "", status = "Completed", exitCode = 0 }),
+                "create" or "scratch-open" => JsonSerializer.SerializeToElement(new { id = "test-sandbox" }),
+                "scratch-cell" => JsonSerializer.SerializeToElement(new { stdout = "1", stderr = "", status = "Completed", exitCode = 0 }),
+                "execute" => JsonSerializer.SerializeToElement(new { stdout = "1", stderr = "", status = "Completed", exitCode = 0, hasArtifacts = true }),
                 _ => JsonSerializer.SerializeToElement(new { destroyed = true })
             };
         }

@@ -15,8 +15,12 @@ public sealed class DockerProgramExecutor : IProgramExecutor
 {
     public Task<ProgramResult> ExecuteAsync(ExecuteAutomationProgram Message, CancellationToken Token)
     {
+        if (Message.InputFiles is { Length: > 0 }) throw new InvalidOperationException("File import requires the Railway runner.");
         if (Message.Packages is { Length: > 0 }) throw new InvalidOperationException("Synthetic Docker execution supports BCL programs only.");
-        return ExecuteAsync(Message.Source, Message.Input, Token);
+        if (Message.Language == "dockerfile") throw new InvalidOperationException("Custom image builds require the disposable Railway VM.");
+        if (Message.RequiredImageId is not null && Message.RequiredImageId != ImageId)
+            throw new InvalidOperationException("The local image differs from the scheduled Python runtime.");
+        return ExecuteAsync(Message.Source, Message.Input, Token, Message.Language);
     }
     private string? ImageId;
     private readonly SemaphoreSlim Capacity = new(2, 2);
@@ -48,8 +52,9 @@ public sealed class DockerProgramExecutor : IProgramExecutor
             throw new InvalidOperationException("The runner requires Linux with memory, swap, CPU and PID limits plus Docker's default seccomp profile.");
     }
 
-    public async Task<ProgramResult> ExecuteAsync(string Source, string Input, CancellationToken Token)
+    public async Task<ProgramResult> ExecuteAsync(string Source, string Input, CancellationToken Token, string Language = "csharp")
     {
+        if (Language is not ("csharp" or "shell" or "python")) throw new ArgumentException("Unknown program language.");
         if (ImageId is null) throw new InvalidOperationException("Sandbox is not initialized.");
         if (string.IsNullOrWhiteSpace(Source) || Source.Length > AutomationPrograms.MaxSource || Input.Length > AutomationPrograms.MaxInput)
             throw new ArgumentException("Invalid program source/input size.");
@@ -64,12 +69,12 @@ public sealed class DockerProgramExecutor : IProgramExecutor
             using var Archive = new MemoryStream();
             using (var Tar = new TarWriter(Archive, leaveOpen: true))
             {
-                AddFile(Tar, "Program.cs", Source);
+                AddFile(Tar, Language switch { "shell" => "program.sh", "python" => "program.py", _ => "Program.cs" }, Source);
                 AddFile(Tar, "input.txt", Input);
             }
             var Arguments = CreateArguments(Name, ImageId);
             var Result = await DockerAsync(Arguments, Archive.ToArray(), Deadline.Token);
-            var Status = Result.ExitCode == 0 ? "Completed" : Result.ExitCode == 200 ? "BuildFailed" : "ExecutionFailed";
+            var Status = Result.ExitCode == 0 ? "Completed" : Language == "csharp" && Result.ExitCode == 200 ? "BuildFailed" : "ExecutionFailed";
             return new(Result.Output, new(Hash, ImageId, Result.ExitCode, Status, Result.Error, Stopwatch.GetElapsedTime(Started).TotalSeconds,
                 Status == "Completed" ? "" : Result.Output));
         }

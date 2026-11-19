@@ -1,4 +1,4 @@
-# C# automation programs
+# Sandbox automation programs
 
 The owner-only, default-disabled `csharp` recipe action compiles saved source against net11.0. Read stdin and write stdout for later steps. Source, package lock and tool declarations are literal and versioned; only `input` expands templates. Internet is enabled on Railway. Programs get no database, Railway, Jev or provider credentials. They can send their supplied input to Internet services; approvals do not inspect arbitrary traffic.
 
@@ -11,7 +11,41 @@ The owner-only, default-disabled `csharp` recipe action compiles saved source ag
 ]}
 ```
 
-For an immediate one-time computation, grant Owner **Run Railway sandbox** as well as **C# automation programs** and **Create or revise automation**. The `run_railway_sandbox` agent tool takes a name, literal C# source, stdin input and a stable UUID `requestKey`, with optional locked packages and declared read tools. It saves a single-step run with no future schedule, then returns its automation ID, run ID and dashboard link. Repeating the same key and source returns the existing run; changing the source for that key fails. `inspect_automation` shows output, diagnostics and cleanup state. Use **Implement platform change** for repository coding jobs, which have their own checkpoint and publication workflow.
+For an immediate one-time computation, grant Owner **Run Railway sandbox** as well as **Sandbox programs** and **Create or revise automation**. The `run_railway_sandbox` agent tool takes a name, literal source, an optional language (csharp, shell or dockerfile), stdin input and a stable UUID `requestKey`, with optional locked packages and declared read tools. It saves a single-step run with no future schedule, then returns its automation ID, run ID and dashboard link. Repeating the same key and source returns the existing run; changing the source for that key fails. `inspect_automation` shows output, diagnostics and cleanup state. Use **Implement platform change** for repository coding jobs, which have their own checkpoint and publication workflow.
+
+## Research jobs and interactive results
+
+For a one-time analysis, call `run_railway_sandbox` with `language: "dockerfile"` and supply the Dockerfile as `source`. For a recurring run, use `save_automation` with the same source and input in a `dockerfile` recipe action. The Worker builds from public images and package sources inside the disposable Railway VM. The build context contains only the Dockerfile. Embed program files using Dockerfile heredocs. The resulting image runs its own CMD and ENTRYPOINT with the supplied stdin as UID 65532. Use `/tmp` or `/scratch` for temporary files. Use image digests and pinned package versions when repeatability matters.
+
+The build has eight minutes, execution has five minutes and the controller has fifteen minutes including provisioning. The VM bounds the build. Runtime has 512 MiB of RAM, one CPU and 32 KiB combined output. Build errors retain the tail of the build log. Successful runs record the local image ID. Destroying the VM removes the image and build cache. Scheduled runs rebuild from the saved Dockerfile. Custom builds require Railway. For simple jobs use `shell` to run POSIX shell directly in the checkpoint image.
+
+To return an interactive result, write a complete HTML document beginning with `<!doctype html>` to stdout. Embed data, styles and JavaScript. Open the returned dashboard link in the authenticated phone browser and tap **Open interactive result**. The viewer uses an opaque-origin sandbox with inline scripts and styles and data-URL images. Ordinary output remains available as text. Changes to the installed mobile client go through the platform coding PR and release workflow.
+
+### Live Python in chat
+
+Select the prepared checkout's checkpoint name and image ID in Railway sandbox settings. The verified 2026-11-19 checkpoint for the AgentPlayground production environment is `scratchpad-06730b4fb5e84febb17610710f511e5d`, image `sha256:395d59cf1f415b69894aa9370f5ba31218e0eb3e5314570855e7938a9cb9d36e`. For another environment, build a fresh checkpoint there with the preparation script. The image includes Python, NumPy, pandas and Matplotlib. Deploy API, Web and Worker together. Grant Owner **Python scratchpad** for live cells. To promote a calculation, also grant **Schedule scratchpad calculation**, **Create or revise automation** and **Sandbox programs**.
+
+Ask “Create a DataFrame of 1, 3 and 5 and call it df.” Then ask “Use df to plot its cumulative sum.” The second cell uses the live interpreter in the same conversation. Output streams into the current turn, and the run dashboard retains the result and previews the exported plot. The native automation run screen opens charts and files in the authenticated browser. Runtime exceptions retain variables for corrections. Ten minutes of inactivity, a timeout or a runtime configuration change starts a fresh session on the next request. A cell has a 30-second execution deadline. Delayed work has a run link for inspection.
+
+“Run that calculation every day” saves the successful cells through the chosen run in execution order. The schedule records the checkpoint image digest. The fresh interpreter reads those cells and rebuilds their variables. If the selected runtime image changes, the job reports ImageChanged so the owner can validate and promote the calculation again. Code that fetches a dataset fetches it again. Files supplied outside those cells, changing data and manually installed dependencies require an explicit reproducible input or setup step. If the session includes a failed cell, save a consolidated Python recipe. Repeating the same promotion with the same name, timestamp and interval returns the existing schedule.
+
+For a live CLI timing check, run `scripts/test-railway-scratchpad.ps1 -EnvironmentName <environment>` from a linked checkout. It creates a billed isolated VM, builds the runtime, checks DataFrame reuse over 20 calls and validates a PNG. Pass `-PrepareCheckpoint` to retain a new, clean checkpoint before the proof writes sample data, or `-Checkpoint <name>` to test an existing proof checkpoint. It destroys its VM on exit. CLI round-trip timing excludes app dispatch, chat inference and device rendering.
+
+### Export files
+
+### File inputs
+
+In web chat, select **Attach sandbox input** and send the message containing the attachment reference. Both `run_python` and `run_railway_sandbox` accept an optional `inputFiles` array. Saved program recipe steps accept the same argument. For example:
+
+```json
+[{ "name": "sales.csv", "reference": "attachment:11111111-1111-1111-1111-111111111111" }]
+```
+
+Read the file at `/inputs/sales.csv`. To reuse a previous export, use `artifact:<run UUID>:<step index>:<file index>` with zero-based indices from the run manifest. The worker resolves files against the receiving actor and profile. The directory is read-only inside the container. A cell can add files to its warm session. Promoting a session records the input references for fresh scheduled executions. Use distinct names across cells when promoting multiple files. One execution accepts up to 16 files totaling 16 MiB. Custom images receive inputs when their entrypoint runs.
+
+Place finished files under `/artifacts` in a Railway C#, shell or Dockerfile step. A custom image can also populate this directory at build time, for example with `COPY --from=builder /app/dist/ /artifacts/`. At runtime the job can add results such as a PDF, a Parquet dataset or an entire static website. Each step exports its own directory after a successful exit.
+
+Open **Automations → Inspect run → Railway sandboxes** to download a file or the full ZIP with relative paths. Run inspection returns the manifest with paths and byte sizes. Downloads work after the VM is destroyed. The console output budget is independent of the 64 MiB and 512-file export budget per step. Archive regular files and directories with portable names. Links and special files fail export. Files persist in PostgreSQL alongside the run result, so recurring exports contribute to database and backup size.
 
 ## Railway setup
 
@@ -19,9 +53,9 @@ For an immediate one-time computation, grant Owner **Run Railway sandbox** as we
 2. Worker deployment watch paths must cover `PersonalAgent.Worker/**`, `PersonalAgent.Contracts/**`, `PersonalAgent.Integrations/**`, `Directory.*.props`, `global.json` and `Dockerfile.personalagent-worker`. Deploy API/Web when contracts, settings UI or agent tools change. `scripts/deploy-railway.ps1` deploys the Worker with the regular services. Each Worker replica can consume two program messages and one coding job; existing database claims prevent duplicate coding execution.
 3. Prepare a trusted checkpoint. On an operator workstation with Node 22+ and this checkout, run `npm ci --ignore-scripts --no-audit --no-fund` in `PersonalAgent.Worker/Railway`. Run `node prepare.mjs`, supplying JSON on stdin with `token` (Railway account/workspace token), `environmentId` (UUID) and a unique versioned `checkpoint` name. Construct stdin using a secret prompt/manager; never put credentials in arguments, terminal output or committed files. This command creates a VM, builds the fixed repository Dockerfile, checkpoints it, prints only checkpoint/environment/image identities, and destroys the preparation VM. It incurs Railway usage. Failure reports any known VM needing cleanup. Never reuse a name for different content.
 4. As a deployment administrator, open **Settings → Railway sandboxes**. Enter environment UUID, checkpoint name, returned `sha256:…` image ID and the **public HTTPS API origin**, not the Web origin. Replace the token, enable and save. Fresh setup needs no manual database inserts. Reads are masked; stale edits require reload. Settings apply to new runs/gateway requests without restart. Saving validates syntax; verify reachability with the acceptance run below.
-5. Under **Integrations and coach access**, enable **C# automation programs** for Owner. Coach is always rejected. Ask chat to create the automation and inspect its completed run before calling it successful.
+5. Under **Integrations and coach access**, enable **Sandbox programs** for Owner. Coach is always rejected. Ask chat to create the automation and inspect its completed run before calling it successful.
 
-Railway ISOLATED VMs allow Internet without environment-private networking. The controller uses official `railway` SDK 3.11.0 through a trusted Node adapter with explicit token/environment on create/connect/destroy. The immutable image must already exist in the checkpoint; runtime never pulls an agent-selected image. Missing cgroup/seccomp resource support fails execution closed. Source limit is 24,000 characters within the recipe's 32,768-character total; input is bounded to 65,536 characters. Fixed project compilation does not process file-based app `#:` directives.
+Railway ISOLATED VMs allow Internet without environment-private networking. The controller uses official `railway` SDK 3.11.0 through a trusted Node adapter with explicit token/environment on create/connect/destroy. The immutable image must already exist in the checkpoint; the csharp and shell actions use this image. Missing cgroup/seccomp resource support fails execution closed. Source limit is 24,000 characters within the recipe's 32,768-character total; input is bounded to 65,536 characters. Fixed project compilation does not process file-based app `#:` directives.
 
 ## Package and tool approval
 

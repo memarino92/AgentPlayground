@@ -2,14 +2,18 @@ namespace PersonalAgent.Contracts.Automations;
 
 // The API authorizes and expands input before dispatch. Programs never receive actor credentials.
 public sealed record ExecuteAutomationProgram(Guid RunId, int StepIndex, string Source, string Input, DateTimeOffset ExpiresAt,
-    string[]? Packages = null, string? PackageLock = null);
+    string[]? Packages = null, string? PackageLock = null, string Language = "csharp", string? RequiredImageId = null, SandboxInputFile[]? InputFiles = null);
 public sealed record AutomationProgramEvidence(string SourceHash, string ImageId, int? ExitCode,
     string Status, string StandardError, double DurationSeconds, string StandardOutput = "", string? SandboxId = null);
 
 public static class AutomationPrograms
 {
+    public static bool IsProgram(string Action) => Action is "csharp" or "shell" or "dockerfile" or "python";
+
     public const string PermissionKey = "Local:csharp_automation";
+    public const string ScratchPermission = "Local:run_python";
     public const string RunSandboxPermissionKey = "Local:run_railway_sandbox";
+    public const string ScratchQueue = "personal-agent-python-cells";
     public const string Queue = "personal-agent-automation-programs";
     public const string SandboxImage = "agentplayground-csharp-sandbox:1";
     public const int MaxSource = 24000;

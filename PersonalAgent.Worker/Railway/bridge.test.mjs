@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dispatch } from './bridge.mjs';
@@ -5,7 +8,7 @@ import { loadPreparationFiles } from './preparation-files.mjs';
 
 test('operator preparation resolves the checked-in compiler payload from any working directory', async () => {
   const files = new Map(await loadPreparationFiles());
-  assert.equal(files.size, 4);
+  assert.equal(files.size, 5);
   assert.ok(files.get('Dockerfile.automation-sandbox').includes('@sha256:'));
   assert.ok(files.get('automation-sandbox/Program.csproj').includes('<TargetFramework>net11.0</TargetFramework>'));
   assert.ok(files.get('automation-sandbox/run.sh').includes('dotnet build Program.csproj'));
@@ -45,9 +48,37 @@ test('source is file content; Internet enabled; management token never enters VM
   const boundary = JSON.stringify([f.writes, f.commands]);
   assert.ok(!boundary.includes('management-secret'));
   assert.ok(!f.commands.at(-1)[0].includes('do-not-execute'));
-  assert.ok(!f.commands.at(-1)[0].includes('--network=none'));
+  assert.ok(!f.commands.at(-1)[0].split('docker run --rm').at(-1).includes('--network=none'));
   for (const flag of ['--read-only', '--memory=512m', '--pids-limit=128', '--ulimit nofile=4096:4096', '--pull=never', '--signal=KILL 95']) assert.ok(f.commands.at(-1)[0].includes(flag));
 });
+test('shell scripts run inside the bounded container and receive input separately', async () => {
+  const f = fake();
+  await dispatch({ ...request, language: 'shell', source: 'wc -w' }, f.api);
+  assert.equal(new Map(f.writes).get('/job/program.sh'), 'wc -w');
+  assert.match(new Map(f.writes).get('/job/run.sh'), /program.sh < \/work\/input.txt/);
+  assert.ok(!f.commands.at(-1)[0].includes('wc -w'));
+});
+
+test('custom image builds with an empty context and runs the resolved image ID', async () => {
+  const f = fake();
+  const exec = f.sandbox.exec;
+  const imageId = 'sha256:' + 'c'.repeat(64);
+  const phases = [];
+  f.sandbox.exec = async (command, options) => {
+    phases.push(command);
+    if (command.includes('docker build')) return { exitCode: 0 };
+    if (command === 'cat /job/image.id') return { exitCode: 0, stdout: imageId };
+    return exec(command, options);
+  };
+  const result = await dispatch({ ...request, language: 'dockerfile', source: 'FROM alpine' }, f.api);
+  assert.equal(result.imageId, imageId);
+  assert.equal(new Map(f.writes).get('/job/Dockerfile'), 'FROM alpine');
+  assert.match(phases[1], /docker build --iidfile \/job\/image.id - < \/job\/Dockerfile/);
+  assert.ok(phases.at(-1).endsWith(imageId + ' < /job/input.txt'));
+  assert.ok(!phases.at(-1).split('docker run --rm').at(-1).includes('--entrypoint'));
+  assert.ok(!phases.join(' ').includes(request.source));
+});
+
 test('unknown operations and agent-selected image expressions are rejected', async () => {
   const f = fake();
   await assert.rejects(dispatch({ ...request, imageId: 'image; malicious' }, f.api));
@@ -76,4 +107,68 @@ test('output flood is bounded, and destroy is idempotent for destroyed VM', asyn
   await dispatch({ operation: 'destroy', id: 'sandbox-id', token: 'secret' }, f.api);
   await dispatch({ operation: 'destroy', id: 'sandbox-id', token: 'secret' }, f.api);
   assert.equal(f.sandbox.status, 'DESTROYED');
+});
+
+test('binary artifact transfer bypasses console output and rejects partial downloads', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'railway-artifacts-'));
+  try {
+    const bytes = Buffer.alloc(100000, 0xff);
+    const f = fake();
+    const exec = f.sandbox.exec;
+    f.sandbox.exec = (command, options) => command.includes('tar --format=posix')
+      ? { stdout: String(bytes.length), exitCode: 0 } : exec(command, options);
+    f.sandbox.files.read = async (path, options) => {
+      assert.equal(path, '/job/export.tar');
+      assert.equal(options.format, 'stream');
+      return new Blob([bytes]).stream();
+    };
+    const artifactDestination = join(directory, 'complete.tar');
+    const result = await dispatch({ ...request, artifactDestination }, f.api);
+    assert.equal(result.hasArtifacts, true);
+    assert.deepEqual(await readFile(artifactDestination), bytes);
+    f.sandbox.files.read = async () => new Blob([bytes.subarray(1)]).stream();
+    const short = await dispatch({ ...request, artifactDestination: join(directory, 'short.tar') }, f.api);
+    assert.equal(short.status, 'ArtifactExportFailed');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('background and warm programs receive binary input through the controller-owned mount', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'sandbox-input-'));
+  try {
+    const path = join(dir, 'private');
+    const bytes = Buffer.from([0, 255, 42]);
+    await writeFile(path, bytes);
+    for (const operation of ['execute', 'scratch-cell']) {
+      const f = fake();
+      const exec = f.sandbox.exec;
+      f.sandbox.exec = (command, options) => command.startsWith('mkdir') ? Promise.resolve({ exitCode: 0 }) : exec(command, options);
+      await dispatch({ ...request, operation, inputFiles: [{ name: 'data.bin', path }] }, f.api);
+      assert.deepEqual(new Map(f.writes).get('/job/incoming'), bytes);
+      await assert.rejects(dispatch({ ...request, operation, inputFiles: [{ name: '../escape', path }] }, f.api), /Invalid input filename/);
+      if (operation === 'execute') assert.match(f.commands.at(-1)[0], /\/sandbox-inputs:\/inputs:ro/);
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('warm Python uses the existing isolated VM, streams text, and skips empty artifact exports', async () => {
+  const f = fake();
+  const prior = await dispatch({ ...request, operation: 'scratch-open', previousId: f.sandbox.id }, f.api);
+  assert.deepEqual(prior, { id: f.sandbox.id, fresh: false });
+  assert.equal(f.commands.length, 0);
+  const dir = await mkdtemp(join(tmpdir(), 'scratch-proof-'));
+  try {
+    const progressPath = join(dir, 'cell.log');
+    f.sandbox.exec = async (command, options) => {
+      assert.match(command, /docker exec -i/);
+      assert.equal(Buffer.from(options.env.SCRATCH_SOURCE, 'base64').toString(), 'total * 2');
+      options.onStdout('42');
+      return { exitCode: 3, stdout: '42', stderr: '' };
+    };
+    const result = await dispatch({ ...request, operation: 'scratch-cell', source: 'total * 2', progressPath }, f.api);
+    assert.equal(result.status, 'Completed');
+    assert.equal(result.hasArtifacts, false);
+    assert.equal(await readFile(progressPath, 'utf8'), '42');
+    f.sandbox.networkIsolation = 'PRIVATE';
+    await assert.rejects(dispatch({ ...request, operation: 'scratch-cell' }, f.api));
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

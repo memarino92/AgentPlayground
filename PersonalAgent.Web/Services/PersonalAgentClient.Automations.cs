@@ -5,6 +5,14 @@ namespace PersonalAgent.Web.Services;
 
 internal partial class PersonalAgentClient
 {
+    public async Task<Guid> UploadSandboxInputAsync(string Profile, byte[] Bytes)
+    {
+        using var Content = new ByteArrayContent(Bytes);
+        using var Response = await SendAsync(HttpMethod.Post, $"/api/automations/inputs?profileId={Uri.EscapeDataString(Profile)}", Content);
+        Response.EnsureSuccessStatusCode();
+        return await Response.Content.ReadFromJsonAsync<Guid>();
+    }
+
     public async Task<IReadOnlyList<AutomationSummary>> GetAutomationsAsync(string Profile, int Offset, CancellationToken Token)
     {
         using var Response = await SendAsync(HttpMethod.Get, $"/api/automations/?profileId={Uri.EscapeDataString(Profile)}&offset={Offset}", cancellationToken: Token);
@@ -25,6 +33,11 @@ internal partial class PersonalAgentClient
         Response.EnsureSuccessStatusCode();
         return await Response.Content.ReadFromJsonAsync<AutomationRunDetail>(Token);
     }
+    public Task<HttpResponseMessage> DownloadSandboxArtifactAsync(Guid Id, Guid Run, int Step, int? File, string Profile,
+        System.Security.Claims.ClaimsPrincipal User, CancellationToken Token, bool Preview = false) =>
+        SendAsync(HttpMethod.Get, $"/api/automations/{Id}/runs/{Run}/artifacts/{Step}?profileId={Uri.EscapeDataString(Profile)}"
+            + (File is null ? "" : $"&file={File}") + (Preview ? "&preview=true" : ""), cancellationToken: Token, requestUser: User, streamResponse: true);
+
     public async Task ControlAutomationAsync(string Profile, Guid Id, string Operation, CancellationToken Token)
     {
         using var Response = await SendAsync(HttpMethod.Post, $"/api/automations/{Id}/{Operation}?profileId={Uri.EscapeDataString(Profile)}", cancellationToken: Token);

@@ -253,7 +253,7 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
         var RequestKey = Guid.NewGuid();
         var Source = """{"steps":[{"id":"program","action":"csharp","arguments":{"source":"Console.Write(7);","input":""}}]}""";
         Guid RunId;
-        var Tool = new AutomationTools(Host.Services.GetRequiredService<IServiceScopeFactory>());
+        var Tool = new AutomationTools(Host.Services.GetRequiredService<IServiceScopeFactory>(), Host.Services.GetRequiredService<ScratchpadStore>());
         using var Started = JsonDocument.Parse(await Tool.RunSandboxAsync(Owner, "One time calculation", "Console.Write(7);", "",
             RequestKey.ToString(), default));
         Started.RootElement.GetProperty("status").GetString().Should().Be("Queued");
@@ -282,13 +282,87 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
     }
 
     [Fact]
-    public async Task CSharpIsOptIn_DispatchesLiteralSource_AndRevocationBlocksResultCommit()
+    public async Task ScratchpadStreamsBeforeCompletionAndSchedulesOnlyItsConversation()
+    {
+        var Grants = new Dictionary<string, bool> { [AutomationAuthorization.ManageKey] = false, [AutomationPrograms.ScratchPermission] = true };
+        using var Host = await CreateHostAsync(Grants: Grants);
+        await Host.StartAsync();
+        try
+        {
+            var Cells = Host.Services.GetRequiredService<ScratchpadStore>();
+            var Tool = new AutomationTools(Host.Services.GetRequiredService<IServiceScopeFactory>(), Cells);
+            var Streamed = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var Actor = Owner with { SessionId = Guid.NewGuid().ToString(), ScratchOutput = (Text, _) =>
+                { Streamed.TrySetResult(Text); return ValueTask.CompletedTask; } };
+            var Key = Guid.NewGuid();
+            var Inputs = new SandboxInputStore(Host.Services.GetRequiredService<IntegrationDatabase>());
+            byte[] Bytes = [0, 255, 42];
+            var Upload = await Inputs.UploadAsync(Actor.ActorId, Actor.SubjectProfileId, Bytes, default);
+            SandboxInputFile[] Files = [new("data.bin", $"attachment:{Upload}")];
+            var Running = Tool.RunPythonAsync(Actor, "n=21\nn*2", Key, default, Files);
+            var Probe = Host.Services.GetRequiredService<ProgramCapture>();
+            await UntilAsync(() => Task.FromResult(Probe.Items.Count == 1));
+            var Request = Probe.Items.Single();
+            Request.InputFiles.Should().Equal(Files);
+            (await Inputs.ReadAsync(Request.RunId, Files[0], Bytes.Length, default)).Should().Equal(Bytes);
+            foreach (var (User, Subject) in new[] { ("other", Actor.SubjectProfileId), (Actor.ActorId, "different") })
+            {
+                var Private = await Inputs.UploadAsync(User, Subject, Bytes, default);
+                await FluentActions.Awaiting(() => Inputs.ReadAsync(Request.RunId, new("data.bin", $"attachment:{Private}"), Bytes.Length, default))
+                    .Should().ThrowAsync<KeyNotFoundException>();
+            }
+            var ScopeKey = (await Cells.ScopeAsync(Request.RunId, default))!;
+            (await Cells.BeginAsync(Request.RunId, ScopeKey, 1, default)).Should().BeNull();
+            await Cells.WriteProgressAsync(Request.RunId, "42", default);
+            (await Streamed.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().Be("42");
+            Running.IsCompleted.Should().BeFalse();
+            var Leases = Host.Services.GetRequiredService<AutomationSandboxStore>();
+            var Runtime = await Host.Services.GetRequiredService<AutomationRuntimeStore>().ReadAsync(default);
+            await Leases.ClaimAsync(Request.RunId, 0, Runtime, "unused", default);
+            await Leases.AttachAsync(Request.RunId, 0, "vm-private", default);
+            using var Zip = new MemoryStream();
+            using (var Archive = new System.IO.Compression.ZipArchive(Zip, System.IO.Compression.ZipArchiveMode.Create, true))
+            {
+                using var Entry = Archive.CreateEntry("nested/result.bin").Open();
+                Entry.Write(Bytes);
+            }
+            await Leases.SaveResultAsync(Request.RunId, 0, "{}", default, Archive: Zip.ToArray(), Released: true);
+            var Hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Request.Source)));
+            var Endpoint = await Host.Services.GetRequiredService<IBus>().GetSendEndpoint(AutomationRegistration.SagaAddress);
+            await Endpoint.Send(new AutomationStepCompleted(Request.RunId, 0, "42", Program: new(Hash, "sha256:" + new string('a', 64), 0, "Completed", "", 0)));
+            (await Running.WaitAsync(TimeSpan.FromSeconds(15))).Should().Contain("Completed");
+            var Export = new SandboxInputFile("result.bin", $"artifact:{Request.RunId}:0:0");
+            (await Inputs.ReadAsync(Request.RunId, Export, Bytes.Length, default)).Should().Equal(Bytes);
+            await FluentActions.Awaiting(() => Inputs.ReadAsync(Request.RunId, Export, 1, default)).Should().ThrowAsync<KeyNotFoundException>();
+            Grants[AutomationAuthorization.ManageKey] = true;
+            Grants[AutomationPrograms.PermissionKey] = true;
+            var Due = DateTimeOffset.UtcNow.AddDays(1).ToString("O");
+            (await Tool.SchedulePythonAsync(Actor with { SessionId = Guid.NewGuid().ToString() }, Request.RunId, "Daily", Due, "P1D", default)).Should().Contain("error");
+            using var Scheduled = JsonDocument.Parse(await Tool.SchedulePythonAsync(Actor, Request.RunId, "Daily", Due, "P1D", default));
+            var Id = Scheduled.RootElement.GetProperty("automation").GetProperty("id").GetGuid();
+            await using var Scope = Host.Services.CreateAsyncScope();
+            var Detail = await Scope.ServiceProvider.GetRequiredService<AutomationService>().DetailAsync(Actor, Id, 0, default);
+            Detail.Versions.Single().Source.Should().Contain("scratchpad replay v1").And.Contain(Files[0].Reference);
+            using var Again = JsonDocument.Parse(await Tool.SchedulePythonAsync(Actor, Request.RunId, "Daily", Due, "P1D", default));
+            Again.RootElement.GetProperty("automation").GetProperty("id").GetGuid().Should().Be(Id);
+            var Repeated = await Tool.RunPythonAsync(Actor, Request.Source, Key, default, Files);
+            Repeated.Should().Contain(Request.RunId.ToString());
+            Probe.Items.Should().ContainSingle();
+        }
+        finally { await Host.StopAsync(); }
+    }
+
+    [Theory]
+    [InlineData("csharp")]
+    [InlineData("shell")]
+    [InlineData("dockerfile")]
+    public async Task SandboxIsOptIn_DispatchesLiteralSource_AndRevocationBlocksResultCommit(string Language)
     {
         var Grants = new Dictionary<string, bool>();
         using var Host = await CreateHostAsync(Grants: Grants);
         const string Program = "Console.Write(\"{{literal source}}\");";
         var Source = JsonSerializer.Serialize(new { steps = new object[] {
-            new { id = "code", action = "csharp", arguments = new { source = Program, input = "input {{run.id}}" } },
+            new { id = "code", action = Language, arguments = new { source = Program, input = "input {{run.id}}" } },
             new { id = "report", action = "save_report", arguments = new { title = "Output", content = "{{steps.code}}" } } } });
         await FluentActions.Awaiting(() => SaveAndQueueAsync(Host, Source)).Should().ThrowAsync<UnauthorizedAccessException>();
         Grants[AutomationPrograms.PermissionKey] = true;
@@ -306,6 +380,7 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
             var Capture = Host.Services.GetRequiredService<ProgramCapture>();
             await UntilAsync(() => Task.FromResult(Capture.Items.Count == 1));
             var Request = Capture.Items.Single();
+            Request.Language.Should().Be(Language);
             Request.Source.Should().Be(Program);
             Request.Input.Should().Be("input " + Run);
             Grants[AutomationPrograms.PermissionKey] = false;
@@ -317,6 +392,9 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
             var Detail = await Scope.ServiceProvider.GetRequiredService<AutomationService>().RunDetailAsync(Owner, Id, Run, default);
             Detail.Reports.Should().BeEmpty();
             Detail.Steps[0].Output.Should().BeNull();
+            var Service = Scope.ServiceProvider.GetRequiredService<AutomationService>();
+            await FluentActions.Awaiting(() => Service.ReadArtifactArchiveAsync(Owner, Id, Run, 0, default))
+                .Should().ThrowAsync<KeyNotFoundException>();
         }
         finally { await Host.StopAsync(); }
     }
@@ -362,7 +440,7 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
                 S.AddSingleton<NotificationCapture>();
                 S.AddSingleton<ProgramCapture>();
                 S.AddSingleton(new IntegrationDatabase(Database.ConnectionString, Convert.ToBase64String(new byte[32])));
-                S.AddSingleton<AutomationRuntimeStore>(); S.AddSingleton<AutomationSandboxStore>();
+                S.AddSingleton<ScratchpadStore>(); S.AddSingleton<AutomationRuntimeStore>(); S.AddSingleton<AutomationSandboxStore>();
                 S.AddScoped<AutomationOperationGateway>();
                 var Snapshot = JevConfigured ? new JevRoutingSnapshot(new() { AllowUserContent = true }, "test-key") : JevRoutingSnapshot.Disabled;
                 S.AddSingleton(Mock.Of<IJevRoutingSettings>(J => J.Current == Snapshot));
@@ -376,6 +454,7 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
                     if (Failure is not null) O.AddInterceptors(Failure);
                 });
                 S.AddMassTransit(B => { B.AddAutomationMessaging(); B.AddConsumer<NotificationProbe>();
+                    B.AddConsumer<ScratchProbe>().Endpoint(E => E.Name = AutomationPrograms.ScratchQueue);
                     B.AddConsumer<ProgramProbe>().Endpoint(E => E.Name = AutomationPrograms.Queue);
                     B.UsingInMemory((C, B) => B.ConfigureEndpoints(C)); });
             }).Build();
@@ -430,7 +509,8 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
     {
         public System.Collections.Concurrent.ConcurrentBag<ExecuteAutomationProgram> Items { get; } = [];
     }
-    private sealed class ProgramProbe(ProgramCapture Capture) : IConsumer<ExecuteAutomationProgram>
+    private sealed class ScratchProbe(ProgramCapture Capture) : ProgramProbe(Capture);
+    private class ProgramProbe(ProgramCapture Capture) : IConsumer<ExecuteAutomationProgram>
     {
         public Task Consume(ConsumeContext<ExecuteAutomationProgram> Context) { Capture.Items.Add(Context.Message); return Task.CompletedTask; }
     }

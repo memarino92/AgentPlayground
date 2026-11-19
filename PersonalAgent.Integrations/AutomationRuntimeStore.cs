@@ -30,6 +30,15 @@ public sealed class AutomationRuntimeStore(IntegrationDatabase Database)
                 run_id uuid NOT NULL, step integer NOT NULL, sandbox_id text, expires_at timestamptz NOT NULL,
                 credential text NOT NULL, settings text NOT NULL, token_hash text NOT NULL,
                 state text NOT NULL DEFAULT 'Creating', result text, PRIMARY KEY(run_id, step));
+            ALTER TABLE app.automation_sandboxes ADD COLUMN IF NOT EXISTS artifact_zip bytea,
+                ADD COLUMN IF NOT EXISTS artifact_manifest text;
+            CREATE TABLE IF NOT EXISTS app.scratch_cells (
+                run_id uuid PRIMARY KEY, scope text NOT NULL, source text NOT NULL, progress text NOT NULL DEFAULT '',
+                started_at timestamptz, sandbox_id text, revision bigint, reusable boolean NOT NULL DEFAULT false);
+            ALTER TABLE app.scratch_cells ADD COLUMN IF NOT EXISTS input_files jsonb NOT NULL DEFAULT '[]';
+            CREATE TABLE IF NOT EXISTS app.sandbox_uploads (
+                id uuid PRIMARY KEY, actor text NOT NULL, profile text NOT NULL, content bytea NOT NULL);
+            CREATE INDEX IF NOT EXISTS scratch_cells_scope ON app.scratch_cells(scope, started_at DESC);
             CREATE TABLE IF NOT EXISTS app.automation_operations (
                 run_id uuid NOT NULL, step integer NOT NULL, operation_id text NOT NULL, request_hash text NOT NULL,
                 kind text NOT NULL, target text NOT NULL, outcome text NOT NULL, policy text NOT NULL,

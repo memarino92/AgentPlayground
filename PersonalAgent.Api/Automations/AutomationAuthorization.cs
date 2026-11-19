@@ -14,10 +14,11 @@ internal sealed class AutomationAuthorization(ScheduledJobAuthorization Subjects
         return Current with { SessionId = Claimed.SessionId };
     }
 
-    public async Task<AgentAccessContext> ForRunAsync(AutomationDefinition Definition, CancellationToken Token)
+    public async Task<AgentAccessContext> ForRunAsync(AutomationDefinition Definition, CancellationToken Token, bool Scratch = false)
     {
         var Current = await Subjects.ResolveAsync(Definition.ActorId, Definition.ActorEmail, Definition.SubjectProfileId, Token);
-        if (Current is null || !await Tools.IsAllowedAsync(Current.Role, ManageKey, Token))
+        if (Current is null || (Scratch && Current.Role != AgentRoles.Owner)
+            || !await Tools.IsAllowedAsync(Current.Role, Scratch ? PersonalAgent.Contracts.Automations.AutomationPrograms.ScratchPermission : ManageKey, Token))
             throw new UnauthorizedAccessException("Automation access has been revoked.");
         return Current;
     }

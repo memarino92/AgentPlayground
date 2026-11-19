@@ -49,7 +49,7 @@ internal sealed class AutomationStateMachine : MassTransitStateMachine<Automatio
 }
 
 internal sealed class AutomationSagaActions(AutomationDbContext Db, AutomationAuthorization Authorization,
-    AutomationRecipes Recipes, ToolAccessService Permissions, TimeProvider Clock, ILogger<AutomationSagaActions> Logger)
+    AutomationRecipes Recipes, ToolAccessService Permissions, TimeProvider Clock, ILogger<AutomationSagaActions> Logger, ScratchpadStore Scratchpads)
 {
     public async Task BeginAsync(AutomationRun Run, ConsumeContext Context)
     {
@@ -59,7 +59,8 @@ internal sealed class AutomationSagaActions(AutomationDbContext Db, AutomationAu
             throw new InvalidOperationException("No durable automation run exists.");
         Run.StartedAt = Clock.GetUtcNow();
         Run.TraceId = Activity.Current?.TraceId.ToString();
-        try { await Authorization.ForRunAsync(await DefinitionAsync(Run, Context.CancellationToken), Context.CancellationToken); }
+        try { await Authorization.ForRunAsync(await DefinitionAsync(Run, Context.CancellationToken), Context.CancellationToken,
+            await Scratchpads.ScopeAsync(Run.CorrelationId, Context.CancellationToken) is not null); }
         catch (UnauthorizedAccessException) { await FailAsync(Run, "Automation access was revoked.", true, Context.CancellationToken); return; }
         await DispatchAsync(Run, Context);
         Logger.LogInformation("Automation run {RunId} started at revision {Version}", Run.CorrelationId, Run.Version);
@@ -71,18 +72,19 @@ internal sealed class AutomationSagaActions(AutomationDbContext Db, AutomationAu
         var Token = Context.CancellationToken;
         var Definition = await DefinitionAsync(Run, Token);
         AgentAccessContext Access;
-        try { Access = await Authorization.ForRunAsync(Definition, Token); }
+        var Interactive = await Scratchpads.ScopeAsync(Run.CorrelationId, Token) is not null;
+        try { Access = await Authorization.ForRunAsync(Definition, Token, Interactive); }
         catch (UnauthorizedAccessException) { await FailAsync(Run, "Automation access was revoked.", true, Token); return; }
         var Version = await Db.Versions.SingleAsync(V => V.AutomationId == Run.AutomationId && V.Version == Run.Version, Token);
         var Recipe = Recipes.Parse(Version.Source);
         var Step = Recipe.Steps[Run.StepIndex];
         var Record = await Db.Steps.SingleAsync(S => S.RunId == Run.CorrelationId && S.Index == Run.StepIndex, Token);
-        if (Step.Action == "csharp" && (Access.Role != AgentRoles.Owner
+        if (!Interactive && AutomationPrograms.IsProgram(Step.Action) && (Access.Role != AgentRoles.Owner
             || !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.PermissionKey, Token)))
-        { await FailAsync(Run, "C# automation permission was revoked.", true, Token); return; }
-        if (Step.Action == "csharp" && !Result.Skipped && (Result.Program is null || Result.Program.Status != "Completed"
+        { await FailAsync(Run, "Sandbox program permission was revoked.", true, Token); return; }
+        if (AutomationPrograms.IsProgram(Step.Action) && !Result.Skipped && (Result.Program is null || Result.Program.Status != "Completed"
             || Result.Program.SourceHash != Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Step.Arguments.GetProperty("source").GetString()!)))))
-            throw new InvalidOperationException("C# result does not match the pinned source.");
+            throw new InvalidOperationException("Sandbox result does not match the pinned source.");
         if (!Result.Skipped && Step.Action == "notify" && !await Permissions.IsAllowedAsync(Access.Role, AgentToolKeys.PublishMobileNotification, Token))
         { await FailAsync(Run, "Notification permission was revoked.", true, Token); return; }
         if (Result.Output.Length > 65536) throw new InvalidOperationException("Invalid oversized step result.");

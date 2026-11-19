@@ -14,3 +14,5 @@ details { margin: .7rem 0; } summary { cursor: pointer; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30rem; overflow: auto; padding: .8rem; background: var(--mud-palette-background-grey); border-radius: .4rem; }
 button { cursor: pointer; } button:disabled { cursor: default; opacity: .55; }
 @media (max-width: 720px) { .automation-grid { grid-template-columns: 1fr; } .automations-page { padding: .75rem; } }
+
+.scratchpad-chart { max-width: 100%; height: auto; }
