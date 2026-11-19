@@ -1,22 +1,21 @@
-using PersonalAgent.Mobile.Services;
-
 namespace PersonalAgent.Mobile;
 
 public partial class App : Application
 {
-    private readonly MainPage _mainPage;
+    private readonly IServiceProvider _services;
 
-    public App(MainPage mainPage)
+    public App(IServiceProvider Services)
     {
+        _services = Services;
         InitializeComponent();
-        _mainPage = mainPage;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        var window = new Window(new AppShell(_mainPage));
-        window.Activated += async (_, _) => await _mainPage.SetActiveAsync(true);
-        window.Stopped += async (_, _) => await _mainPage.SetActiveAsync(false);
+        var page = _services.GetRequiredService<MainPage>();
+        var window = new Window(new AppShell(page));
+        window.Activated += async (_, _) => await page.SetActiveAsync(true);
+        window.Stopped += async (_, _) => await page.SetActiveAsync(false);
         return window;
     }
 }
