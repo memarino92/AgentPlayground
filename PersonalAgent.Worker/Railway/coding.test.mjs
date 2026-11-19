@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { codingDispatch, validateRequest } from './coding.mjs';
 import { loadCodingPreparationFiles } from './coding-preparation-files.mjs';
 
@@ -8,6 +9,16 @@ test('coding preparation loads the repository Dockerfile and immutable workload 
   assert.equal(files.size, 2);
   assert.ok(files.get('Dockerfile.coding-sandbox').includes('opencode-ai@1.18.32'));
   assert.ok(files.get('PersonalAgent.Worker/Railway/workload.mjs').includes("phase === 'export'"));
+});
+
+test('coding image SDK matches the exact stable repository SDK requirement', async () => {
+  const { sdk } = JSON.parse(await readFile(new URL('../../global.json', import.meta.url), 'utf8'));
+  const files = new Map(await loadCodingPreparationFiles());
+  const imageSdk = files.get('Dockerfile.coding-sandbox').match(/^FROM mcr\.microsoft\.com\/dotnet\/sdk:(\S+)$/m)?.[1];
+  assert.match(sdk.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(sdk.allowPrerelease, false);
+  assert.equal(sdk.rollForward, 'disable');
+  assert.equal(imageSdk, sdk.version, 'immutable coding image must satisfy global.json without SDK roll-forward');
 });
 
 const request = { operation: 'coding-execute', imageId: 'sha256:' + 'a'.repeat(64), repository: 'owner/repo',
