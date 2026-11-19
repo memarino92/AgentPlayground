@@ -48,10 +48,7 @@ internal class PushNotificationService(IOptions<PushNotificationsOptions> option
                 Android = new AndroidConfig
                 {
                     Priority = Priority.High,
-                    Notification = new AndroidNotification
-                    {
-                        ChannelId = _options.AndroidChannelId
-                    }
+                    Notification = CreateAndroidNotification(_options.AndroidChannelId)
                 }
             };
 
@@ -84,6 +81,12 @@ internal class PushNotificationService(IOptions<PushNotificationsOptions> option
 
         return (sentCount, unregistered);
     }
+
+    internal static AndroidNotification CreateAndroidNotification(string ChannelId) => new()
+    {
+        ChannelId = ChannelId,
+        EventTimestamp = DateTime.UtcNow
+    };
 
     private FirebaseMessaging GetOrCreateMessagingClient()
     {
