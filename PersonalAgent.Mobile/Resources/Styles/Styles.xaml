@@ -18,6 +18,8 @@
         <Setter Property="FontSize" Value="13" />
     </Style>
 
+    <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}" />
+
     <Style x:Key="SecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
         <Setter Property="BackgroundColor" Value="{StaticResource SecondaryButtonColor}" />
         <Setter Property="TextColor" Value="{StaticResource SecondaryButtonTextColor}" />

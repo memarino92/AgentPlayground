@@ -43,7 +43,16 @@ public partial class MainPage : ContentPage
             if (_chat.Profiles.Length > 1) choices.Add("Change profile");
             if (_chat.IsOwner) choices.AddRange(["Coding jobs", "Administration"]);
         }
+        choices.AddRange(["Approvals", "Settings", "Refresh"]);
+        if (_chat.Profile is not null) choices.Add("Sign out");
         var choice = await DisplayActionSheetAsync("PersonalAgent", "Close", null, choices.ToArray());
+        switch (choice)
+        {
+            case "Approvals": await ReviewPendingApprovalsAsync(true); return;
+            case "Settings": await OpenSettingsAsync(); return;
+            case "Refresh": await LoadChatAsync(); return;
+            case "Sign out": SignOut(); return;
+        }
         if (choice == "Change profile")
         {
             var profile = await DisplayActionSheetAsync("Profile", "Cancel", null, _chat.Profiles);
@@ -59,7 +68,7 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async void OnSettingsClicked(object? sender, EventArgs e)
+    private async Task OpenSettingsAsync()
     {
         var page = new ContentPage { Title = "Settings", BindingContext = _viewModel, Content = BuildContent() };
         var done = new ToolbarItem { Text = "Done" };
@@ -69,13 +78,13 @@ public partial class MainPage : ContentPage
     }
 
     private async void OnSignInClicked(object? sender, EventArgs e) => await LoadChatAsync(signIn: true);
-    private async void OnRefreshClicked(object? sender, EventArgs e) => await LoadChatAsync();
+
     private async void OnSendClicked(object? sender, EventArgs e)
     {
         if (_conversation.HasValue && !string.IsNullOrWhiteSpace(Draft.Text)) await LoadChatAsync(message: Draft.Text.Trim());
     }
 
-    private void OnDisconnectClicked(object? sender, EventArgs e)
+    private void SignOut()
     {
         _chat.SignOut();
         Draft.Text = string.Empty;
@@ -86,7 +95,7 @@ public partial class MainPage : ContentPage
     {
         _conversation = conversation?.SessionId;
         Transcript.ItemsSource = conversation?.Messages;
-        Composer.IsVisible = Disconnect.IsVisible = Refresh.IsVisible = conversation is not null;
+        Composer.IsVisible = conversation is not null;
         SignIn.IsVisible = conversation is null;
         ChatStatus.Text = conversation is null ? "Sign in to open your conversation." :
             conversation.Messages.Count == 0 ? "Start your conversation." : string.Empty;
@@ -98,7 +107,7 @@ public partial class MainPage : ContentPage
     {
         if (_chatBusy) return;
         _chatBusy = true;
-        SessionActions.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = SettingsAction.IsEnabled = false;
+        SignIn.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = false;
         ChatStatus.Text = message is null ? "Opening conversation…" : "Waiting for a reply…";
         try
         {
@@ -113,12 +122,31 @@ public partial class MainPage : ContentPage
                 using var turn = new CancellationTokenSource(TimeSpan.FromMinutes(10));
                 _turn = turn;
                 StopReply.IsVisible = true;
-                var reply = new System.Text.StringBuilder();
-                conversation = await _chat.SendAsync(id, message, delta =>
+                var saved = Transcript.ItemsSource;
+                var pending = new System.Collections.ObjectModel.ObservableCollection<NativeChatMessage>(
+                    saved as IEnumerable<NativeChatMessage> ?? []);
+                pending.Add(new("user", message));
+                pending.Add(new("assistant", string.Empty));
+                Transcript.ItemsSource = pending;
+                Transcript.ScrollTo(pending.Count - 1, position: ScrollToPosition.End, animate: false);
+                try
                 {
-                    ChatStatus.Text = reply.Append(delta).ToString();
-                    return Task.CompletedTask;
-                }, turn.Token);
+                    var reply = new System.Text.StringBuilder();
+                    var redraw = System.Diagnostics.Stopwatch.StartNew();
+                    conversation = await _chat.SendAsync(id, message, delta =>
+                    {
+                        reply.Append(delta);
+                        if (redraw.ElapsedMilliseconds >= 150 || pending[^1].Content.Length == 0)
+                        {
+                            ChatStatus.Text = string.Empty;
+                            pending[^1] = new("assistant", reply.ToString());
+                            Transcript.ScrollTo(pending.Count - 1, position: ScrollToPosition.End, animate: false);
+                            redraw.Restart();
+                        }
+                        return Task.CompletedTask;
+                    }, turn.Token);
+                }
+                finally { Transcript.ItemsSource = saved; }
             }
             else conversation = await _chat.ReadAsync();
             ShowConversation(conversation);
@@ -129,15 +157,13 @@ public partial class MainPage : ContentPage
         catch (Exception ex)
         {
             ChatStatus.Text = message is null ? $"Could not open chat. {ex.Message}" : "Delivery uncertain. Refresh before sending again.";
-            Refresh.IsVisible = true;
-            Disconnect.IsVisible = _chat.Profile is not null;
         }
         finally
         {
             _turn = null;
             StopReply.IsVisible = false;
             _chatBusy = false;
-            SessionActions.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = SettingsAction.IsEnabled = true;
+            SignIn.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = true;
         }
     }
 
@@ -159,7 +185,6 @@ public partial class MainPage : ContentPage
         if (Active && _hasAppeared) await ReviewPendingApprovalsAsync();
     }
 
-    private async void OnOpenApprovalClicked(object? sender, EventArgs e) => await ReviewPendingApprovalsAsync(true);
 
     private async void OnRegisterDeviceClicked(object? sender, EventArgs e)
     {

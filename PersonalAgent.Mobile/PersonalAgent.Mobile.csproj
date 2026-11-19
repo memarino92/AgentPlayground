@@ -44,6 +44,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Markdig" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Plugin.Firebase.CloudMessaging" />
