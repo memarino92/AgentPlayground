@@ -171,6 +171,50 @@ public sealed class ContinuousConversationTests : IClassFixture<PostgresVectorFi
 
 public sealed class ConversationContextBuilderTests
 {
+    [Theory]
+    [InlineData("{}", "key", false)]
+    [InlineData("{\"allowUserContent\":true}", "key", true)]
+    [InlineData("{\"allowUserContent\":true}", "", false)]
+    [InlineData("{\"allowUserContent\":true,\"enableConversationContinuity\":false}", "key", false)]
+    public void SavedSettings_DefaultContinuityOnAndRespectProviderAccess(string Json, string Key, bool Expected)
+    {
+        var Settings = JsonSerializer.Deserialize<JevRoutingSettings>(Json, JevRoutingRuntime.JsonOptions)!;
+        new JevRoutingSnapshot(Settings, Key).CanClassifyConversation.Should().Be(Expected);
+    }
+
+    [Theory]
+    [InlineData("new_topic", 1, 0)]
+    [InlineData("from_2", 1, 2)]
+    [InlineData("new_topic", 0.5, 4)]
+    public async Task ContinuityDecision_SelectsReplayAndRecallQuery(string Choice, double Confidence, int Count)
+    {
+        var Id = Guid.NewGuid();
+        var Access = new AgentAccessContext("owner", "Owner", "owner");
+        var Yesterday = DateTimeOffset.UtcNow.AddDays(-1);
+        List<ConversationMessage> Messages = [
+            new("user", "Train times") { Sequence = 1, CreatedAt = Yesterday },
+            new("assistant", "Nine") { Sequence = 2 },
+            new("user", "Garden beds") { Sequence = 3 },
+            new("assistant", "Use cedar") { Sequence = 4 }];
+        var Store = new Mock<IConversationContextStore>();
+        Store.Setup(Value => Value.GetRecentMessagesAsync(Id, 0, 24, default)).ReturnsAsync(Messages);
+        var Query = Count == 2 ? "How much?\nUse cedar\nGarden beds" : "How much?";
+        var Before = Count switch { 2 => 3L, 4 => 1L, _ => long.MaxValue };
+        Store.Setup(Value => Value.SearchHistoryAsync(Access, Id, Before, null, Query, null, default)).ReturnsAsync([]);
+        var Snapshot = new JevRoutingSnapshot(new() { EnableConversationContinuity = true, AllowUserContent = true }, "synthetic");
+        var Decisions = new Mock<IToolDecisionClient>(MockBehavior.Strict);
+        Decisions.Setup(Value => Value.ChooseAsync(It.Is<ToolChoiceRequest>(R => R.ConversationContinuity &&
+            R.Message.Contains("minutesAgo") && R.Message.Contains("Garden beds") && R.Choices.ContainsKey("from_2")), Snapshot, default))
+            .ReturnsAsync(new ToolChoiceResult(Choice, 1, Confidence));
+        var Builder = new ConversationContextBuilder(Store.Object, Mock.Of<IAgentEmbeddingService>(),
+            Options.Create(new AgentMemoryOptions { EnableSemanticMemory = false }), NullLogger<ConversationContextBuilder>.Instance,
+            Mock.Of<IJevRoutingSettings>(S => S.Current == Snapshot), Decisions.Object);
+        var Result = await Builder.BuildAsync(Access, Id, new("model"), "How much?", default);
+        Result.Messages.Skip(1).Select(M => M.Text).Should().Equal(Messages.TakeLast(Count).Select(M => M.Content));
+        Store.VerifyAll();
+        Decisions.VerifyAll();
+    }
+
     [Fact]
     public async Task EmbeddingFailure_FallsBackToLexical_AndNeverPromotesHistoricalInstructions()
     {

@@ -16,6 +16,7 @@ internal sealed record JevRoutingSettings
     public double MinimumProbability { get; init; } = 0.95;
     public double MinimumConfidence { get; init; } = 0.8;
     public bool AllowUserContent { get; init; }
+    public bool EnableConversationContinuity { get; init; } = true;
 
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsValid => Enum.IsDefined(Mode)
@@ -32,6 +33,7 @@ internal sealed class JevRoutingSnapshot(JevRoutingSettings Settings, string Api
     public JevRoutingSettings Settings { get; } = Settings;
     public string ApiKey { get; } = ApiKey;
     public bool CanCall => Settings.Mode != JevRoutingMode.Off && Settings.AllowUserContent && ApiKey.Length > 0;
+    public bool CanClassifyConversation => Settings.EnableConversationContinuity && Settings.AllowUserContent && ApiKey.Length > 0;
     public static JevRoutingSnapshot Disabled { get; } = new(new(), "");
 }
 
