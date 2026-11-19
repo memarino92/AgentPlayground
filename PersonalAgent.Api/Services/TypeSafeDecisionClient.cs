@@ -6,7 +6,8 @@ using PersonalAgent.Integrations;
 
 namespace PersonalAgent.Api.Services;
 
-internal sealed record ToolChoiceRequest(string Message, IReadOnlyDictionary<string, string> Choices, string? ReviewInstructions = null);
+internal sealed record ToolChoiceRequest(string Message, IReadOnlyDictionary<string, string> Choices, string? ReviewInstructions = null,
+    bool ConversationContinuity = false);
 internal sealed record ToolChoiceResult(string? Choice, double Probability = 0, double Confidence = 0, string Reason = "selected");
 
 internal interface IToolDecisionClient
@@ -23,13 +24,14 @@ internal sealed class TypeSafeDecisionClient(HttpClient Client, ILogger<TypeSafe
     public async Task<ToolChoiceResult> ChooseAsync(ToolChoiceRequest Request, JevRoutingSnapshot Snapshot, CancellationToken Token)
     {
         Token.ThrowIfCancellationRequested();
-        if (!Snapshot.CanCall) return new(null, Reason: "disabled");
+        if (!(Request.ConversationContinuity ? Snapshot.CanClassifyConversation : Snapshot.CanCall)) return new(null, Reason: "disabled");
         if (Request.Message.Length > 8000 || Request.Choices.Count is < 2 or > 255) return new(null, Reason: "input_limit");
         if (DateTime.UtcNow.Ticks < Interlocked.Read(ref _retryAfterTicks)) return new(null, Reason: "backoff");
         if (!await _capacity.WaitAsync(0, Token)) return new(null, Reason: "capacity");
         using var Span = AiTelemetry.Start("decision.choose", "LLM", Snapshot.Settings.Model);
         Span?.SetTag("llm.system", "typesafe");
-        Span?.SetTag("decision.policy", Request.ReviewInstructions is null ? JevToolRoutingCatalog.Policy : "automation-operations-v1");
+        Span?.SetTag("decision.policy", Request.ConversationContinuity ? "conversation-continuity-v1" :
+            Request.ReviewInstructions is null ? JevToolRoutingCatalog.Policy : "automation-operations-v1");
         using var Deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
         Deadline.CancelAfter(Snapshot.Settings.TimeoutMilliseconds);
         try

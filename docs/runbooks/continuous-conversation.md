@@ -31,6 +31,14 @@ Typed presentation and recalled source references are stored in the assistant tr
 
 The only new schema infrastructure is a full-text index. Continuous-state properties and metadata are additive; older binaries can still read the text/model fields but do not render these cards. Rolling back UI/API code does not remove stored metadata. Existing scheduled-job records retain their read-only semantics.
 
+## Adaptive topic context
+
+Adaptive topic context defaults to enabled, including for saved Jev settings that omit `enableConversationContinuity`. It works with tool routing set to `Off`. The API calls Jev when `allowUserContent` is true and an encrypted `Jev:ApiKey` is configured. The runtime reloads edits within its 15-second polling interval. Each classification sends excerpts of the current request and recent messages, including assistant replies and timestamps, to TypeSafe.
+
+For continuous-chat turns that reach the chat model, Jev considers up to eight recent messages. It can select a new topic or the user message where the current discussion began. The API replays the selected suffix and adds short excerpts to the current request for lexical and optional vector recall. A new topic searches with the current request alone. Older authorized turns can still surface as cited evidence. Start fresh remains the explicit recall boundary.
+
+Low confidence, timeout, or a rejected decision uses the ordinary bounded recent context and original search query. Set `enableConversationContinuity` to false to restore that behavior for all turns. Classification runs on demand and writes no topic labels to historical records.
+
 ## Verify locally
 
 Use the [synthetic demo](synthetic-demo.md), then run:
