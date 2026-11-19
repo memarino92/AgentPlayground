@@ -46,6 +46,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPushTokenProvider, PushTokenProvider>();
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddTransient<MainPage>();
+        builder.Services.AddHttpClient<NativeChatClient>(client => client.Timeout = TimeSpan.FromMinutes(10))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
         builder.Services.AddHttpClient<PersonalAgentApiClient>((sp, client) =>
             {

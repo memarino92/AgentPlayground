@@ -8,14 +8,10 @@
 <div class="settings-hub">
     <h1>Settings</h1>
     <nav aria-label="Settings sections">
-        <a class="@(CurrentSection == "sentry" ? "active" : null)" href="/admin/settings?section=sentry">Sentry</a>
-        <a class="@(CurrentSection == "telemetry" ? "active" : null)" href="/admin/settings?section=telemetry">OpenTelemetry</a>
-        <a class="@(CurrentSection == "providers" ? "active" : null)" href="/admin/settings?section=providers">AI providers</a>
-        <a class="@(CurrentSection == "automation" ? "active" : null)" href="/admin/settings?section=automation">Railway sandboxes</a>
-        <a class="@(CurrentSection == "coding" ? "active" : null)" href="/admin/settings?section=coding">Platform coding</a>
-        <a class="@(CurrentSection == "database" ? "active" : null)" href="/admin/settings?section=database">Database settings</a>
-        <a class="@(CurrentSection == "backup" ? "active" : null)" href="/admin/settings?section=backup">Database backups</a>
-        <a class="@(CurrentSection == "integrations" ? "active" : null)" href="/admin/settings?section=integrations">Integrations and coach access</a>
+        @foreach (var section in PersonalAgent.Presentation.SettingsSection.All)
+        {
+            <a class="@(CurrentSection == section.Key ? "active" : null)" href="@($"/admin/settings?section={section.Key}")">@section.Title</a>
+        }
     </nav>
     @switch (CurrentSection)
     {

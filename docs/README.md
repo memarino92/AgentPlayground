@@ -40,6 +40,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 
 | Record | Status | Purpose |
 | --- | --- | --- |
+| [0046: Native Android client](decisions/0046-native-android-conversation.md) | Accepted | Native screens, shared presentation logic and account-bound access |
 | [0038: Platform improvement jobs](decisions/0038-platform-improvement-jobs.md) | Accepted; live acceptance pending | OpenCode/OpenRouter coding jobs propose draft PRs; maintainer controls merging |
 | [0001: Database configuration](decisions/0001-database-configuration.md) | Accepted, retrospective | Record the encrypted configuration refactor |
 | [0002: Actor and tool authorization](decisions/0002-actor-and-tool-authorization.md) | Accepted, retrospective | Record RBAC and its remaining boundaries |

@@ -40,6 +40,9 @@ internal partial class PersonalAgentClient : IDisposable
         lock (AuthenticationLock) return AuthenticationState ??= authenticationStateProvider.GetAuthenticationStateAsync();
     }
 
+    internal void UseMobileAccount(ClaimsPrincipal User) =>
+        OnAuthenticationStateChanged(Task.FromResult(new AuthenticationState(User)));
+
     public void Dispose() => authenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     private const int DefaultPageSize = 20;
 
@@ -56,6 +59,13 @@ internal partial class PersonalAgentClient : IDisposable
         if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("open conversation", Response);
         return (await Response.Content.ReadFromJsonAsync<HistoryResponse>())!;
     }
+
+    internal Task<HttpResponseMessage> MobileStreamAsync(Guid Id, string ProfileId, string? Message, ClaimsPrincipal User, CancellationToken Token) =>
+        SendAsync(HttpMethod.Post, $"/api/conversation/{Id}/messages/stream", JsonContent.Create(new { ProfileId, Message }),
+            Token, requestUser: User, streamResponse: true);
+
+    internal Task<HttpResponseMessage> OpenMobileConversationAsync(string ProfileId, ClaimsPrincipal User, CancellationToken Token) =>
+        SendAsync(HttpMethod.Post, "/api/conversation/open", JsonContent.Create(new { ProfileId, ModelId = (string?)null }), Token, requestUser: User);
 
     public async Task ClearConversationAsync(string Id, string ProfileId)
     {
@@ -80,17 +90,7 @@ internal partial class PersonalAgentClient : IDisposable
             JsonContent.Create(new { ProfileId, Message }, options: JsonOptions), CancellationToken, streamResponse: true);
         if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("send message", Response);
         await using var Content = await Response.Content.ReadAsStreamAsync(CancellationToken);
-        using var Reader = new StreamReader(Content);
-        while (await Reader.ReadLineAsync(CancellationToken) is { } Line)
-        {
-            if (string.IsNullOrWhiteSpace(Line)) continue;
-            var Event = JsonSerializer.Deserialize<ChatStreamEvent>(Line, JsonOptions)
-                ?? throw new InvalidOperationException("The chat stream returned an invalid event.");
-            if (Event.Type == "delta" && Event.Delta is not null) await OnDelta(Event.Delta);
-            if (Event.Type == "error") throw new InvalidOperationException(Event.Error ?? "The chat stream failed.");
-            if (Event.Type == "completed" && Event.Conversation is not null) return Event.Conversation;
-        }
-        throw new EndOfStreamException("The chat stream ended before completion.");
+        return await ConversationStream.ReadAsync<HistoryResponse>(Content, OnDelta, CancellationToken);
     }
 
     public async Task<PersonalAgent.Contracts.ChatCard> UpdateChatCardAsync(string Id, string ProfileId, long Sequence, string CardId, PersonalAgent.Contracts.ChatCardAction Action)
@@ -201,6 +201,17 @@ internal partial class PersonalAgentClient : IDisposable
 
         var content = await response.Content.ReadAsStreamAsync();
         return await JsonSerializer.DeserializeAsync<SessionPageResponse>(content, JsonOptions);
+    }
+
+    internal async Task<IResult> UploadMobileRecordingAsync(string Profile, string Name, Stream Audio, CancellationToken Token)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(Profile), "profileId");
+        var file = new StreamContent(Audio);
+        file.Headers.ContentType = new MediaTypeHeaderValue("audio/mp4");
+        form.Add(file, "file", Name);
+        using var response = await SendAsync(HttpMethod.Post, "/api/coach-checkins/uploads", form, Token);
+        return Results.StatusCode((int)response.StatusCode);
     }
 
     public async Task<CoachCheckinUploadResponse?> UploadCoachCheckinAsync(string profileId, string fileName, string contentType, byte[] bytes)
@@ -490,7 +501,6 @@ public record SessionResponse(string SessionId, string ModelId, string Message);
 public record ModelCatalogResponse(List<AvailableChatModelResponse> Models);
 public record MessageResponse(string SessionId, string Response);
 public record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages, bool IsReadOnly = false);
-internal sealed record ChatStreamEvent(string Type, string? Delta, HistoryResponse? Conversation, string? Error);
 public record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
 public record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
 public record ConversationMessage(string Role, string Content)
@@ -504,11 +514,8 @@ public record CoachCheckinUploadResponse(Guid UploadId, Guid CorrelationId, stri
 public record CoachCheckinStatusResponse(Guid UploadId, Guid SessionId, string ProfileId, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
 public record CoachCheckinSummaryResponse(Guid UploadId, Guid SessionId, string SummaryMarkdown, string SummaryJson, DateTimeOffset UpdatedAtUtc);
 public record CoachCheckinTranscriptResponse(Guid UploadId, Guid SessionId, string ProfileId, string Status, string TranscriptText, DateTimeOffset UpdatedAtUtc, List<CoachCheckinTranscriptUtteranceResponse> Utterances);
-public record CoachCheckinTranscriptUtteranceResponse(int SpeakerLabel, string SpeakerRole, int StartMs, int EndMs, string Text, double Confidence, string SpeakerName = "");
 public record CoachEvidenceResponse(CoachCheckinTranscriptResponse Transcript, bool AudioAvailable, long MaxAudioUploadBytes = 25 * 1024 * 1024);
 public record SpeakerOverrideItem(int SpeakerLabel, string Role);
-public record CoachCheckinSpeakerLabelInfoResponse(int SpeakerLabel, string SpeakerRole, int UtteranceCount, List<string> SampleTexts);
-public record CoachCheckinAdminItemResponse(Guid UploadId, Guid SessionId, string ProfileId, string OriginalFileName, string Status, string? Error, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, bool HasAudioBlob, int UtteranceCount, int ChunkCount, List<CoachCheckinSpeakerLabelInfoResponse> SpeakerLabels, string? ExecutiveSummary = null);
 public record TranscriptDownloadResponse(string FileName, byte[] Bytes);
 public record AgentToolDescriptorResponse(string Key, string Name, string DisplayName, string Integration, string Description, bool IsAvailable, bool OwnerDefault, bool CoachDefault);
 public record ToolRolePermissionResponse(string Role, string ToolKey, bool IsEnabled);

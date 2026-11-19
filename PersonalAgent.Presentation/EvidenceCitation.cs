@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.WebUtilities;
+using System.Web;
 
-namespace PersonalAgent.Web.Services;
+namespace PersonalAgent.Presentation;
 
-internal sealed record EvidenceCitation(Guid UploadId, string ProfileId, int? StartMs)
+public sealed record EvidenceCitation(Guid UploadId, string ProfileId, int? StartMs)
 {
     private static readonly Regex Links = new(@"(?<![\w/:])(?:/evidence/|https?://evidence/)[a-fA-F0-9-]{36}(?:\?[^\s)<>""']+)?", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
     private static readonly Regex Destination = new(@"^(?:/evidence/|https?://evidence/)(?<id>[a-fA-F0-9-]{36})(?:\?(?<query>[^#\s]*))?$", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
@@ -14,10 +14,10 @@ internal sealed record EvidenceCitation(Guid UploadId, string ProfileId, int? St
     {
         var Match = Destination.Match(Url ?? string.Empty);
         if (!Match.Success || !Guid.TryParse(Match.Groups["id"].Value, out var Id)) return null;
-        var Query = QueryHelpers.ParseQuery(Match.Groups["query"].Value.Replace("&amp;", "&", StringComparison.Ordinal));
-        var Profile = Query.TryGetValue("profileId", out var ProfileValue) ? ProfileValue.ToString() : DefaultProfileId;
+        var Query = HttpUtility.ParseQueryString(Match.Groups["query"].Value.Replace("&amp;", "&", StringComparison.Ordinal));
+        var Profile = Query["profileId"] ?? DefaultProfileId;
         if (string.IsNullOrWhiteSpace(Profile)) return null;
-        int? Start = Query.TryGetValue("startMs", out var Timing) && int.TryParse(Timing, out var Value) && Value >= 0 ? Value : null;
+        int? Start = int.TryParse(Query["startMs"], out var Value) && Value >= 0 ? Value : null;
         return new(Id, Profile, Start);
     }
 

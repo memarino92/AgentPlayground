@@ -51,7 +51,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <MauiIcon Include="Resources\appicon.svg" ForegroundFile="Resources\appiconfg.svg" Color="#166534" />
+    <MauiIcon Include="Resources\appicon.svg" ForegroundFile="Resources\appiconfg.svg" ForegroundScale="0.67" Color="#166534" />
     <MauiSplashScreen Include="Resources\appiconfg.svg" Color="#f0fdf4" BaseSize="128,128" />
     <MauiImage Include="Resources\Images\*" />
     <MauiFont Include="Resources\Fonts\*" />
@@ -62,4 +62,8 @@
     <GoogleServicesJson Include="..\google-services.json" Link="Platforms\Android\google-services.json" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\PersonalAgent.Contracts\ChatCards.cs" Link="Models\ChatCards.cs" />
+    <ProjectReference Include="..\PersonalAgent.Presentation\PersonalAgent.Presentation.csproj" />
+  </ItemGroup>
 </Project>

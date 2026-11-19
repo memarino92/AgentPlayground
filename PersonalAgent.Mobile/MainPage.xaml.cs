@@ -1,8 +1,8 @@
+using Microsoft.Maui.Controls.Shapes;
+
 using PersonalAgent.Mobile.Models;
 using PersonalAgent.Mobile.Services;
 using PersonalAgent.Mobile.ViewModels;
-using Microsoft.Maui.Controls.Shapes;
-using Microsoft.Extensions.Logging;
 
 namespace PersonalAgent.Mobile;
 
@@ -10,13 +10,19 @@ public partial class MainPage : ContentPage
 {
     private readonly MainViewModel _viewModel;
     private readonly NotificationRoutingService _notificationRoutingService;
-    private readonly WebView _agentWebView;
+    private readonly NativeChatClient _chat;
+    private Guid? _conversation;
+    private bool _chatBusy;
+    private CancellationTokenSource? _turn;
+    private void OnStopClicked(object? sender, EventArgs e) => _turn?.Cancel();
     private readonly FirebaseCloudMessagingBridge _firebaseBridge;
     private bool _isVisible;
+    private Page VisiblePage => Navigation.ModalStack.LastOrDefault() is NavigationPage modal
+        ? modal.CurrentPage : Shell.Current?.CurrentPage ?? this;
     private bool _isReviewingApproval;
     private bool _hasAppeared;
 
-    public MainPage(MainViewModel viewModel, NotificationRoutingService notificationRoutingService, FirebaseCloudMessagingBridge firebaseBridge, ILogger<MainPage> logger)
+    public MainPage(MainViewModel viewModel, NotificationRoutingService notificationRoutingService, FirebaseCloudMessagingBridge firebaseBridge, NativeChatClient chat)
     {
         _viewModel = viewModel;
         _notificationRoutingService = notificationRoutingService;
@@ -24,69 +30,133 @@ public partial class MainPage : ContentPage
         BindingContext = _viewModel;
         _notificationRoutingService.PendingApprovalReceived += OnPendingApprovalReceived;
 
-        _agentWebView = new WebView();
-        _agentWebView.SetBinding(WebView.SourceProperty, nameof(MainViewModel.WebAppUrl));
-        _agentWebView.Navigated += (_, Args) =>
-        {
-            logger.LogInformation("PersonalAgent website navigation completed: {NavigationResult}", Args.Result);
-#if ANDROID && DEBUG
-            Android.Util.Log.Info("PersonalAgent.Mobile", $"WebsiteNavigation={Args.Result}");
-#endif
-        };
+        _chat = chat;
+        InitializeComponent();
+    }
 
-        var settingsButton = new Button { Text = "Settings", FontSize = 13 };
-        settingsButton.Clicked += async (_, _) =>
+    private async void OnMenuClicked(object? sender, EventArgs e)
+    {
+        var choices = new List<string> { "Check-in preview" };
+        if (_chat.Profile is not null)
         {
-            var settingsPage = new ContentPage { Title = "Settings", Content = BuildContent() };
-            var closeButton = new ToolbarItem { Text = "Done" };
-            closeButton.Clicked += async (_, _) => await Navigation.PopModalAsync();
-            settingsPage.ToolbarItems.Add(closeButton);
-            await Navigation.PushModalAsync(new NavigationPage(settingsPage));
-        };
-        var approvalsButton = new Button { Text = "Approvals", FontSize = 13 };
-        approvalsButton.Clicked += OnOpenApprovalClicked;
-        var toolbar = new Grid
+            choices.AddRange(["Chat history", "Chat options", "Scheduled jobs", "Automations", "Coach recordings"]);
+            if (_chat.Profiles.Length > 1) choices.Add("Change profile");
+            if (_chat.IsOwner) choices.AddRange(["Coding jobs", "Administration"]);
+        }
+        var choice = await DisplayActionSheetAsync("PersonalAgent", "Close", null, choices.ToArray());
+        if (choice == "Change profile")
         {
-            ColumnDefinitions = [new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto)]
-        };
-        toolbar.Add(approvalsButton, 0);
-        toolbar.Add(settingsButton, 1);
-        var root = new Grid
+            var profile = await DisplayActionSheetAsync("Profile", "Cancel", null, _chat.Profiles);
+            if (profile is null || !_chat.Profiles.Contains(profile)) return;
+            _chat.SelectProfile(profile);
+            Draft.Text = string.Empty;
+            ShowConversation(null);
+            await LoadChatAsync();
+        }
+        else if (choice is not null && choices.Contains(choice))
         {
-            RowDefinitions = [new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Star)],
-            SafeAreaEdges = SafeAreaEdges.All
-        };
-        root.Add(toolbar, 0, 0);
-        root.Add(_agentWebView, 0, 1);
-        Content = root;
+            await Navigation.PushAsync(new WorkspacePage(_chat, choice, _conversation ?? Guid.Empty));
+        }
+    }
+
+    private async void OnSettingsClicked(object? sender, EventArgs e)
+    {
+        var page = new ContentPage { Title = "Settings", BindingContext = _viewModel, Content = BuildContent() };
+        var done = new ToolbarItem { Text = "Done" };
+        done.Clicked += async (_, _) => await Navigation.PopModalAsync();
+        page.ToolbarItems.Add(done);
+        await Navigation.PushModalAsync(new NavigationPage(page));
+    }
+
+    private async void OnSignInClicked(object? sender, EventArgs e) => await LoadChatAsync(signIn: true);
+    private async void OnRefreshClicked(object? sender, EventArgs e) => await LoadChatAsync();
+    private async void OnSendClicked(object? sender, EventArgs e)
+    {
+        if (_conversation.HasValue && !string.IsNullOrWhiteSpace(Draft.Text)) await LoadChatAsync(message: Draft.Text.Trim());
+    }
+
+    private void OnDisconnectClicked(object? sender, EventArgs e)
+    {
+        _chat.SignOut();
+        Draft.Text = string.Empty;
+        ShowConversation(null);
+    }
+
+    private void ShowConversation(NativeConversation? conversation)
+    {
+        _conversation = conversation?.SessionId;
+        Transcript.ItemsSource = conversation?.Messages;
+        Composer.IsVisible = Disconnect.IsVisible = Refresh.IsVisible = conversation is not null;
+        SignIn.IsVisible = conversation is null;
+        ChatStatus.Text = conversation is null ? "Sign in to open your conversation." :
+            conversation.Messages.Count == 0 ? "Start your conversation." : string.Empty;
+        if (conversation?.Messages.Count > 0)
+            Transcript.ScrollTo(conversation.Messages[^1], position: ScrollToPosition.End, animate: false);
+    }
+
+    private async Task LoadChatAsync(bool signIn = false, string? message = null)
+    {
+        if (_chatBusy) return;
+        _chatBusy = true;
+        SessionActions.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = SettingsAction.IsEnabled = false;
+        ChatStatus.Text = message is null ? "Opening conversation…" : "Waiting for a reply…";
+        try
+        {
+            if (signIn)
+            {
+                await _chat.SignInAsync();
+                Draft.Text = string.Empty;
+            }
+            NativeConversation? conversation;
+            if (message is not null && _conversation is Guid id)
+            {
+                using var turn = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+                _turn = turn;
+                StopReply.IsVisible = true;
+                var reply = new System.Text.StringBuilder();
+                conversation = await _chat.SendAsync(id, message, delta =>
+                {
+                    ChatStatus.Text = reply.Append(delta).ToString();
+                    return Task.CompletedTask;
+                }, turn.Token);
+            }
+            else conversation = await _chat.ReadAsync();
+            ShowConversation(conversation);
+            if (message is not null && conversation is not null) Draft.Text = string.Empty;
+        }
+        catch (TaskCanceledException) { ChatStatus.Text = "Request interrupted. Refresh to check the conversation."; }
+        catch (OperationCanceledException) { ChatStatus.Text = "Sign-in canceled."; }
+        catch (Exception ex)
+        {
+            ChatStatus.Text = message is null ? $"Could not open chat. {ex.Message}" : "Delivery uncertain. Refresh before sending again.";
+            Refresh.IsVisible = true;
+            Disconnect.IsVisible = _chat.Profile is not null;
+        }
+        finally
+        {
+            _turn = null;
+            StopReply.IsVisible = false;
+            _chatBusy = false;
+            SessionActions.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = SettingsAction.IsEnabled = true;
+        }
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
         _isVisible = true;
+        var firstAppearance = !_hasAppeared;
         _hasAppeared = true;
+        if (firstAppearance || _conversation.HasValue) await LoadChatAsync();
         var hasCurrentToken = await _firebaseBridge.InitializeAsync();
         await _viewModel.InitializeAsync(hasCurrentToken);
         await ReviewPendingApprovalsAsync();
-    }
-
-    protected override void OnDisappearing()
-    {
-        _isVisible = false;
-        base.OnDisappearing();
     }
 
     public async Task SetActiveAsync(bool Active)
     {
         _isVisible = Active;
         if (Active && _hasAppeared) await ReviewPendingApprovalsAsync();
-    }
-
-    private void OnReloadClicked(object? sender, EventArgs e)
-    {
-        if (_agentWebView.Source is not UrlWebViewSource source) return;
-        _agentWebView.Source = new UrlWebViewSource { Url = source.Url };
     }
 
     private async void OnOpenApprovalClicked(object? sender, EventArgs e) => await ReviewPendingApprovalsAsync(true);
@@ -105,6 +175,9 @@ public partial class MainPage : ContentPage
     private async void OnSaveProfileClicked(object? sender, EventArgs e)
     {
         await _viewModel.SaveProfileIdAsync();
+        Draft.Text = string.Empty;
+        ShowConversation(null);
+        await LoadChatAsync();
         await DisplayAlertAsync("Profile", _viewModel.StatusMessage, "OK");
         await ReviewPendingApprovalsAsync();
     }
@@ -112,6 +185,9 @@ public partial class MainPage : ContentPage
     private async void OnSaveConnectionClicked(object? sender, EventArgs e)
     {
         await _viewModel.SaveConnectionSettingsAsync();
+        Draft.Text = string.Empty;
+        ShowConversation(null);
+        await LoadChatAsync();
         await DisplayAlertAsync("Connection", _viewModel.StatusMessage, "OK");
     }
 
@@ -122,13 +198,13 @@ public partial class MainPage : ContentPage
 
     private async Task ReviewPendingApprovalsAsync(bool ShowEmpty = false)
     {
-        if (!_isVisible || _isReviewingApproval) return;
+        if (!_isVisible || !_hasAppeared || _isReviewingApproval) return;
         _isReviewingApproval = true;
         try
         {
-            var pendingApproval = _notificationRoutingService.GetNextPendingApproval(_viewModel.ProfileId);
+            var pendingApproval = _notificationRoutingService.GetNextPendingApproval(_viewModel.SavedProfileId);
             if (pendingApproval is null && ShowEmpty)
-                await DisplayAlertAsync("No pending request", "No active approval request has been received for this profile.", "OK");
+                await VisiblePage.DisplayAlertAsync("No pending request", "No active approval request has been received for this profile.", "OK");
 
             while (_isVisible && pendingApproval is not null)
             {
@@ -137,38 +213,38 @@ public partial class MainPage : ContentPage
                 if (!_isVisible) return;
                 if (approval is null)
                 {
-                    await DisplayAlertAsync("Approval unavailable", "Could not load this request for your saved profile. Check your connection and try Approve Pending again.", "OK");
+                    await VisiblePage.DisplayAlertAsync("Approval unavailable", "Could not load this request for your saved profile. Check your connection and try Approve Pending again.", "OK");
                     return;
                 }
                 if (approval.Status != "pending" || approval.ExpiresAt <= DateTimeOffset.UtcNow)
                 {
                     _notificationRoutingService.Remove(approval.ApprovalId);
-                    await DisplayAlertAsync("Request closed", "This approval has expired or already been decided.", "OK");
+                    await VisiblePage.DisplayAlertAsync("Request closed", "This approval has expired or already been decided.", "OK");
                 }
                 else
                 {
-                    var choice = await DisplayActionSheetAsync(
+                    var choice = await VisiblePage.DisplayActionSheetAsync(
                         $"Agent approval\nTool: {approval.ToolName}\nAction: {approval.ActionSummary}\nRequested by: {approval.RequestedBy}\nExpires: {approval.ExpiresAt.ToLocalTime():g}",
                         "Later", null, "Approve", "Deny");
                     if (choice is not ("Approve" or "Deny")) return;
-                    if (!string.Equals(approval.ProfileId, _viewModel.ProfileId, StringComparison.OrdinalIgnoreCase)) return;
+                    if (!string.Equals(approval.ProfileId, _viewModel.SavedProfileId, StringComparison.OrdinalIgnoreCase)) return;
                     var approved = choice == "Approve";
                     var result = await _viewModel.SubmitApprovalDecisionAsync(approval.ApprovalId, approved,
-                        approved ? "Approved from Android app" : "Denied from Android app", _viewModel.ProfileId);
+                        approved ? "Approved from Android app" : "Denied from Android app", _viewModel.SavedProfileId);
                     if (!result.IsSuccess)
                     {
-                        await DisplayAlertAsync("Decision not confirmed", result.Error, "OK");
+                        await VisiblePage.DisplayAlertAsync("Decision not confirmed", result.Error, "OK");
                         return;
                     }
                     _notificationRoutingService.Remove(approval.ApprovalId);
-                    await DisplayAlertAsync("Decision submitted", approved ? "Approval sent" : "Denial sent", "OK");
+                    await VisiblePage.DisplayAlertAsync("Decision submitted", approved ? "Approval sent" : "Denial sent", "OK");
                 }
-                pendingApproval = _notificationRoutingService.GetNextPendingApproval(_viewModel.ProfileId);
+                pendingApproval = _notificationRoutingService.GetNextPendingApproval(_viewModel.SavedProfileId);
             }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
-            await DisplayAlertAsync("Approval unavailable", "Could not reach the server. Your request is still pending; try Approve Pending when connected.", "OK");
+            await VisiblePage.DisplayAlertAsync("Approval unavailable", "Could not reach the server. Your request is still pending; try Approve Pending when connected.", "OK");
         }
         finally { _isReviewingApproval = false; }
     }
@@ -187,7 +263,7 @@ public partial class MainPage : ContentPage
                 Children =
                 {
                     new Label { Text = "PersonalAgent Mobile", FontSize = 18, FontAttributes = FontAttributes.Bold, TextColor = Color.FromArgb("#f8fafc") },
-                    new Label { Text = "2FA gateway + web companion", FontSize = 12, TextColor = Color.FromArgb("#cbd5e1") }
+                    new Label { Text = "Device and connection settings", FontSize = 12, TextColor = Color.FromArgb("#cbd5e1") }
                 }
             }
         };
@@ -232,7 +308,7 @@ public partial class MainPage : ContentPage
 
         var webUrlEntry = new Entry
         {
-            Placeholder = "Web URL (https://app.example.com)",
+            Placeholder = "Chat service URL (https://app.example.com)",
             BackgroundColor = Colors.White,
             TextColor = Color.FromArgb("#0f172a")
         };

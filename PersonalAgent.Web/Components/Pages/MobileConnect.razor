@@ -1,0 +1,36 @@
+@page "/mobile/connect"
+@inject MobileChatGrant Grants
+@inject NavigationManager Navigation
+
+<PageTitle>Connect Android</PageTitle>
+<h1>Connect Android</h1>
+@if (!MobileChatGrant.IsChallenge(Challenge))
+{
+    <p>Start sign-in from the Android app.</p>
+}
+else
+{
+    <AuthorizeView Roles="Owner,Coach">
+        <Authorized>
+            <p>Allow PersonalAgent on this phone to access your conversations, recordings, jobs and automations, and manage any settings available to your account for 24 hours?</p>
+            <button @onclick="() => Connect(context.User)">Connect this phone</button>
+        </Authorized>
+        <NotAuthorized>
+            <a href="@LoginUrl("GitHub")">Sign in with GitHub</a>
+            <a href="@LoginUrl("Google")">Sign in with Google</a>
+        </NotAuthorized>
+    </AuthorizeView>
+}
+
+@code {
+    [SupplyParameterFromQuery] public string? Challenge { get; set; }
+
+    private string LoginUrl(string Provider) =>
+        $"/login?provider={Provider}&returnUrl={Uri.EscapeDataString($"/mobile/connect?challenge={Challenge}")}";
+
+    private void Connect(System.Security.Claims.ClaimsPrincipal User)
+    {
+        var Grant = Grants.Issue(User, Challenge!);
+        Navigation.NavigateTo($"personalagentmobile://chat?grant={Uri.EscapeDataString(Grant)}", forceLoad: true);
+    }
+}

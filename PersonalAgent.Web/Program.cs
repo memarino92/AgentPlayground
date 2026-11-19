@@ -1,3 +1,5 @@
+using PersonalAgent.Web.Endpoints;
+using PersonalAgent.Web.Services;
 using PersonalAgent.Contracts.Hosting;
 using PersonalAgent.Integrations;
 using PersonalAgent.Contracts.Configuration;
@@ -22,6 +24,7 @@ builder.Services.AddPersonalAgentWebMessaging(builder.Configuration);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddSingleton<MobileChatGrant>();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddMudServices();
 builder.Services.AddRateLimiter(Options => Options.AddPolicy("chatgpt-pairing", Context =>
@@ -35,6 +38,9 @@ builder.Services.AddRateLimiter(Options => Options.AddPolicy("chatgpt-pairing", 
 var app = builder.Build();
 app.UsePersonalAgentWebPipeline();
 app.UseRateLimiter();
+app.MapMobileChat();
+app.MapNativeWorkspace();
+app.MapNativeRecordings();
 app.Use(async (Context, Next) =>
 {
     if (Context.Request.Path == "/chatgpt/handshake")

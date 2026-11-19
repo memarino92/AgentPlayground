@@ -1,8 +1,8 @@
 using System.Globalization;
 
-namespace PersonalAgent.Web.Services;
+namespace PersonalAgent.Presentation;
 
-internal static class RecordingLabel
+public static class RecordingLabel
 {
     public static string FromFileName(string FileName) => FileName.Length > 19 && FileName[19] == '.'
         && DateTime.TryParseExact(FileName[..19], "yyyy-MM-dd HH.mm.ss", CultureInfo.InvariantCulture,

@@ -1,34 +1,37 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="PersonalAgent.Mobile.MainPage"
-             BackgroundColor="#f8fafc">
-
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Padding="12,10,12,8" RowSpacing="10">
-        <Border Grid.Row="0" StrokeThickness="0" BackgroundColor="#0f172a" StrokeShape="RoundRectangle 14" Padding="12,10">
-            <VerticalStackLayout Spacing="2">
-                <Label Text="PersonalAgent Mobile" FontSize="18" FontAttributes="Bold" TextColor="#f8fafc" />
-                <Label Text="2FA gateway + web companion" FontSize="12" TextColor="#cbd5e1" />
-            </VerticalStackLayout>
-        </Border>
-
-        <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="8">
-            <Button Grid.Column="0" Text="Reload" Clicked="OnReloadClicked" BackgroundColor="#1e293b" TextColor="#f8fafc" CornerRadius="10" Padding="14,10" FontSize="13" />
-            <Button Grid.Column="1" Text="Approve Pending" Clicked="OnOpenApprovalClicked" BackgroundColor="#166534" TextColor="#f0fdf4" CornerRadius="10" Padding="14,10" FontSize="13" />
+             xmlns:chat="clr-namespace:PersonalAgent.Mobile.Services"
+             x:Class="PersonalAgent.Mobile.MainPage" Title="Chat" SafeAreaEdges="All">
+    <ContentPage.ToolbarItems>
+        <ToolbarItem x:Name="WorkspaceAction" Text="Menu" Clicked="OnMenuClicked" />
+        <ToolbarItem Text="Approvals" Clicked="OnOpenApprovalClicked" />
+        <ToolbarItem x:Name="SettingsAction" Text="Settings" Clicked="OnSettingsClicked" />
+    </ContentPage.ToolbarItems>
+    <Grid Padding="16,8" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto">
+            <Label x:Name="ChatStatus" FontSize="14" MaxLines="4" LineBreakMode="HeadTruncation" />
+            <Button x:Name="StopReply" Grid.Column="1" Text="Stop" IsVisible="False" Clicked="OnStopClicked" />
         </Grid>
-
-        <VerticalStackLayout Grid.Row="2" Spacing="8">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                <Button Grid.Column="0" Text="Register Device" Clicked="OnRegisterDeviceClicked" BackgroundColor="#334155" TextColor="#f8fafc" CornerRadius="10" Padding="14,10" FontSize="13" />
-                <Label Grid.Column="1" Text="{Binding StatusMessage}" VerticalOptions="Center" TextColor="#475569" LineBreakMode="TailTruncation" />
-            </Grid>
-        </VerticalStackLayout>
-
-        <Label Grid.Row="3" Text="Web Preview" FontSize="12" TextColor="#64748b" />
-
-        <Border Grid.Row="4" Stroke="#cbd5e1" StrokeThickness="1" StrokeShape="RoundRectangle 12" BackgroundColor="#ffffff" Padding="0" HeightRequest="260" VerticalOptions="Start">
-            <WebView x:Name="AgentWebView" Source="{Binding WebAppUrl}" />
-        </Border>
+        <CollectionView x:Name="Transcript" Grid.Row="1" SelectionMode="None">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="chat:NativeChatMessage">
+                    <VerticalStackLayout Padding="0,8" Spacing="4">
+                        <Label Text="{Binding Speaker}" FontAttributes="Bold" FontSize="14" />
+                        <Label Text="{Binding Content}" FontSize="16" />
+                        <VerticalStackLayout BindingContextChanged="OnMessageActionsChanged" Spacing="4" />
+                    </VerticalStackLayout>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+        <HorizontalStackLayout x:Name="SessionActions" Grid.Row="2" Spacing="8">
+            <Button x:Name="SignIn" Text="Sign in" Clicked="OnSignInClicked" />
+            <Button x:Name="Refresh" Text="Refresh" Clicked="OnRefreshClicked" IsVisible="False" />
+            <Button x:Name="Disconnect" Text="Sign out" Clicked="OnDisconnectClicked" IsVisible="False" />
+        </HorizontalStackLayout>
+        <Grid x:Name="Composer" Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="False">
+            <Editor x:Name="Draft" Placeholder="Message PersonalAgent" MaxLength="4000" MaximumHeightRequest="130" AutoSize="TextChanges" />
+            <Button Grid.Column="1" Text="Send" Clicked="OnSendClicked" />
+        </Grid>
     </Grid>
-
 </ContentPage>

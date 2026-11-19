@@ -7,8 +7,8 @@ public partial class AppShell : Shell
         InitializeComponent();
         Items.Add(new ShellContent
         {
-            Title = "Home",
-            Content = mainPage,
+            Title = "Chat",
+            ContentTemplate = new DataTemplate(() => mainPage),
             Route = nameof(MainPage)
         });
     }

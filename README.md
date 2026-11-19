@@ -13,7 +13,7 @@ The repository name remains `AgentPlayground` to preserve existing project and d
 - Unified Settings with encrypted Sentry/OpenTelemetry revisions, live provider credential reload, and database-owned chat model policy.
 - Authorized durable one-time and fixed-interval recurring agent/notification jobs with an activity dashboard, series cancellation, conservative recovery, push outcomes, and separate approval records.
 - Synthetic retrieval regressions and a repeatable opt-in coaching model evaluation runner; broader held-out quality evaluation remains open.
-- Android companion for notifications, approvals, and a WebView; still needs authentication and release polish.
+- Android companion for native chat, recordings, jobs, automations, administration, and approvals; still needs authentication and release polish.
 
 ## Architecture
 
