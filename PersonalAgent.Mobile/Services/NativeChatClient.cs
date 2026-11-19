@@ -125,5 +125,6 @@ public sealed record NativeChatMessage(string Role, string Content)
 {
     public long Sequence { get; init; }
     public PersonalAgent.Contracts.ChatPresentation? Presentation { get; init; }
-    public string Speaker => Role.Equals("user", StringComparison.OrdinalIgnoreCase) ? "You" : "PersonalAgent";
+    public bool IsUser => Role.Equals("user", StringComparison.OrdinalIgnoreCase);
+    public string Speaker => IsUser ? "You" : "PersonalAgent";
 }

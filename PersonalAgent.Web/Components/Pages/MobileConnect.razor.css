@@ -1,0 +1,34 @@
+.connect-panel {
+    box-sizing: border-box;
+    max-width: 29rem;
+    margin: clamp(1rem, 7vh, 5rem) auto;
+    padding: clamp(1.25rem, 5vw, 2.25rem);
+    background: var(--surface-color);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-soft);
+}
+.connect-robot { display: inline-block; padding: .55rem; background: var(--accent-soft); border-radius: .85rem; font-size: 1.85rem; line-height: 1.2; }
+.connect-panel h1 { margin: 1rem 0 .5rem; font-size: 1.75rem; line-height: 1.15; }
+.connect-panel p { color: var(--text-secondary); line-height: 1.6; margin: .75rem 0 1.35rem; }
+.connect-action, .connect-provider {
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    margin-top: .75rem;
+    padding: .85rem 1rem;
+    border-radius: .75rem;
+    border: 1px solid transparent;
+    font: inherit;
+    font-weight: 650;
+    line-height: 1.35;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+}
+.connect-action { background: #116454; color: white; }
+.connect-action:hover { background: #0d5043; }
+.connect-provider { background: var(--surface-muted); color: var(--text-primary); border-color: var(--border-color); }
+.connect-provider:hover { background: var(--accent-soft); }
+.connect-panel :is(button, a):focus-visible { outline: 3px solid var(--accent-color); outline-offset: 3px; }

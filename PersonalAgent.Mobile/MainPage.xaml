@@ -2,36 +2,61 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:chat="clr-namespace:PersonalAgent.Mobile.Services"
-             x:Class="PersonalAgent.Mobile.MainPage" Title="Chat" SafeAreaEdges="All">
+             x:Class="PersonalAgent.Mobile.MainPage" Title="Chat" SafeAreaEdges="All"
+             Shell.BackgroundColor="#123C38" Shell.TitleColor="White" Shell.ForegroundColor="White"
+             BackgroundColor="{AppThemeBinding Light=#F9FBFA, Dark=#12201F}">
+    <Shell.TitleView>
+        <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
+            <Label Text="🤖" FontSize="23" VerticalOptions="Center" />
+            <Label Text="Chat" TextColor="White" FontSize="21" FontFamily="OpenSansSemibold" VerticalOptions="Center" />
+        </HorizontalStackLayout>
+    </Shell.TitleView>
     <ContentPage.ToolbarItems>
         <ToolbarItem x:Name="WorkspaceAction" Text="Menu" Clicked="OnMenuClicked" />
-        <ToolbarItem Text="Approvals" Clicked="OnOpenApprovalClicked" />
-        <ToolbarItem x:Name="SettingsAction" Text="Settings" Clicked="OnSettingsClicked" />
     </ContentPage.ToolbarItems>
-    <Grid Padding="16,8" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8">
-        <Grid ColumnDefinitions="*,Auto">
-            <Label x:Name="ChatStatus" FontSize="14" MaxLines="4" LineBreakMode="HeadTruncation" />
+    <Grid RowDefinitions="Auto,*,Auto">
+        <Grid ColumnDefinitions="*,Auto" Padding="16,0">
+            <Label x:Name="ChatStatus" FontSize="14" MaxLines="4" VerticalOptions="Center"
+                   TextColor="{AppThemeBinding Light=#425D58, Dark=#B5CEC6}" />
             <Button x:Name="StopReply" Grid.Column="1" Text="Stop" IsVisible="False" Clicked="OnStopClicked" />
         </Grid>
-        <CollectionView x:Name="Transcript" Grid.Row="1" SelectionMode="None">
+        <CollectionView x:Name="Transcript" Grid.Row="1" SelectionMode="None" Margin="16,0">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="chat:NativeChatMessage">
-                    <VerticalStackLayout Padding="0,8" Spacing="4">
-                        <Label Text="{Binding Speaker}" FontAttributes="Bold" FontSize="14" />
-                        <Label Text="{Binding Content}" FontSize="16" />
-                        <VerticalStackLayout BindingContextChanged="OnMessageActionsChanged" Spacing="4" />
-                    </VerticalStackLayout>
+                    <Border StrokeThickness="0" StrokeShape="RoundRectangle 16" BackgroundColor="Transparent"
+                            Padding="0,10" Margin="0,4">
+                        <Border.Triggers>
+                            <DataTrigger TargetType="Border" Binding="{Binding IsUser}" Value="True">
+                                <Setter Property="Margin" Value="36,6,0,6" />
+                                <Setter Property="Padding" Value="14,11" />
+                                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light=#DCEFE8, Dark=#23433D}" />
+                                <Setter Property="HorizontalOptions" Value="End" />
+                            </DataTrigger>
+                        </Border.Triggers>
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="{Binding Speaker}" FontFamily="OpenSansSemibold" FontSize="13"
+                                   TextColor="{AppThemeBinding Light=#30645A, Dark=#A4D9C8}" />
+                            <Label FontSize="16" LineHeight="1.16" TextColor="{AppThemeBinding Light=#162C29, Dark=#E9F2EE}"
+                                   BindingContextChanged="OnMessageTextChanged" />
+                            <VerticalStackLayout BindingContextChanged="OnMessageActionsChanged" Spacing="5" />
+                        </VerticalStackLayout>
+                    </Border>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>
-        <HorizontalStackLayout x:Name="SessionActions" Grid.Row="2" Spacing="8">
-            <Button x:Name="SignIn" Text="Sign in" Clicked="OnSignInClicked" />
-            <Button x:Name="Refresh" Text="Refresh" Clicked="OnRefreshClicked" IsVisible="False" />
-            <Button x:Name="Disconnect" Text="Sign out" Clicked="OnDisconnectClicked" IsVisible="False" />
-        </HorizontalStackLayout>
-        <Grid x:Name="Composer" Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="False">
-            <Editor x:Name="Draft" Placeholder="Message PersonalAgent" MaxLength="4000" MaximumHeightRequest="130" AutoSize="TextChanges" />
-            <Button Grid.Column="1" Text="Send" Clicked="OnSendClicked" />
+        <Grid Grid.Row="2" Padding="12,8,12,12">
+            <Button x:Name="SignIn" Text="Sign in" Style="{StaticResource PrimaryButtonStyle}" Clicked="OnSignInClicked" />
+            <Border x:Name="Composer" IsVisible="False" StrokeShape="RoundRectangle 20"
+                    Stroke="{AppThemeBinding Light=#A8C2BA, Dark=#52746B}" BackgroundColor="{AppThemeBinding Light=White, Dark=#1C302C}" Padding="10,4,4,4">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                    <Editor x:Name="Draft" Placeholder="Message PersonalAgent" MaxLength="4000" MaximumHeightRequest="128"
+                            AutoSize="TextChanges" FontSize="16" VerticalOptions="Center" BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light=#162C29, Dark=#E9F2EE}"
+                            PlaceholderColor="{AppThemeBinding Light=#526A64, Dark=#B5CEC6}" />
+                    <Button Grid.Column="1" Text="Send" Style="{StaticResource PrimaryButtonStyle}" CornerRadius="16"
+                            MinimumHeightRequest="48" VerticalOptions="End" Clicked="OnSendClicked" />
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </ContentPage>

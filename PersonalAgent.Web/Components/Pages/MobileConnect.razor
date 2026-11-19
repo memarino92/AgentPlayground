@@ -3,7 +3,9 @@
 @inject NavigationManager Navigation
 
 <PageTitle>Connect Android</PageTitle>
-<h1>Connect Android</h1>
+<section class="connect-panel" aria-labelledby="connect-title">
+<span class="connect-robot" aria-hidden="true">🤖</span>
+<h1 id="connect-title">Connect your phone</h1>
 @if (!MobileChatGrant.IsChallenge(Challenge))
 {
     <p>Start sign-in from the Android app.</p>
@@ -13,14 +15,16 @@ else
     <AuthorizeView Roles="Owner,Coach">
         <Authorized>
             <p>Allow PersonalAgent on this phone to access your conversations, recordings, jobs and automations, and manage any settings available to your account for 24 hours?</p>
-            <button @onclick="() => Connect(context.User)">Connect this phone</button>
+            <button class="connect-action" type="button" @onclick="() => Connect(context.User)">Connect this phone</button>
         </Authorized>
         <NotAuthorized>
-            <a href="@LoginUrl("GitHub")">Sign in with GitHub</a>
-            <a href="@LoginUrl("Google")">Sign in with Google</a>
+            <a class="connect-provider" href="@LoginUrl("GitHub")">Sign in with GitHub</a>
+            <a class="connect-provider" href="@LoginUrl("Google")">Sign in with Google</a>
         </NotAuthorized>
     </AuthorizeView>
 }
+
+</section>
 
 @code {
     [SupplyParameterFromQuery] public string? Challenge { get; set; }
