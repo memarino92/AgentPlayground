@@ -172,3 +172,36 @@ test('warm Python uses the existing isolated VM, streams text, and skips empty a
     await assert.rejects(dispatch({ ...request, operation: 'scratch-cell' }, f.api));
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test('Python exports an artifact from a scratchpad with no staged inputs', async () => {
+  const f = fake();
+  const directory = await mkdtemp(join(tmpdir(), 'scratch-export-'));
+  try {
+    const bytes = Buffer.from('test archive');
+    const phases = [];
+    f.sandbox.exec = async command => {
+      if (command.startsWith('printf')) return { exitCode: 0, stdout: 'Saved chaos.gif', stderr: '' };
+      if (command === 'docker pause scratch' || command === 'docker unpause scratch') {
+        phases.push(command);
+        return { exitCode: 0 };
+      }
+      phases.push('pack');
+      assert.match(command, /\nmkdir -p \/job\n[\s\S]*> \/job\/export\.tar/);
+      return { exitCode: 0, stdout: String(bytes.length) };
+    };
+    f.sandbox.files.read = async path => {
+      assert.equal(path, '/job/export.tar');
+      phases.push('download');
+      return new Blob([bytes]).stream();
+    };
+
+    const artifactDestination = join(directory, 'cell.tar');
+    const result = await dispatch({ ...request, operation: 'scratch-cell', artifactDestination }, f.api);
+
+    assert.equal(result.status, 'Completed');
+    assert.equal(result.hasArtifacts, true);
+    assert.deepEqual(await readFile(artifactDestination), bytes);
+    assert.deepEqual(phases, ['docker pause scratch', 'pack', 'download', 'docker unpause scratch']);
+    assert.deepEqual(f.writes, []);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
