@@ -81,7 +81,7 @@ internal partial class PersonalAgentClient : IDisposable
     }
 
     public async Task<HistoryResponse> SendConversationMessageStreamingAsync(string Id, string ProfileId, string Message,
-        Func<string, Task> OnDelta, CancellationToken CancellationToken)
+        Func<string, Task> OnDelta, CancellationToken CancellationToken, Func<PersonalAgent.Contracts.ChatToolActivity, Task>? OnActivity = null)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
         deadline.CancelAfter(TimeSpan.FromMinutes(10));
@@ -90,7 +90,7 @@ internal partial class PersonalAgentClient : IDisposable
             JsonContent.Create(new { ProfileId, Message }, options: JsonOptions), CancellationToken, streamResponse: true);
         if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("send message", Response);
         await using var Content = await Response.Content.ReadAsStreamAsync(CancellationToken);
-        return await ConversationStream.ReadAsync<HistoryResponse>(Content, OnDelta, CancellationToken);
+        return await ConversationStream.ReadAsync<HistoryResponse, PersonalAgent.Contracts.ChatToolActivity>(Content, OnDelta, OnActivity, CancellationToken);
     }
 
     public async Task<PersonalAgent.Contracts.ChatCard> UpdateChatCardAsync(string Id, string ProfileId, long Sequence, string CardId, PersonalAgent.Contracts.ChatCardAction Action)

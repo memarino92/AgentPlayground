@@ -132,6 +132,7 @@ public partial class MainPage : ContentPage
                 try
                 {
                     var reply = new System.Text.StringBuilder();
+                    var calls = new Dictionary<Guid, PersonalAgent.Contracts.ChatToolActivity>();
                     var redraw = System.Diagnostics.Stopwatch.StartNew();
                     conversation = await _chat.SendAsync(id, message, delta =>
                     {
@@ -139,12 +140,18 @@ public partial class MainPage : ContentPage
                         if (redraw.ElapsedMilliseconds >= 150 || pending[^1].Content.Length == 0)
                         {
                             ChatStatus.Text = string.Empty;
-                            pending[^1] = new("assistant", reply.ToString());
+                            pending[^1] = pending[^1] with { Content = reply.ToString() };
                             Transcript.ScrollTo(pending.Count - 1, position: ScrollToPosition.End, animate: false);
                             redraw.Restart();
                         }
                         return Task.CompletedTask;
-                    }, turn.Token);
+                    }, turn.Token, activity =>
+                    {
+                        calls[activity.CallId] = activity;
+                        pending[^1] = pending[^1] with { Presentation = new() { Activity = [.. calls.Values] } };
+                        ChatStatus.Text = string.Empty;
+                        return Task.CompletedTask;
+                    });
                 }
                 finally { Transcript.ItemsSource = saved; }
             }

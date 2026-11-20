@@ -27,6 +27,15 @@ public partial class MainPage
             layout.Add(button);
         }
 
+        if (message.Presentation?.Activity is { Count: > 0 } activity)
+        {
+            var rows = new VerticalStackLayout { IsVisible = message.Sequence == 0 };
+            foreach (var call in activity) rows.Add(new Label { Text = $"{call.Label} · {call.Status}" });
+            var toggle = new Button { Text = $"View activity · {activity.Count}" };
+            toggle.Clicked += (_, _) => rows.IsVisible = !rows.IsVisible;
+            layout.Add(toggle);
+            layout.Add(rows);
+        }
         foreach (var link in EvidenceCitation.Parse(message.Content, _chat.Profile))
             if (link.ProfileId == _chat.Profile)
                 Action("Open recording evidence", () => Navigation.PushAsync(new WorkspacePage(_chat, "Recording evidence", link.UploadId, StartMs: link.StartMs)));

@@ -111,6 +111,60 @@ public sealed class ContinuousConversationTests : IClassFixture<PostgresVectorFi
     }
 
     [Fact]
+    public async Task SlowMultiToolTurn_ReportsEachInvocationBeforeItFinishes_AndPersistsActivity()
+    {
+        var store = await StoreAsync(false);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        var events = System.Threading.Channels.Channel.CreateUnbounded<ChatToolActivity>();
+        var access = new AgentAccessContext("owner", AgentRoles.Owner, "owner")
+        {
+            ToolActivity = (item, token) => events.Writer.WriteAsync(item, token)
+        };
+        var id = await store.EnsureConversationAsync(access, "synthetic-demo", timeout.Token);
+        var registry = new Mock<IAgentToolRegistry>();
+        string[] names = ["get_current_date_time", "list_scheduled_jobs"];
+        var gates = names.Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).ToArray();
+        registry.Setup(r => r.GetRegistrations()).Returns(names.Select((name, index) =>
+            new AgentToolRegistration(new(name, name, name, "Test", "Test read", true, true, false), "Test",
+                (_, _) => AIFunctionFactory.Create(async (CancellationToken token) =>
+                {
+                    await gates[index].Task.WaitAsync(token);
+                    return "private result";
+                }, name))).ToArray());
+        var permissions = new Mock<IToolAccessStore>();
+        permissions.Setup(s => s.GetRolePermissionsAsync(AgentRoles.Owner, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, bool>());
+        using var services = new ServiceCollection().AddLogging().AddSingleton(registry.Object)
+            .AddSingleton(permissions.Object).AddSingleton<ToolAccessService>().AddSingleton<AgentToolBinder>().BuildServiceProvider();
+        var options = Microsoft.Extensions.Options.Options.Create(new AgentMemoryOptions());
+        var embeddings = Mock.Of<IAgentEmbeddingService>();
+        var chat = new AgentChatService(Microsoft.Extensions.Options.Options.Create(new ApiKeyOptions()), Mock.Of<IChatModelCatalog>(),
+            services.GetRequiredService<ILoggerFactory>(), services, store,
+            new SemanticMemoryService(embeddings, store, options, NullLogger<SemanticMemoryService>.Instance),
+            services.GetRequiredService<AgentToolBinder>(), NullLogger<AgentChatService>.Instance, new PersonalAgent.Api.Development.SyntheticChatClient(),
+            conversationStore: store, contextBuilder: new(store, embeddings, options, NullLogger<ConversationContextBuilder>.Instance));
+        var turn = chat.SendMessageStreamingAsync(id.ToString(), access, "demo tool activity", (_, _) => ValueTask.CompletedTask, timeout.Token);
+        var expected = new List<ChatToolActivity>();
+        for (var i = 0; i < names.Length; i++)
+        {
+            var next = events.Reader.ReadAsync(timeout.Token).AsTask();
+            if (await Task.WhenAny(next, turn) == turn)
+                throw new InvalidOperationException($"Turn ended before {names[i]} started: {await turn}");
+            var started = await next;
+            started.Label.Should().Be(names[i]);
+            started.Status.Should().Be("Running");
+            turn.IsCompleted.Should().BeFalse();
+            gates[i].SetResult();
+            var completed = await events.Reader.ReadAsync(timeout.Token);
+            completed.Should().Be(started with { Status = "Completed" });
+            expected.Add(completed);
+        }
+        expected.Select(item => item.CallId).Should().OnlyHaveUniqueItems();
+        (await turn).Should().Be("Finished the two demo tool calls.");
+        (await store.GetSessionMessagesAsync(id))!.Last().Presentation!.Activity.Should().Equal(expected);
+    }
+
+    [Fact]
     public async Task AgentTurn_PersistsCards_ClearSurvivesServiceRecreation_AndRejectsOtherActors()
     {
         var Store = await StoreAsync(false);

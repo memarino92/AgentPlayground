@@ -59,6 +59,28 @@ internal sealed class SyntheticChatClient : IChatClient, IAgentChatClientFactory
 
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> Messages, ChatOptions? Options = null, [EnumeratorCancellation] CancellationToken CancellationToken = default)
     {
+        var turn = Messages.ToList();
+        var user = turn.FindLastIndex(message => message.Role == ChatRole.User);
+        if (user >= 0 && turn[user].Text.Trim().Equals("demo tool activity", StringComparison.OrdinalIgnoreCase))
+        {
+            var finished = turn.Skip(user + 1).SelectMany(message => message.Contents).OfType<FunctionResultContent>().Count();
+            // Space the model steps apart so the live activity can be inspected in the synthetic chat UI.
+            if (finished > 0) await Task.Delay(TimeSpan.FromSeconds(2), CancellationToken);
+            string[] names = ["get_current_date_time", "list_scheduled_jobs"];
+            if (finished < names.Length)
+            {
+                var arguments = new Dictionary<string, object?>();
+                if (names[finished] == "list_scheduled_jobs")
+                {
+                    arguments["status"] = null;
+                    arguments["before"] = null;
+                }
+                yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents =
+                    [new FunctionCallContent(Guid.NewGuid().ToString("N"), names[finished], arguments)] };
+            }
+            else yield return new ChatResponseUpdate(ChatRole.Assistant, "Finished the two demo tool calls.");
+            yield break;
+        }
         var Response = await GetResponseAsync(Messages, Options, CancellationToken);
         foreach (var Message in Response.Messages)
             yield return new ChatResponseUpdate { Role = Message.Role, Contents = Message.Contents };

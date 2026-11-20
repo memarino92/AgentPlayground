@@ -1,3 +1,5 @@
+using PersonalAgent.Contracts;
+
 namespace PersonalAgent.Web.Services;
 
 // Scoped to the signed-in Blazor circuit so navigation can reattach to an active turn.
@@ -20,7 +22,7 @@ internal sealed class ChatTurnTracker
         {
             try
             {
-                return await client.SendConversationMessageStreamingAsync(sessionId, profileId, message, turn.AppendAsync, turn.Cancellation.Token);
+                return await client.SendConversationMessageStreamingAsync(sessionId, profileId, message, turn.AppendAsync, turn.Cancellation.Token, turn.UpdateActivityAsync);
             }
             finally
             {
@@ -39,6 +41,15 @@ internal sealed class ChatTurn(string message)
     public CancellationTokenSource Cancellation { get; } = new();
     public Task<HistoryResponse> Completion { get; set; } = null!;
     public event Func<Task>? Changed;
+
+    private readonly Dictionary<Guid, ChatToolActivity> activity = [];
+    public ChatPresentation Presentation => new() { Activity = [.. activity.Values] };
+
+    public Task UpdateActivityAsync(ChatToolActivity item)
+    {
+        activity[item.CallId] = item;
+        return Changed?.Invoke() ?? Task.CompletedTask;
+    }
 
     public Task AppendAsync(string delta)
     {

@@ -13,7 +13,8 @@ internal sealed class LoggingAIFunction(
     string toolKey,
     AgentAccessContext access,
     ToolAccessService toolAccessService,
-    Func<CancellationToken, Task<bool>>? currentAuthorization = null) : AIFunction
+    Func<CancellationToken, Task<bool>>? currentAuthorization = null,
+    string? displayName = null) : AIFunction
 {
     public override string Name => innerFunction.Name;
     public override string Description => innerFunction.Description;
@@ -52,15 +53,19 @@ internal sealed class LoggingAIFunction(
             access.Role,
             access.SubjectProfileId);
 
+        var callId = Guid.NewGuid();
+        ValueTask ReportAsync(string status) => access.ToolActivity?.Invoke(
+            new(callId, displayName ?? Name, status), cancellationToken) ?? ValueTask.CompletedTask;
+        await ReportAsync("Running");
+        object? result;
         try
         {
-            var result = await innerFunction.InvokeAsync(arguments, cancellationToken);
+            result = await innerFunction.InvokeAsync(arguments, cancellationToken);
             logger.LogInformation(
                 "Tool {ToolName} from {ToolSource} completed in {ElapsedMilliseconds}ms",
                 Name,
                 source,
                 stopwatch.ElapsedMilliseconds);
-            return result;
         }
         catch (Exception ex)
         {
@@ -70,7 +75,10 @@ internal sealed class LoggingAIFunction(
                 Name,
                 source,
                 stopwatch.ElapsedMilliseconds);
+            await ReportAsync(ex is OperationCanceledException ? "Interrupted" : "Failed");
             throw;
         }
+        await ReportAsync("Completed");
+        return result;
     }
 }
