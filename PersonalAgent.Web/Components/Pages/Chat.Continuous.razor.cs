@@ -32,7 +32,15 @@ public partial class Chat
             isReadOnly = false;
             shouldScrollToBottom = true;
             SaveChatQuery();
-            if ((Turns.Find(sessionId) ?? pending.GetValueOrDefault(sessionId)) is { } turn) await ObserveTurnAsync(sessionId, turn);
+            var turn = Turns.Find(sessionId) ?? pending.GetValueOrDefault(sessionId);
+            if (turn is null && History.PendingRun is { } run)
+                turn = Turns.Start(sessionId, run.Message, ApiClient, profileId, run.Id);
+            if (turn is not null)
+            {
+                isLoadingHistory = false;
+                hasInitialized = true;
+                await ObserveTurnAsync(sessionId, turn);
+            }
         }
         finally { isLoadingHistory = false; }
     }

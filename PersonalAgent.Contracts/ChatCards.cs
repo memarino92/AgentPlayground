@@ -22,6 +22,8 @@ public sealed record ChatCard(string Id, string Kind, string Title)
 }
 
 public sealed record ChatCardAction(int Revision, string Action, string? Value = null);
+public sealed record PendingChatRun(Guid Id, string Message, long Baseline);
+
 public sealed record ChatToolActivity(Guid CallId, string Label, string Status);
 
 public sealed record ChatPresentation

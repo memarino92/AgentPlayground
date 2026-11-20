@@ -162,6 +162,8 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<ToolAccessService>();
         services.AddSingleton<ICoachAssignmentStore, PostgresCoachAssignmentStore>();
         services.AddSingleton<AgentChatService>();
+        services.AddSingleton<ChatRunStore>();
+        services.AddHostedService<ChatRunWorker>();
         services.AddSingleton<AgentService>();
         services.AddAutomations();
         services.AddHostedService<CoachCallSummaryBackfill>();

@@ -15,7 +15,10 @@ internal partial class AgentChatService
                     ? throw new PersonalAgent.Integrations.ChatGpt.ChatGptException("The selected ChatGPT model is unavailable for this account. Reconnect in Settings or select another model.")
                     : await _chatModelCatalog.GetDefaultModelAsync(Token));
         var Id = await _conversationStore!.EnsureConversationAsync(Access, Model.Id, Token);
-        return await ReadConversationAsync(Id, Access, Token) ?? throw new UnauthorizedAccessException();
+        var pending = _runs is null ? null : await _runs.LatestAsync(Id, Token);
+        var conversation = await ReadConversationAsync(Id, Access, Token) ?? throw new UnauthorizedAccessException();
+        return pending is not null && (conversation.Messages.LastOrDefault()?.Sequence ?? 0) <= pending.Baseline
+            ? conversation with { PendingRun = pending } : conversation;
     }
 
     public async Task<SessionConversation?> ReadConversationAsync(Guid Id, AgentAccessContext Access, CancellationToken Token)

@@ -73,6 +73,20 @@ internal class AgentMemorySchemaInitializer(IOptions<AgentMemoryOptions> options
                 last_message_at timestamptz NULL
             );
 
+            CREATE TABLE IF NOT EXISTS {schema}.chat_runs (
+                id uuid PRIMARY KEY, session_id uuid NOT NULL REFERENCES {sessionsTable}(session_id) ON DELETE CASCADE,
+                actor text NOT NULL, role text NOT NULL, subject text NOT NULL, email text, message text NOT NULL,
+                baseline bigint NOT NULL, state text NOT NULL DEFAULT 'queued', stop_requested boolean NOT NULL DEFAULT false,
+                created_at timestamptz NOT NULL DEFAULT now()
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_chat_runs_active ON {schema}.chat_runs(session_id)
+                WHERE state IN ('queued','running');
+            CREATE INDEX IF NOT EXISTS ix_chat_runs_session ON {schema}.chat_runs(session_id,created_at DESC);
+            CREATE TABLE IF NOT EXISTS {schema}.chat_run_events (
+                seq bigint GENERATED ALWAYS AS IDENTITY, run_id uuid NOT NULL REFERENCES {schema}.chat_runs(id) ON DELETE CASCADE,
+                frame text NOT NULL, PRIMARY KEY(run_id,seq)
+            );
+
             ALTER TABLE {sessionsTable} ADD COLUMN IF NOT EXISTS profile_id text;
             UPDATE {sessionsTable} SET profile_id = 'anonymous' WHERE profile_id IS NULL;
             ALTER TABLE {sessionsTable} ALTER COLUMN profile_id SET NOT NULL;

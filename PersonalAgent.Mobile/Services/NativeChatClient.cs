@@ -81,11 +81,19 @@ public sealed class NativeChatClient(HttpClient Http, PersonalAgentApiClient Set
         if (Output is not null) await response.Content.CopyToAsync(Output);
     }
 
+    public async Task StopAsync(Guid session, Guid run)
+    {
+        using var request = await CreateAsync($"/mobile/chat/{session}/runs/{run}/stop") ?? throw new InvalidOperationException("Sign in to continue.");
+        request.Content = JsonContent.Create(new { ProfileId = Profile });
+        using var response = await Http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<NativeConversation> SendAsync(Guid Id, string Message, Func<string, Task> OnDelta, CancellationToken Token,
-        Func<PersonalAgent.Contracts.ChatToolActivity, Task> OnActivity)
+        Func<PersonalAgent.Contracts.ChatToolActivity, Task> OnActivity, Guid RunId, bool ObserveOnly)
     {
         using var request = await CreateAsync($"/mobile/chat/{Id}/stream") ?? throw new InvalidOperationException("Sign in to continue.");
-        request.Content = JsonContent.Create(new { ProfileId = Profile, Message });
+        request.Content = JsonContent.Create(new { ProfileId = Profile, Message, RunId, ObserveOnly });
         using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, Token);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(Token);
@@ -121,7 +129,8 @@ public sealed class NativeChatClient(HttpClient Http, PersonalAgentApiClient Set
     }
 }
 
-public sealed record NativeConversation(Guid SessionId, List<NativeChatMessage> Messages);
+public sealed record NativeConversation(Guid SessionId, List<NativeChatMessage> Messages,
+    PersonalAgent.Contracts.PendingChatRun? PendingRun = null);
 public sealed record NativeChatMessage(string Role, string Content)
 {
     public long Sequence { get; init; }
