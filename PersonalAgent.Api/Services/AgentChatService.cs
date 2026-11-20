@@ -7,6 +7,7 @@ using PersonalAgent.Api.Models;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text;
+using PersonalAgent.Contracts;
 
 namespace PersonalAgent.Api.Services;
 
@@ -182,13 +183,33 @@ internal partial class AgentChatService
             if (!string.Equals(persistedSession.Role, access.Role, StringComparison.OrdinalIgnoreCase)) return null;
             if (sessionState.ScheduledTaskId is { } JobId && access.ScheduledTaskId != JobId)
                 throw new UnauthorizedAccessException("Scheduled job conversations are read-only.");
-            var tools = await _toolBinder.BindAsync(access with { SessionId = sessionId, ScratchOutput = OnDelta }, cancellationToken);
+            var activity = new Dictionary<Guid, ChatToolActivity>();
+            async ValueTask ReportAsync(ChatToolActivity item, CancellationToken token)
+            {
+                lock (activity) activity[item.CallId] = item;
+                if (access.ToolActivity is { } emit) await emit(item, token);
+            }
+            ChatPresentation Snapshot()
+            {
+                lock (activity) return new() { Activity = [.. activity.Values.Select(item =>
+                    item.Status == "Running" ? item with { Status = "Interrupted" } : item)] };
+            }
+
+            var tools = await _toolBinder.BindAsync(access with
+            {
+                SessionId = sessionId,
+                ScratchOutput = OnDelta,
+                ToolActivity = OnDelta is null ? null : ReportAsync
+            }, cancellationToken);
             // Scheduled runs keep their existing execution path. Routing is for interactive user turns only.
             var route = _requestRouter is not null && access.ScheduledTaskId is null
                 ? await _requestRouter.RouteAsync(message, tools, cancellationToken) : new PreChatRoute();
             if (route.Response is { } directResponse)
             {
-                var saved = await _sessionStore.SaveInteractionAsync(parsedSessionId, message, directResponse, persistedSession.SessionStateJson, CancellationToken.None);
+                var summary = Snapshot();
+                var saved = summary.Activity.Count > 0 && _conversationStore is not null
+                    ? await _conversationStore.SavePresentedInteractionAsync(parsedSessionId, message, directResponse, persistedSession.SessionStateJson, summary, CancellationToken.None)
+                    : await _sessionStore.SaveInteractionAsync(parsedSessionId, message, directResponse, persistedSession.SessionStateJson, CancellationToken.None);
                 if (saved && OnDelta is not null) await OnDelta(directResponse, cancellationToken);
                 return saved ? directResponse : null;
             }
@@ -240,12 +261,12 @@ internal partial class AgentChatService
                 {
                     Builder.Append("\n\n[Response interrupted. Check any scheduled jobs before repeating this request.]");
                     await _conversationStore.SavePresentedInteractionAsync(parsedSessionId, message, Builder.ToString().Trim(),
-                        persistedSession.SessionStateJson, new PersonalAgent.Contracts.ChatPresentation(), CancellationToken.None);
+                        persistedSession.SessionStateJson, Snapshot(), CancellationToken.None);
                     throw;
                 }
                 responseText = CoachEvidenceLinks.Normalize(Builder.ToString(), Results);
             }
-            var Presentation = new PersonalAgent.Contracts.ChatPresentation { Sources = Context?.Sources ?? [] };
+            var Presentation = Snapshot() with { Sources = Context?.Sources ?? [] };
             if (sessionState.IsContinuous)
             {
                 var Parsed = PersonalAgent.Contracts.ChatCardParser.Parse(responseText);

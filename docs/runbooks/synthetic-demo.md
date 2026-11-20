@@ -13,6 +13,7 @@ Open [the demo sign-in page](http://127.0.0.1:15000/login). API is bound to `127
 ## Walkthrough
 
 1. Choose **Demo owner**. Open the seeded conversation or start a new chat and ask, “What is my favorite exercise?” The deterministic reply recalls the deadlift fact from this account's stored vector memory.
+   Send `demo tool activity` as Demo owner to see two read-only tool calls appear in sequence. After the reply, expand **View activity** to inspect both calls.
 2. Open coach check-ins to inspect the seeded two-speaker review. Upload a small `.m4a` file to exercise the actual API -> Worker -> transcription gateway path. In demo mode the bytes always produce the same two-speaker example; no audio leaves the application.
 3. Assign speaker roles and inspect the resulting transcript. The existing Worker extraction/tagging pipeline and gateway embeddings run locally.
 4. Sign out and choose **Assigned coach**. This identity can see `demo-owner` data through the existing assignment checks. **Other owner** has a separate conversation and no assignment to that athlete.

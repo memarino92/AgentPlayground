@@ -12,7 +12,20 @@
             @if (msg.Role == "assistant")
             {
                 <div class="message-list__content">
-                    @if (IsSendingMessage && string.IsNullOrEmpty(msg.Content))
+                    @{ var live = IsSendingMessage && ReferenceEquals(msg, Messages[^1]); }
+                    @if (msg.Presentation?.Activity is { Count: > 0 } activity)
+                    {
+                        <details class="chat-activity" open="@live">
+                            <summary>View activity · @activity.Count</summary>
+                            <ul aria-live="polite">
+                                @foreach (var call in activity)
+                                {
+                                    <li @key="call.CallId">@call.Label · @(call.Status == "Running" && !live ? "Interrupted" : call.Status)</li>
+                                }
+                            </ul>
+                        </details>
+                    }
+                    @if (live && string.IsNullOrEmpty(msg.Content) && msg.Presentation?.Activity.Count is not > 0)
                     {
                         <p class="chat-thinking" role="status">Putting a response together…</p>
                     }

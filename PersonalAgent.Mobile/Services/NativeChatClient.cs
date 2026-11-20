@@ -81,14 +81,15 @@ public sealed class NativeChatClient(HttpClient Http, PersonalAgentApiClient Set
         if (Output is not null) await response.Content.CopyToAsync(Output);
     }
 
-    public async Task<NativeConversation> SendAsync(Guid Id, string Message, Func<string, Task> OnDelta, CancellationToken Token)
+    public async Task<NativeConversation> SendAsync(Guid Id, string Message, Func<string, Task> OnDelta, CancellationToken Token,
+        Func<PersonalAgent.Contracts.ChatToolActivity, Task> OnActivity)
     {
         using var request = await CreateAsync($"/mobile/chat/{Id}/stream") ?? throw new InvalidOperationException("Sign in to continue.");
         request.Content = JsonContent.Create(new { ProfileId = Profile, Message });
         using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, Token);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(Token);
-        return await PersonalAgent.Presentation.ConversationStream.ReadAsync<NativeConversation>(stream, OnDelta, Token);
+        return await PersonalAgent.Presentation.ConversationStream.ReadAsync<NativeConversation, PersonalAgent.Contracts.ChatToolActivity>(stream, OnDelta, OnActivity, Token);
     }
 
     public async Task<NativeConversation?> ReadAsync()

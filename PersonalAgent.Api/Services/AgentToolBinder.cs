@@ -29,7 +29,7 @@ internal sealed class AgentToolBinder(
                         var Current = Job?.Status == "Running"
                             ? await Services.GetRequiredService<ScheduledJobAuthorization>().ForExecutionAsync(Job, Token) : null;
                         return Current is not null && Current.Role == Access.Role;
-                    } : null)));
+                    } : null, registration.Descriptor.DisplayName)));
         }
         return tools.AsReadOnly();
     }

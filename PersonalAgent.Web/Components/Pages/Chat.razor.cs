@@ -147,7 +147,7 @@ public partial class Chat
     {
         activeTurn = turn;
         messages.Add(new ConversationMessage("user", turn.Message));
-        messages.Add(new ConversationMessage("assistant", turn.Reply));
+        messages.Add(new ConversationMessage("assistant", turn.Reply) { Presentation = turn.Presentation });
         shouldScrollToBottom = true;
         isSendingMessage = true;
         turn.Changed += RefreshTurnAsync;
@@ -177,7 +177,7 @@ public partial class Chat
     private Task RefreshTurnAsync()
     {
         if (activeTurn is null || messages.Count == 0 || messages[^1].Role != "assistant") return Task.CompletedTask;
-        messages[^1] = messages[^1] with { Content = activeTurn.Reply };
+        messages[^1] = messages[^1] with { Content = activeTurn.Reply, Presentation = activeTurn.Presentation };
         shouldScrollToBottom = true;
         return InvokeAsync(StateHasChanged);
     }

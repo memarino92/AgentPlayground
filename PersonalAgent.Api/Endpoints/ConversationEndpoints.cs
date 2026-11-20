@@ -67,15 +67,22 @@ internal static partial class PersonalAgentEndpoints
             if (await Chat.ReadConversationAsync(Id, Access, Token) is null) { Context.Response.StatusCode = StatusCodes.Status404NotFound; return; }
             Context.Response.ContentType = "application/x-ndjson";
             Context.Response.Headers.CacheControl = "no-store";
+            using var writer = new SemaphoreSlim(1);
             async ValueTask WriteAsync(object Value, CancellationToken CancellationToken)
             {
-                await JsonSerializer.SerializeAsync(Context.Response.Body, Value, JsonSerializerOptions.Web, CancellationToken);
-                await Context.Response.WriteAsync("\n", CancellationToken);
-                await Context.Response.Body.FlushAsync(CancellationToken);
+                await writer.WaitAsync(CancellationToken);
+                try
+                {
+                    await JsonSerializer.SerializeAsync(Context.Response.Body, Value, JsonSerializerOptions.Web, CancellationToken);
+                    await Context.Response.WriteAsync("\n", CancellationToken);
+                    await Context.Response.Body.FlushAsync(CancellationToken);
+                }
+                finally { writer.Release(); }
             }
             try
             {
                 await WriteAsync(new { Type = "started" }, Token);
+                Access = Access with { ToolActivity = (Activity, Ct) => WriteAsync(new { Type = "activity", Activity }, Ct) };
                 var Reply = await Chat.SendMessageStreamingAsync(Id.ToString(), Access, Request.Message,
                     (Delta, CancellationToken) => WriteAsync(new { Type = "delta", Delta }, CancellationToken), Token);
                 if (Reply is null) { await WriteAsync(new { Type = "error", Error = "Conversation was not found." }, Token); return; }

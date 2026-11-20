@@ -155,6 +155,41 @@ public sealed class ChatModelDiscoveryTests : TestContext
         handler.SendCount.Should().Be(1);
     }
 
+    [Fact]
+    public async Task SlowToolStream_RendersEachUpdateBeforeTheReply_AndCollapsesCompletedActivity()
+    {
+        var pipe = new System.IO.Pipelines.Pipe();
+        using var handler = new CatalogHandler { StreamBody = pipe.Reader.AsStream() };
+        Configure(handler);
+        var chat = RenderComponent<Chat>();
+        chat.WaitForElement("textarea").Input("Check the schedule");
+        chat.FindAll("button").Single(button => button.TextContent == "Send").Click();
+
+        async Task EmitAsync(object frame) => _ = await pipe.Writer.WriteAsync(
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(frame, JsonSerializerOptions.Web) + "\n"));
+        var first = new PersonalAgent.Contracts.ChatToolActivity(Guid.NewGuid(), "Read clock", "Running");
+        var second = new PersonalAgent.Contracts.ChatToolActivity(Guid.NewGuid(), "List jobs", "Running");
+        foreach (var call in new[] { first, second })
+        {
+            await EmitAsync(new { type = "activity", activity = call });
+            chat.WaitForAssertion(() => chat.Find("details[open]").TextContent.Should().Contain($"{call.Label} · Running"));
+            await EmitAsync(new { type = "activity", activity = call with { Status = "Completed" } });
+            chat.WaitForAssertion(() => chat.Find("details[open]").TextContent.Should().Contain($"{call.Label} · Completed"));
+        }
+        await EmitAsync(new { type = "delta", delta = "All done" });
+        chat.WaitForAssertion(() => chat.Markup.Should().Contain("All done"));
+        var reply = new ConversationMessage("assistant", "All done")
+        {
+            Presentation = new() { Activity = [first with { Status = "Completed" }, second with { Status = "Completed" }] }
+        };
+        await EmitAsync(new { type = "completed", conversation = new HistoryResponse(handler.ConversationId.ToString(),
+            "provider-default", [new("user", "Check the schedule"), reply]) });
+        await pipe.Writer.CompleteAsync();
+        chat.WaitForAssertion(() => chat.Find("details").HasAttribute("open").Should().BeFalse());
+        chat.FindAll("details li").Should().HaveCount(2);
+        chat.FindAll("[data-role=assistant]").Should().ContainSingle();
+    }
+
     private void Configure(CatalogHandler Handler)
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
@@ -177,6 +212,7 @@ public sealed class ChatModelDiscoveryTests : TestContext
         public string? ChangedModel;
         public bool FailMessage;
         public TaskCompletionSource? ReleaseSend;
+        public Stream? StreamBody;
         public int SendCount;
         public int CatalogReads { get; private set; }
         public int OpenCount { get; private set; }
@@ -231,6 +267,7 @@ public sealed class ChatModelDiscoveryTests : TestContext
             if (Request.Method == HttpMethod.Post && Request.RequestUri.AbsolutePath.EndsWith("/messages/stream"))
             {
                 SendCount++;
+                if (StreamBody is not null) return new(HttpStatusCode.OK) { Content = new StreamContent(StreamBody) };
                 if (ReleaseSend is not null) await ReleaseSend.Task.WaitAsync(CancellationToken);
                 if (FailMessage) return new(HttpStatusCode.InternalServerError);
                 var Payload = await Request.Content!.ReadFromJsonAsync<JsonElement>(CancellationToken);

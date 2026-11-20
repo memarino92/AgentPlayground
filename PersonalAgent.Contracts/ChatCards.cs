@@ -22,8 +22,11 @@ public sealed record ChatCard(string Id, string Kind, string Title)
 }
 
 public sealed record ChatCardAction(int Revision, string Action, string? Value = null);
+public sealed record ChatToolActivity(Guid CallId, string Label, string Status);
+
 public sealed record ChatPresentation
 {
+    public List<ChatToolActivity> Activity { get; init; } = [];
     public List<ChatCard> Cards { get; init; } = [];
     public List<ChatContextSource> Sources { get; init; } = [];
 }
