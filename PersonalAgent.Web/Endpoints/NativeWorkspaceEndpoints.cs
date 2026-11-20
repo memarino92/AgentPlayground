@@ -73,6 +73,9 @@ internal static class NativeWorkspaceEndpoints
         switch (Operation)
         {
             case "coding-jobs": return Results.Ok(await C.GetCodingJobsAsync(Profile, Token));
+            case "coding-questions": return Results.Ok(await C.GetCodingQuestionsAsync(Profile, null, Token));
+            case "coding-updates": return Results.Ok(await C.HasCodingMessagesAsync(Profile, R.Id, R.Sequence, Token));
+            case "answer-coding-question": await C.AnswerCodingQuestionAsync(Profile, R.Id, R.Value ?? "", Token); break;
             case "coding-job": return Results.Ok(await C.GetCodingJobAsync(Profile, R.Id, Token));
             case "cancel-coding": await C.CancelCodingJobAsync(Profile, R.Id, Token); break;
             case "coding-settings": return Results.Ok(await C.GetCodingSettingsAsync(Token));

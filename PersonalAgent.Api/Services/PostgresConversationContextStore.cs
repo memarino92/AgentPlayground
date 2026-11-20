@@ -20,12 +20,14 @@ internal partial class PostgresAgentSessionStore
             await using var Command = Connection.CreateCommand();
             Command.Transaction = Transaction;
             Command.CommandText = "SELECT pg_advisory_xact_lock(@key)";
-            Command.Parameters.AddWithValue("key", BitConverter.ToInt64(Id.ToByteArray()));
+            Command.Parameters.AddWithValue("key", ConversationLockKey(Id));
             await Command.ExecuteNonQueryAsync(Token);
             return new ConversationLock(Connection, Transaction);
         }
         catch { await Connection.DisposeAsync(); throw; }
     }
+
+    private static long ConversationLockKey(Guid Id) => BitConverter.ToInt64(Id.ToByteArray());
 
     public static Guid ConversationId(AgentAccessContext Access)
     {

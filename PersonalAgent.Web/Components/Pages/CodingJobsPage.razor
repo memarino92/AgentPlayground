@@ -14,6 +14,10 @@
             <button type="button" disabled="@Busy" @onclick="RefreshAsync">Refresh</button>
         </div>
     </header>
+    @if (!string.IsNullOrWhiteSpace(Profile))
+    {
+        <CodingQuestionsPanel Profile="@Profile" />
+    }
     @if (Error is not null) { <p class="job-error" role="alert">@Error</p> }
     @if (!Loaded) { <p class="page-state">Loading jobs…</p> }
     else if (Items.Count == 0) { <p class="page-state">No coding jobs yet. Ask chat to implement your first change.</p> }
@@ -24,7 +28,7 @@
             {
                 <article class="job-card" @key="Job.Id">
                     <header class="job-header">
-                        <span class="job-status" data-status="@Job.Status">@(Job.Status == "PrOpened" ? "PR opened" : Job.Status)</span>
+                        <span class="job-status" data-status="@Job.Status">@(Job.Status == "PrOpened" ? Job.PreviousJobId is null ? "PR opened" : "PR updated" : Job.Status)</span>
                         <time datetime="@Job.CreatedAt.ToString("O")">@Job.CreatedAt.ToUniversalTime().ToString("MMM d, yyyy · HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture)</time>
                     </header>
                     <h2>@(Job.Instruction.Length > 140 ? Job.Instruction[..140].TrimEnd() + "…" : Job.Instruction)</h2>

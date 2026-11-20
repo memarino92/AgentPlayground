@@ -5,8 +5,9 @@ import { loadCodingPreparationFiles } from './coding-preparation-files.mjs';
 
 test('coding preparation loads the repository Dockerfile and immutable workload before provisioning', async () => {
   const files = new Map(await loadCodingPreparationFiles());
-  assert.equal(files.size, 2);
-  assert.ok(files.get('Dockerfile.coding-sandbox').includes('opencode-ai@1.18.32'));
+  assert.equal(files.size, 3);
+  assert.ok(files.get('Dockerfile.coding-sandbox').includes('@opencode/cli@2.3.2'));
+  assert.ok(files.has('PersonalAgent.Worker/Railway/coding-questions.mjs'));
   assert.ok(files.get('PersonalAgent.Worker/Railway/workload.mjs').includes("phase === 'export'"));
 });
 
@@ -66,16 +67,19 @@ test('failed coding retains phase diagnostics even when no diff can be exported'
   assert.equal(result.artifact.checks.find(c => c.command === 'code').output, 'Model unavailable');
 });
 
-test('subscription model selection reaches the workload without account credentials', async () => {
+test('subscription and follow-up context reach the workload without account credentials', async () => {
   let written;
   const sandbox = { networkIsolation: 'ISOLATED', files: { write: async (_, value) => written = JSON.parse(value) }, exec: async command => {
     if (command.startsWith('docker info')) return { exitCode: 0, stdout: JSON.stringify({ MemoryLimit: true, SwapLimit: true, CpuCfsQuota: true, PidsLimit: true, SecurityOptions: ['name=seccomp,profile=builtin'] }) };
     if (command.endsWith(' export')) return { exitCode: 0, stdout: JSON.stringify({ baseSha: request.baseSha, files: [{ path: 'a.cs', content: 'hi' }] }) };
     return { exitCode: 0, stdout: '', stderr: '' };
   }};
-  await codingDispatch({ ...request, model: 'gpt-6-astra', responses: true }, { connect: async () => sandbox });
+  await codingDispatch({ ...request, model: 'gpt-6-astra', responses: true, canAsk: true, followUpEvidence: 'Failing validation' },
+    { connect: async () => sandbox });
   assert.equal(written.model, 'gpt-6-astra');
   assert.equal(written.responses, true);
+  assert.equal(written.canAsk, true);
+  assert.equal(written.followUpEvidence, 'Failing validation');
   assert.equal(written.token, undefined);
   assert.throws(() => validateRequest({ ...request, model: 'x;id' }));
 });

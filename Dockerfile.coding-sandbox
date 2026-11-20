@@ -1,14 +1,13 @@
 FROM node:24-bookworm-slim AS tools
-RUN npm install --global opencode-ai@1.18.32
+RUN npm install --global @opencode/cli@2.3.2
 
 FROM mcr.microsoft.com/dotnet/sdk:11.0.100
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates ripgrep \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=tools /usr/local/bin/node /usr/local/bin/node
-COPY --from=tools /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN ln -s /usr/local/lib/node_modules/opencode-ai/bin/opencode.exe /usr/local/bin/opencode \
-    && opencode --version
-COPY PersonalAgent.Worker/Railway/workload.mjs /opt/coding/workload.mjs
+COPY --from=tools /usr/local/lib/node_modules/@opencode/cli/bin/opencode.exe /usr/local/bin/opencode
+RUN opencode --version
+COPY PersonalAgent.Worker/Railway/workload.mjs PersonalAgent.Worker/Railway/coding-questions.mjs /opt/coding/
 WORKDIR /work
 ENTRYPOINT ["node", "/opt/coding/workload.mjs"]

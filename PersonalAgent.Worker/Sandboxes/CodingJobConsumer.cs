@@ -50,6 +50,7 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
                 operation = "coding-execute", token = Railway.Token, environmentId = Railway.Settings.EnvironmentId,
                 id = Job.SandboxId, imageId = Job.Settings.ImageId, repository = Job.Settings.Repository,
                 baseSha = Job.BaseSha, instruction = Job.Instruction, minutes = Job.Settings.MaxMinutes,
+                canAsk = Job.SessionId is not null, followUpEvidence = Job.FollowUpEvidence,
                 testProject = Job.Settings.TestProject, testFilter = Job.Settings.TestFilter,
                 model = CodingJobs.TrySubscriptionModel(Job.Settings.ModelId, out _, out var Slug) ? Slug : CodingJobs.Model,
                 responses = CodingJobs.IsSubscriptionModel(Job.Settings.ModelId),

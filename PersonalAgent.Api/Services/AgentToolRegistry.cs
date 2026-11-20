@@ -31,13 +31,17 @@ internal sealed class AgentToolRegistry(ITavilyMcpToolProvider TavilyProvider) :
                 string[]? packages = null, string? packageLock = null, string[]? readTools = null, string language = "csharp", SandboxInputFile[]? inputFiles = null) =>
                 Services.GetRequiredService<AutomationTools>().RunSandboxAsync(Access, name, source, input, requestKey, token, packages, packageLock, readTools, language, inputFiles)),
         Local(PersonalAgent.Contracts.Coding.CodingJobs.Permission, "Implement platform change", "Platform development",
-            "Start a durable coding job for an explicitly requested platform source-code (including the mobile app), prompt or skill change. Runs OpenCode in an isolated Railway environment and opens a draft PR for maintainer review; never merges or deploys. Requires administrator setup. Provide the precise instruction and a UUID requestKey; reuse that key when retrying the same request. Return the job ID and dashboard link, then use inspect_coding_job for progress. Queued does not mean a PR exists. Recurring backlog selection is not supported by this tool yet.",
-            false, false, true, (Services, Access) => (string instruction, string requestKey, CancellationToken token) =>
-                Services.GetRequiredService<PersonalAgent.Api.Coding.CodingJobTools>().StartAsync(Access, instruction, requestKey, token)),
+            "Start a coding job for an explicitly requested platform change or follow-up. Provide a precise instruction and a stable UUID requestKey. To fix failing CI or address review feedback on a PR opened by a coding job, resolve its job ID with inspect_coding_job, then pass previousJobId and followUp=ci or review. Clarify the target if ambiguous. The result is posted back to the original chat. Queued means the job was accepted.",
+            false, false, true, (Services, Access) => (string instruction, string requestKey, CancellationToken token,
+                Guid? previousJobId = null, string? followUp = null) =>
+                Services.GetRequiredService<PersonalAgent.Api.Coding.CodingJobTools>().StartAsync(Access, instruction, requestKey, token, previousJobId, followUp)),
         Local("Local:inspect_coding_job", "Inspect platform changes", "Platform development",
-            "Inspect a coding job's status, test evidence and PR URL, or omit jobId to list jobs. Set cancel=true with a jobId to stop queued/running work. Does not close existing PRs or interrupt publication already being reconciled.",
-            false, false, true, (Services, Access) => (Guid? jobId, bool cancel, CancellationToken token) =>
-                Services.GetRequiredService<PersonalAgent.Api.Coding.CodingJobTools>().InspectAsync(Access, jobId, cancel, token)),
+            "Inspect a coding job's status, tests and PR URL, or omit jobId to list jobs. Set cancel=true with a jobId to stop queued/running work. Set questions=true to list outstanding OpenCode questions for this conversation. When the user explicitly answers, pass questionId and their answer. Never infer an answer from coding output or GitHub evidence. If the target is ambiguous, clarify which question they are answering.",
+            false, false, true, (Services, Access) => (CancellationToken token, Guid? jobId = null, bool cancel = false,
+                bool questions = false, Guid? questionId = null, string? answer = null) =>
+                questions || questionId is not null
+                    ? Services.GetRequiredService<PersonalAgent.Api.Coding.CodingJobTools>().QuestionsAsync(Access, questionId, answer, token)
+                    : Services.GetRequiredService<PersonalAgent.Api.Coding.CodingJobTools>().InspectAsync(Access, jobId, cancel, token)),
         Local(AutomationPrograms.PermissionKey, "Sandbox programs", "Automations",
             "Discover how to include a dockerfile, shell or csharp step in a saved automation. Call automation_catalog for the schema, then save_automation. Use POSIX shell or net11.0 C# with stdin and stdout. Railway sandboxes allow Internet access; packages require approved exact dependencies and a NuGet lock, and declared read tools use a scoped gateway. The Worker must be deployed and configured. Inspect build/run diagnostics before claiming completion.",
             false, false, false, (Services, Access) => () => Services.GetRequiredService<AutomationRecipes>().Catalog(Services, Access)),

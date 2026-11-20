@@ -5,6 +5,7 @@ using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
 
+using PersonalAgent.Contracts.Coding;
 using PersonalAgent.Integrations;
 
 using PersonalAgent.Worker.Sandboxes;
@@ -73,6 +74,34 @@ public sealed class CodingJobStoreTests : IAsyncLifetime
         var List = await Store.ListAsync("owner", "owner", default);
         List.Should().ContainSingle(); List[0].Artifact.Should().BeNull();
         (await Store.GetAsync(Job.Id, default))!.Artifact!.Files[0].Content.Should().Be("private content");
+    }
+
+    [Fact]
+    public async Task CodingQuestionUsesTheOriginatingConversationAndStopsAcceptingAnswersAfterCancellation()
+    {
+        var Job = NewJob() with { SessionId = Guid.NewGuid() };
+        await Store.CreateAsync(Job, Guid.NewGuid().ToString(), default);
+        await Store.ClaimAsync(Job.Id, "cap", "secret", "env", default);
+        var Request = new AskCodingQuestion(Guid.NewGuid(), "Which database should this use?");
+        (await Store.AskAsync(Job.Id, "wrong", Request, default)).Should().BeNull();
+        var Question = await Store.AskAsync(Job.Id, "cap", Request, default);
+        Question!.SessionId.Should().Be(Job.SessionId!.Value);
+        (await Store.AskAsync(Job.Id, "cap", Request with { Id = Guid.NewGuid() }, default)).Should().BeNull();
+        (await Store.QuestionsAsync("owner", "owner", Guid.NewGuid(), false, default)).Should().BeEmpty();
+        (await Store.AnswerAsync(Request.Id, "other", "owner", null, "SQLite", default)).Should().BeFalse();
+        (await Store.AnswerAsync(Request.Id, "owner", "owner", Guid.NewGuid(), "SQLite", default)).Should().BeFalse();
+        (await Store.AnswerAsync(Request.Id, "owner", "owner", Job.SessionId, "PostgreSQL", default)).Should().BeTrue();
+        (await Store.AnswerAsync(Request.Id, "owner", "owner", Job.SessionId, "SQLite", default)).Should().BeFalse();
+        (await Store.AskAsync(Job.Id, "cap", Request, default))!.Answer.Should().Be("PostgreSQL");
+        (await Store.QuestionsAsync("owner", "owner", Job.SessionId, false, default)).Should().BeEmpty();
+        var Second = Request with { Id = Guid.NewGuid(), Text = "What version?" };
+        (await Store.AskAsync(Job.Id, "cap", Second, default)).Should().NotBeNull();
+        await Store.SaveAsync(Job with { Status = "Cancelled" }, "Running", default);
+        (await Store.AnswerAsync(Second.Id, "owner", "owner", Job.SessionId, "18", default)).Should().BeFalse();
+        (await Store.QuestionsAsync("owner", "owner", Job.SessionId, false, default)).Should().BeEmpty();
+        (await Store.UnpostedResultsAsync(default)).Should().ContainSingle().Which.Id.Should().Be(Job.Id);
+        await Store.MarkConversationPostAsync(Job.Id, false, default);
+        (await Store.UnpostedResultsAsync(default)).Should().BeEmpty();
     }
 
     [Fact]

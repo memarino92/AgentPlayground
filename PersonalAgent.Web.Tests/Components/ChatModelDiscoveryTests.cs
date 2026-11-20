@@ -237,6 +237,10 @@ public sealed class ChatModelDiscoveryTests : TestContext
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken CancellationToken)
         {
+            if (Request.RequestUri!.AbsolutePath == "/api/coding-jobs/questions")
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(Array.Empty<PersonalAgent.Contracts.Coding.CodingQuestion>()) };
+            if (Request.RequestUri.AbsolutePath == "/api/coding-jobs/conversation-updates")
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(false) };
             if (Request.RequestUri!.AbsolutePath == "/api/chatgpt/models")
             {
                 CatalogReads++;

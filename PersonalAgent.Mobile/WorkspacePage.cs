@@ -153,7 +153,28 @@ internal sealed partial class WorkspacePage : ContentPage
                 Details(execution);
                 break;
             case "Coding jobs":
+                Link("Outstanding questions");
                 await ListAsync("coding-jobs", "Coding job", "instruction"); break;
+            case "Outstanding questions":
+                var questions = (await Read("coding-questions"))!.AsArray();
+                if (questions.Count == 0) Label("No coding jobs are waiting for an answer.");
+                foreach (var question in questions)
+                {
+                    var questionId = IdOf(question);
+                    var prompt = Text(question, "text");
+                    Label(prompt, true);
+                    if (DateTimeOffset.TryParse(Text(question, "deadline"), out var deadline))
+                        Label($"Job deadline {deadline.ToLocalTime():g}");
+                    Link("Conversation history", IdOf(question, "sessionId"), "Open originating chat");
+                    Button("Answer question", async () =>
+                    {
+                        var answer = await DisplayPromptAsync("OpenCode question", prompt, "Send answer", "Cancel", maxLength: 4000);
+                        if (string.IsNullOrWhiteSpace(answer)) return;
+                        await _client.WorkspaceAsync("answer-coding-question", questionId, answer);
+                        await RenderAsync();
+                    });
+                }
+                break;
             case "Coding job":
                 var codingJob = await Read("coding-job"); Details(codingJob);
                 if (Uri.TryCreate(Text(codingJob, "pullRequestUrl"), UriKind.Absolute, out var pr) && pr.Scheme == "https")

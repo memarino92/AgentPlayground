@@ -172,14 +172,14 @@ internal partial class PersonalAgentClient : IDisposable
         return await JsonSerializer.DeserializeAsync<MessageResponse>(content, JsonOptions);
     }
 
-    public async Task<HistoryResponse?> GetHistoryAsync(string sessionId, string profileId, string? actorId = null, string role = "Owner")
+    public async Task<HistoryResponse?> GetHistoryAsync(string sessionId, string profileId, string? actorId = null, string role = "Owner", CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(HttpMethod.Get, $"/api/sessions/{sessionId}/messages?profileId={Uri.EscapeDataString(profileId)}&actorId={Uri.EscapeDataString(actorId ?? profileId)}&role={Uri.EscapeDataString(role)}");
+        using var response = await SendAsync(HttpMethod.Get, $"/api/sessions/{sessionId}/messages?profileId={Uri.EscapeDataString(profileId)}&actorId={Uri.EscapeDataString(actorId ?? profileId)}&role={Uri.EscapeDataString(role)}", cancellationToken: cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("load chat history", response);
 
-        var content = await response.Content.ReadAsStreamAsync();
-        return await JsonSerializer.DeserializeAsync<HistoryResponse>(content, JsonOptions);
+        await using var content = await response.Content.ReadAsStreamAsync(cancellationToken);
+        return await JsonSerializer.DeserializeAsync<HistoryResponse>(content, JsonOptions, cancellationToken);
     }
 
     public async Task<SessionPageResponse?> GetSessionsAsync(string profileId, DateTimeOffset? beforeActivityAt = null, Guid? beforeSessionId = null, int pageSize = DefaultPageSize, string? actorId = null, string role = "Owner")

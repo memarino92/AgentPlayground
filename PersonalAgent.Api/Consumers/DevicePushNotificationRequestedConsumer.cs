@@ -9,6 +9,7 @@ internal class DevicePushNotificationRequestedConsumer(IAgentApprovalStore appro
     public async Task Consume(ConsumeContext<DevicePushNotificationRequested> context)
     {
         var message = context.Message;
+        if (message.ExpiresAt is { } Expiry && Expiry <= DateTimeOffset.UtcNow) return;
         var tokens = await approvalStore.GetMobileDeviceTokensAsync(message.ProfileId, context.CancellationToken);
 
         var (sentCount, _) = await pushNotificationService.SendToDevicesAsync(

@@ -51,6 +51,14 @@ internal static class CodingJobEndpoints
             Results.Accepted(value: await Service.StartAsync(Access(C, profileId), Request, Token)));
         Group.MapGet("", async (HttpContext C, string profileId, [FromServices] CodingJobService Service, CancellationToken Token) =>
             Results.Ok(await Service.ListAsync(Access(C, profileId), Token)));
+        Group.MapGet("/questions", async (HttpContext C, string profileId, Guid? sessionId, [FromServices] CodingJobService Service, CancellationToken Token) =>
+            Results.Ok(await Service.QuestionsAsync(Access(C, profileId), sessionId, Token)));
+        Group.MapGet("/conversation-updates", async (HttpContext C, string profileId, Guid sessionId, long after,
+            [FromServices] PostgresAgentSessionStore Sessions, CancellationToken Token) =>
+            Results.Ok(await Sessions.HasCodingMessagesAsync(sessionId, Access(C, profileId).ActorId, profileId, after, Token)));
+        Group.MapPost("/questions/{id:guid}/answer", async (HttpContext C, string profileId, Guid id, AnswerCodingQuestion Request,
+            [FromServices] CodingJobService Service, CancellationToken Token) =>
+            Results.Ok(await Service.AnswerQuestionAsync(Access(C, profileId), id, Request.Answer, false, Token)));
         Group.MapGet("/{id:guid}", async (HttpContext C, string profileId, Guid id, [FromServices] CodingJobService Service, CancellationToken Token) =>
             Results.Ok(await Service.InspectAsync(Access(C, profileId), id, false, Token)));
         Group.MapPost("/{id:guid}/cancel", async (HttpContext C, string profileId, Guid id, [FromServices] CodingJobService Service, CancellationToken Token) =>
@@ -59,6 +67,21 @@ internal static class CodingJobEndpoints
 
     public static void MapCodingModelGateway(this WebApplication App)
     {
+        App.MapPost("/coding-runtime/{id:guid}/v1/question", async (Guid id, HttpContext Context,
+            [FromServices] CodingJobService Service, CancellationToken Token) =>
+        {
+            var Limit = Context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+            if (Limit is not null) Limit.MaxRequestBodySize = 16_384;
+            try
+            {
+                var Request = await Context.Request.ReadFromJsonAsync<AskCodingQuestion>(Token) ?? throw new ArgumentException();
+                var Question = await Service.AskQuestionAsync(id, Context.Request.Headers.Authorization.ToString(), Request, Token);
+                return Question is null ? Results.Conflict() : Results.Ok(new { Question.Answer });
+            }
+            catch (UnauthorizedAccessException) { return Results.StatusCode(403); }
+            catch (Exception E) when (E is ArgumentException or System.Text.Json.JsonException) { return Results.BadRequest(); }
+        }).RequireRateLimiting(PersonalAgentConstants.ApiRateLimiter);
+
         foreach (var Responses in new[] { false, true })
             App.MapPost("/coding-runtime/{id:guid}/v1/" + (Responses ? "responses" : "chat/completions"),
         async (Guid id, HttpContext Context, [FromServices] CodingModelGateway Gateway, CancellationToken Token) =>

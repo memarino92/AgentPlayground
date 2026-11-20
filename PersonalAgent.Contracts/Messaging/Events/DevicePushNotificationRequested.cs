@@ -4,6 +4,7 @@ public record DevicePushNotificationRequested
 {
     public required Guid NotificationId { get; init; }
     public required DateTimeOffset RequestedAt { get; init; }
+    public DateTimeOffset? ExpiresAt { get; init; }
     public required string ProfileId { get; init; }
     public required string NotificationType { get; init; }
     public required string Title { get; init; }

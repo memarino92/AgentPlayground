@@ -67,6 +67,8 @@ public partial class Chat
     private string? notice;
     private ChatTurn? activeTurn;
     private bool disposed;
+    private readonly CancellationTokenSource CodingUpdatesLifetime = new();
+    private Task? CodingUpdates;
 
     private bool isBusy => uploadingInput || !hasInitialized || isLoadingHistory || isSendingMessage || isCreatingSession || isChangingModel || isUpdatingCard;
 
@@ -77,6 +79,7 @@ public partial class Chat
             hasAttemptedRestore = true;
             NavigationManager.LocationChanged += HandleLocationChanged;
             await InitializeAsync();
+            if (!disposed && role == "Owner") CodingUpdates = RefreshCodingUpdatesAsync();
             StateHasChanged();
             return;
         }
@@ -366,12 +369,42 @@ public partial class Chat
         catch (Exception ex) { await DispatchExceptionAsync(ex); }
     }
 
-    public void Dispose()
+    private async Task RefreshCodingUpdatesAsync()
+    {
+        try
+        {
+            while (!disposed)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), CodingUpdatesLifetime.Token);
+                if (isBusy || !Guid.TryParse(sessionId, out var Session) || profileId is not { } Profile) continue;
+                var Identity = sessionId;
+                var Before = messages;
+                var After = Before.LastOrDefault()?.Sequence ?? 0;
+                try
+                {
+                    if (!await ApiClient.HasCodingMessagesAsync(Profile, Session, After, CodingUpdatesLifetime.Token) || disposed) continue;
+                    var History = await ApiClient.GetHistoryAsync(Identity!, Profile, actorId, role, CodingUpdatesLifetime.Token);
+                    if (disposed || isBusy || sessionId != Identity || messages != Before || History is null
+                        || (History.Messages.LastOrDefault()?.Sequence ?? 0) <= After) continue;
+                    messages = History.Messages;
+                    shouldScrollToBottom = true;
+                    StateHasChanged();
+                }
+                catch (Exception Error) when (Error is HttpRequestException or PersonalAgentApiException or System.Text.Json.JsonException) { }
+            }
+        }
+        catch (OperationCanceledException) when (disposed) { }
+    }
+
+    public async ValueTask DisposeAsync()
     {
         disposed = true;
+        await CodingUpdatesLifetime.CancelAsync();
         if (activeTurn is not null) activeTurn.Changed -= RefreshTurnAsync;
         activeTurn = null;
         NavigationManager.LocationChanged -= HandleLocationChanged;
+        if (CodingUpdates is not null) await CodingUpdates;
+        CodingUpdatesLifetime.Dispose();
     }
 
     private async Task LoadSessionsAsync(bool append = false)

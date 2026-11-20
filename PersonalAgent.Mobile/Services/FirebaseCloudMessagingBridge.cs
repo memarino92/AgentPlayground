@@ -66,6 +66,12 @@ public class FirebaseCloudMessagingBridge
 
     private void RouteApprovalNotification(FCMNotification notification, bool RequestReview = false)
     {
+        if (RequestReview && notification.Data is { } Data && Data.TryGetValue("codingQuestion", out var Question)
+            && Guid.TryParse(Question, out _))
+        {
+            _notificationRoutingService.RequestCodingQuestions();
+            return;
+        }
         var approval = ApprovalNotificationParser.Parse(notification.Data is null ? null : new Dictionary<string, string>(notification.Data));
         if (approval is not null) _notificationRoutingService.RoutePendingApproval(approval, RequestReview);
     }

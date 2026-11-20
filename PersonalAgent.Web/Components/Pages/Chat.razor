@@ -3,7 +3,7 @@
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @using Microsoft.AspNetCore.WebUtilities
 @using System.Security.Claims
-@implements IDisposable
+@implements IAsyncDisposable
 @inject ProtectedLocalStorage ModelStorage
 @inject ChatTurnTracker Turns
 @inject PersonalAgentClient ApiClient
@@ -62,6 +62,10 @@
                 <ChatMessageList Messages="messages" IsSendingMessage="isSendingMessage" ContainerId="@MessageListContainerId" ProfileId="@profileId"
                                  IsReadOnly="isReadOnly" IsUpdatingCard="isUpdatingCard" OnCardAction="HandleCardActionAsync" HighlightSequence="RequestedMessage" />
 
+                @if (role == "Owner" && profileId is not null && Guid.TryParse(sessionId, out var CodingSession))
+                {
+                    <CodingQuestionsPanel @key="CodingSession" Profile="@profileId" Session="CodingSession" />
+                }
                 @if (isReadOnly)
                 {
                     <MudText Typo="Typo.body2">You're viewing saved history. Return to your conversation to continue.</MudText>
