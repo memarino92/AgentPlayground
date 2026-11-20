@@ -182,9 +182,15 @@ public partial class Chat
         return InvokeAsync(StateHasChanged);
     }
 
-    private void StopResponse()
+    private async Task StopResponse()
     {
-        if (activeTurn is { Completion.IsCompleted: false } turn) turn.Cancellation.Cancel();
+        if (activeTurn is not { Completion.IsCompleted: false } turn || sessionId is null || profileId is null) return;
+        try
+        {
+            using var response = await ApiClient.StopChatRunAsync(sessionId, turn.Id, profileId, CancellationToken.None);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException) { errorMessage = "Could not confirm the stop request. Reopen chat to check the turn."; }
     }
 
     private Task ResetSelectionAsync()

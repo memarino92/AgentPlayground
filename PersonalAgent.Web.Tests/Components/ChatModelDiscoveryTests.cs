@@ -190,6 +190,18 @@ public sealed class ChatModelDiscoveryTests : TestContext
         chat.FindAll("[data-role=assistant]").Should().ContainSingle();
     }
 
+    [Fact]
+    public void FreshCircuit_AttachesToTheSavedRunUsingObservationOnly()
+    {
+        var run = new PersonalAgent.Contracts.PendingChatRun(Guid.NewGuid(), "Check the schedule", 0);
+        using var handler = new CatalogHandler { PendingRun = run };
+        Configure(handler);
+        var chat = RenderComponent<Chat>();
+        chat.WaitForAssertion(() => chat.Markup.Should().Contain("Synthetic reply"));
+        handler.ObservedRun.Should().Be(run.Id);
+        handler.SendCount.Should().Be(1);
+    }
+
     private void Configure(CatalogHandler Handler)
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
@@ -212,6 +224,8 @@ public sealed class ChatModelDiscoveryTests : TestContext
         public string? ChangedModel;
         public bool FailMessage;
         public TaskCompletionSource? ReleaseSend;
+        public PersonalAgent.Contracts.PendingChatRun? PendingRun;
+        public Guid? ObservedRun;
         public Stream? StreamBody;
         public int SendCount;
         public int CatalogReads { get; private set; }
@@ -242,7 +256,7 @@ public sealed class ChatModelDiscoveryTests : TestContext
             if (Request.RequestUri.AbsolutePath == "/api/conversation/open")
             {
                 OpenCount++;
-                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new HistoryResponse(ConversationId.ToString(), ChangedModel ?? "provider-default", Conversation)) };
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new HistoryResponse(ConversationId.ToString(), ChangedModel ?? "provider-default", Conversation, PendingRun: PendingRun)) };
             }
             if (Request.RequestUri.AbsolutePath.EndsWith("/clear"))
             {
@@ -271,6 +285,7 @@ public sealed class ChatModelDiscoveryTests : TestContext
                 if (ReleaseSend is not null) await ReleaseSend.Task.WaitAsync(CancellationToken);
                 if (FailMessage) return new(HttpStatusCode.InternalServerError);
                 var Payload = await Request.Content!.ReadFromJsonAsync<JsonElement>(CancellationToken);
+                if (Payload.TryGetProperty("observeOnly", out var observe) && observe.GetBoolean()) ObservedRun = Payload.GetProperty("runId").GetGuid();
                 Conversation.Add(new("user", Payload.GetProperty("message").GetString()!));
                 Conversation.Add(new("assistant", "Synthetic reply"));
                 var Completed = new { type = "completed", conversation = new HistoryResponse(

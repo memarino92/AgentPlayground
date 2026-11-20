@@ -24,6 +24,7 @@ internal partial class AgentChatService
     private readonly IAgentRequestRouter? _requestRouter;
     private readonly IConversationContextStore? _conversationStore;
     private readonly ConversationContextBuilder? _contextBuilder;
+    private readonly ChatRunStore? _runs;
     private readonly AgentSkillsProvider? _skillsProvider;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
 
@@ -40,7 +41,8 @@ internal partial class AgentChatService
         IAgentRequestRouter? requestRouter = null,
         IConversationContextStore? conversationStore = null,
         ConversationContextBuilder? contextBuilder = null,
-        AgentSkillsProvider? skillsProvider = null)
+        AgentSkillsProvider? skillsProvider = null,
+        ChatRunStore? runs = null)
     {
         _chatClients = chatClients ?? new OpenAiAgentChatClientFactory(apiKeyOptions);
         _chatModelCatalog = chatModelCatalog;
@@ -54,6 +56,7 @@ internal partial class AgentChatService
         _conversationStore = conversationStore;
         _contextBuilder = contextBuilder;
         _skillsProvider = skillsProvider;
+        _runs = runs;
     }
 
     public async Task<(string SessionId, string ModelId)> CreateSessionAsync(string profileId, string modelId)

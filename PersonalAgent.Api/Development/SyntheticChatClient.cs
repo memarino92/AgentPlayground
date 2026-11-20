@@ -65,7 +65,7 @@ internal sealed class SyntheticChatClient : IChatClient, IAgentChatClientFactory
         {
             var finished = turn.Skip(user + 1).SelectMany(message => message.Contents).OfType<FunctionResultContent>().Count();
             // Space the model steps apart so the live activity can be inspected in the synthetic chat UI.
-            if (finished > 0) await Task.Delay(TimeSpan.FromSeconds(2), CancellationToken);
+            if (finished > 0) await Task.Delay(TimeSpan.FromSeconds(5), CancellationToken);
             string[] names = ["get_current_date_time", "list_scheduled_jobs"];
             if (finished < names.Length)
             {

@@ -13,8 +13,13 @@ public partial class MainPage : ContentPage
     private readonly NativeChatClient _chat;
     private Guid? _conversation;
     private bool _chatBusy;
-    private CancellationTokenSource? _turn;
-    private void OnStopClicked(object? sender, EventArgs e) => _turn?.Cancel();
+    private Guid? _run;
+    private async void OnStopClicked(object? sender, EventArgs e)
+    {
+        if (_conversation is not { } session || _run is not { } run) return;
+        try { await _chat.StopAsync(session, run); }
+        catch (Exception) { ChatStatus.Text = "Could not confirm stop. Refresh to check the turn."; }
+    }
     private readonly FirebaseCloudMessagingBridge _firebaseBridge;
     private bool _isVisible;
     private Page VisiblePage => Navigation.ModalStack.LastOrDefault() is NavigationPage modal
@@ -116,11 +121,18 @@ public partial class MainPage : ContentPage
                 await _chat.SignInAsync();
                 Draft.Text = string.Empty;
             }
-            NativeConversation? conversation;
+            var conversation = message is null ? await _chat.ReadAsync() : null;
+            var pendingRun = conversation?.PendingRun;
+            if (pendingRun is not null)
+            {
+                ShowConversation(conversation);
+                message = pendingRun.Message;
+            }
             if (message is not null && _conversation is Guid id)
             {
-                using var turn = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-                _turn = turn;
+                var run = pendingRun?.Id ?? Guid.NewGuid();
+                _run = run;
+                using var turn = new CancellationTokenSource();
                 StopReply.IsVisible = true;
                 var saved = Transcript.ItemsSource;
                 var pending = new System.Collections.ObjectModel.ObservableCollection<NativeChatMessage>(
@@ -151,13 +163,13 @@ public partial class MainPage : ContentPage
                         pending[^1] = pending[^1] with { Presentation = new() { Activity = [.. calls.Values] } };
                         ChatStatus.Text = string.Empty;
                         return Task.CompletedTask;
-                    });
+                    }, run, pendingRun is not null);
                 }
                 finally { Transcript.ItemsSource = saved; }
             }
-            else conversation = await _chat.ReadAsync();
+
             ShowConversation(conversation);
-            if (message is not null && conversation is not null) Draft.Text = string.Empty;
+            if (message is not null && pendingRun is null && conversation is not null) Draft.Text = string.Empty;
         }
         catch (TaskCanceledException) { ChatStatus.Text = "Request interrupted. Refresh to check the conversation."; }
         catch (OperationCanceledException) { ChatStatus.Text = "Sign-in canceled."; }
@@ -167,7 +179,7 @@ public partial class MainPage : ContentPage
         }
         finally
         {
-            _turn = null;
+            _run = null;
             StopReply.IsVisible = false;
             _chatBusy = false;
             SignIn.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = true;

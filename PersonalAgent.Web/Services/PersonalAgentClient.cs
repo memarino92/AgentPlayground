@@ -60,12 +60,16 @@ internal partial class PersonalAgentClient : IDisposable
         return (await Response.Content.ReadFromJsonAsync<HistoryResponse>())!;
     }
 
-    internal Task<HttpResponseMessage> MobileStreamAsync(Guid Id, string ProfileId, string? Message, ClaimsPrincipal User, CancellationToken Token) =>
-        SendAsync(HttpMethod.Post, $"/api/conversation/{Id}/messages/stream", JsonContent.Create(new { ProfileId, Message }),
+    internal Task<HttpResponseMessage> MobileStreamAsync(Guid Id, string ProfileId, string? Message, ClaimsPrincipal User, CancellationToken Token, Guid? RunId, bool ObserveOnly) =>
+        SendAsync(HttpMethod.Post, $"/api/conversation/{Id}/messages/stream", JsonContent.Create(new { ProfileId, Message, RunId, ObserveOnly }),
             Token, requestUser: User, streamResponse: true);
 
     internal Task<HttpResponseMessage> OpenMobileConversationAsync(string ProfileId, ClaimsPrincipal User, CancellationToken Token) =>
         SendAsync(HttpMethod.Post, "/api/conversation/open", JsonContent.Create(new { ProfileId, ModelId = (string?)null }), Token, requestUser: User);
+
+    internal Task<HttpResponseMessage> StopChatRunAsync(string id, Guid run, string profile,
+        CancellationToken token, ClaimsPrincipal? user = null) => SendAsync(HttpMethod.Post, $"/api/conversation/{id}/runs/{run}/stop",
+            JsonContent.Create(new { profileId = profile }), token, requestUser: user);
 
     public async Task ClearConversationAsync(string Id, string ProfileId)
     {
@@ -81,13 +85,12 @@ internal partial class PersonalAgentClient : IDisposable
     }
 
     public async Task<HistoryResponse> SendConversationMessageStreamingAsync(string Id, string ProfileId, string Message,
-        Func<string, Task> OnDelta, CancellationToken CancellationToken, Func<PersonalAgent.Contracts.ChatToolActivity, Task>? OnActivity = null)
+        Func<string, Task> OnDelta, CancellationToken CancellationToken, Func<PersonalAgent.Contracts.ChatToolActivity, Task>? OnActivity = null,
+        Guid? RunId = null, bool ObserveOnly = false)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
-        deadline.CancelAfter(TimeSpan.FromMinutes(10));
-        CancellationToken = deadline.Token;
+
         using var Response = await SendAsync(HttpMethod.Post, $"/api/conversation/{Id}/messages/stream",
-            JsonContent.Create(new { ProfileId, Message }, options: JsonOptions), CancellationToken, streamResponse: true);
+            JsonContent.Create(new { ProfileId, Message, RunId, ObserveOnly }, options: JsonOptions), CancellationToken, streamResponse: true);
         if (!Response.IsSuccessStatusCode) throw await CreateRequestExceptionAsync("send message", Response);
         await using var Content = await Response.Content.ReadAsStreamAsync(CancellationToken);
         return await ConversationStream.ReadAsync<HistoryResponse, PersonalAgent.Contracts.ChatToolActivity>(Content, OnDelta, OnActivity, CancellationToken);
@@ -500,7 +503,7 @@ internal class PersonalAgentApiException(string operation, HttpStatusCode status
 public record SessionResponse(string SessionId, string ModelId, string Message);
 public record ModelCatalogResponse(List<AvailableChatModelResponse> Models);
 public record MessageResponse(string SessionId, string Response);
-public record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages, bool IsReadOnly = false);
+public record HistoryResponse(string SessionId, string ModelId, List<ConversationMessage> Messages, bool IsReadOnly = false, PersonalAgent.Contracts.PendingChatRun? PendingRun = null);
 public record SessionPageResponse(List<SessionListItem> Sessions, DateTimeOffset? NextBeforeActivityAt, Guid? NextBeforeSessionId, bool HasMore);
 public record SessionListItem(string SessionId, string Snippet, DateTimeOffset LastActivityAt, DateTimeOffset CreatedAt);
 public record ConversationMessage(string Role, string Content)

@@ -65,6 +65,21 @@ internal static partial class PersonalAgentEndpoints
             var Access = await ResolveAccessAsync(Context, Request.ProfileId, Assignments);
             if (Access is null) { Context.Response.StatusCode = StatusCodes.Status403Forbidden; return; }
             if (await Chat.ReadConversationAsync(Id, Access, Token) is null) { Context.Response.StatusCode = StatusCodes.Status404NotFound; return; }
+            if (Request.ObserveOnly && Request.RunId is null) { Context.Response.StatusCode = 400; return; }
+            if (Request.RunId is { } runId)
+            {
+                var runs = Context.RequestServices.GetRequiredService<ChatRunStore>();
+                if (Request.ObserveOnly)
+                {
+                    var run = await runs.FindAsync(runId, Token);
+                    if (run is null || run.Session != Id || !ChatRunStore.Matches(run, Access))
+                    { Context.Response.StatusCode = 404; return; }
+                }
+                else if (!await runs.SubmitAsync(Id, runId, Access, Request.Message, Token))
+                { Context.Response.StatusCode = 409; return; }
+                await ObserveRunAsync(Context, runs, Chat, Id, runId, Access, Token);
+                return;
+            }
             Context.Response.ContentType = "application/x-ndjson";
             Context.Response.Headers.CacheControl = "no-store";
             using var writer = new SemaphoreSlim(1);
@@ -91,6 +106,17 @@ internal static partial class PersonalAgentEndpoints
             catch (UnauthorizedAccessException) { await WriteAsync(new { Type = "error", Error = "Access was denied." }, Token); }
             catch (PersonalAgent.Integrations.ChatGpt.ChatGptException Exception) { await WriteAsync(new { Type = "error", Error = Exception.Message }, Token); }
         });
+        Group.MapPost("/{Id:guid}/runs/{RunId:guid}/stop", async (HttpContext Context, Guid Id, Guid RunId,
+            CreateSessionRequest Request, ICoachAssignmentStore Assignments, CancellationToken Token) =>
+        {
+            var access = await ResolveAccessAsync(Context, Request.ProfileId, Assignments);
+            if (access is null) return Results.StatusCode(403);
+            var runs = Context.RequestServices.GetRequiredService<ChatRunStore>();
+            var run = await runs.FindAsync(RunId, Token);
+            if (run is null || run.Session != Id || !ChatRunStore.Matches(run, access)) return Results.NotFound();
+            await runs.StopAsync(RunId, Token);
+            return Results.NoContent();
+        });
         Group.MapPost("/{Id:guid}/cards/{Sequence:long}/{CardId}", async (HttpContext Context, Guid Id, long Sequence, string CardId,
             UpdateChatCardRequest Request, AgentChatService Chat, ICoachAssignmentStore Assignments, CancellationToken Token) =>
         {
@@ -104,6 +130,35 @@ internal static partial class PersonalAgentEndpoints
             }
             catch (UnauthorizedAccessException) { return Results.StatusCode(403); }
         });
+    }
+
+    private static async Task ObserveRunAsync(HttpContext context, ChatRunStore runs, AgentChatService chat,
+        Guid session, Guid run, AgentAccessContext access, CancellationToken token)
+    {
+        context.Response.ContentType = "application/x-ndjson";
+        context.Response.Headers.CacheControl = "no-store";
+        await context.Response.WriteAsync("{\"type\":\"started\"}\n", token);
+        await context.Response.Body.FlushAsync(token);
+        long cursor = 0;
+        while (true)
+        {
+            var page = await runs.ReadAsync(run, cursor, token);
+            foreach (var (sequence, frame) in page.Events)
+            {
+                await context.Response.WriteAsync(frame + "\n", token);
+                cursor = sequence;
+            }
+            if (page.Events.Count > 0) await context.Response.Body.FlushAsync(token);
+            if (page.Events.Count == 128) continue;
+            if (page.State is not ("queued" or "running"))
+            {
+                var history = await chat.ReadConversationAsync(session, access, token);
+                var frame = JsonSerializer.Serialize(new { type = "completed", conversation = history }, JsonSerializerOptions.Web);
+                await context.Response.WriteAsync(frame + "\n", token);
+                return;
+            }
+            await Task.Delay(150, token);
+        }
     }
 
     internal record UpdateChatCardRequest(string ProfileId, ChatCardAction Action);

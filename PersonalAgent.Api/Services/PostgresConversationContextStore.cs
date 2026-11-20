@@ -36,6 +36,7 @@ internal partial class PostgresAgentSessionStore
     public async Task<Guid> EnsureConversationAsync(AgentAccessContext Access, string ModelId, CancellationToken Token)
     {
         var Id = ConversationId(Access);
+        if (await GetSessionAsync(Id, Token) is not null) return Id;
         await using var Guard = await LockConversationAsync(Id, Token);
         if (await GetSessionAsync(Id, Token) is null)
             await CreateSessionAsync(Id, Access, JsonSerializer.Serialize(new AgentSessionState(ModelId) { IsContinuous = true }), Token);

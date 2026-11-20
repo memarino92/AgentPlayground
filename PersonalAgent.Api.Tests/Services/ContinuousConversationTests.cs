@@ -19,11 +19,11 @@ public sealed class ContinuousConversationTests : IClassFixture<PostgresVectorFi
     private readonly PostgresVectorFixture Fixture;
     public ContinuousConversationTests(PostgresVectorFixture Fixture) => this.Fixture = Fixture;
 
-    private async Task<PostgresAgentSessionStore> StoreAsync(bool Semantic = true)
+    private async Task<PostgresAgentSessionStore> StoreAsync(bool Semantic = true, string? Schema = null)
     {
         var Options = Microsoft.Extensions.Options.Options.Create(new AgentMemoryOptions
         {
-            ConnectionString = Fixture.ConnectionString, Schema = "chat_" + Guid.NewGuid().ToString("N"),
+            ConnectionString = Fixture.ConnectionString, Schema = Schema ?? "chat_" + Guid.NewGuid().ToString("N"),
             EnableSemanticMemory = Semantic, VectorDimensions = 3
         });
         await new AgentMemorySchemaInitializer(Options, NullLogger<AgentMemorySchemaInitializer>.Instance).StartAsync(default);
@@ -113,21 +113,22 @@ public sealed class ContinuousConversationTests : IClassFixture<PostgresVectorFi
     [Fact]
     public async Task SlowMultiToolTurn_ReportsEachInvocationBeforeItFinishes_AndPersistsActivity()
     {
-        var store = await StoreAsync(false);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
-        var events = System.Threading.Channels.Channel.CreateUnbounded<ChatToolActivity>();
-        var access = new AgentAccessContext("owner", AgentRoles.Owner, "owner")
-        {
-            ToolActivity = (item, token) => events.Writer.WriteAsync(item, token)
-        };
+        var schema = "chat_" + Guid.NewGuid().ToString("N");
+        var store = await StoreAsync(false, schema);
+        var options = Options.Create(new AgentMemoryOptions { ConnectionString = Fixture.ConnectionString, Schema = schema });
+        await using var runs = new ChatRunStore(options);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        var access = new AgentAccessContext("owner", AgentRoles.Owner, "owner");
         var id = await store.EnsureConversationAsync(access, "synthetic-demo", timeout.Token);
         var registry = new Mock<IAgentToolRegistry>();
         string[] names = ["get_current_date_time", "list_scheduled_jobs"];
+        var invocations = new int[names.Length];
         var gates = names.Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).ToArray();
         registry.Setup(r => r.GetRegistrations()).Returns(names.Select((name, index) =>
             new AgentToolRegistration(new(name, name, name, "Test", "Test read", true, true, false), "Test",
                 (_, _) => AIFunctionFactory.Create(async (CancellationToken token) =>
                 {
+                    Interlocked.Increment(ref invocations[index]);
                     await gates[index].Task.WaitAsync(token);
                     return "private result";
                 }, name))).ToArray());
@@ -136,32 +137,96 @@ public sealed class ContinuousConversationTests : IClassFixture<PostgresVectorFi
             .ReturnsAsync(new Dictionary<string, bool>());
         using var services = new ServiceCollection().AddLogging().AddSingleton(registry.Object)
             .AddSingleton(permissions.Object).AddSingleton<ToolAccessService>().AddSingleton<AgentToolBinder>().BuildServiceProvider();
-        var options = Microsoft.Extensions.Options.Options.Create(new AgentMemoryOptions());
         var embeddings = Mock.Of<IAgentEmbeddingService>();
         var chat = new AgentChatService(Microsoft.Extensions.Options.Options.Create(new ApiKeyOptions()), Mock.Of<IChatModelCatalog>(),
             services.GetRequiredService<ILoggerFactory>(), services, store,
             new SemanticMemoryService(embeddings, store, options, NullLogger<SemanticMemoryService>.Instance),
             services.GetRequiredService<AgentToolBinder>(), NullLogger<AgentChatService>.Instance, new PersonalAgent.Api.Development.SyntheticChatClient(),
             conversationStore: store, contextBuilder: new(store, embeddings, options, NullLogger<ConversationContextBuilder>.Instance));
-        var turn = chat.SendMessageStreamingAsync(id.ToString(), access, "demo tool activity", (_, _) => ValueTask.CompletedTask, timeout.Token);
-        var expected = new List<ChatToolActivity>();
-        for (var i = 0; i < names.Length; i++)
+        var run = Guid.NewGuid();
+        const string message = "demo tool activity";
+        (await runs.SubmitAsync(id, run, access, message, timeout.Token)).Should().BeTrue();
+        ChatRunWorker Worker() => new(runs, chat, Mock.Of<ICoachAssignmentStore>(), store, store, NullLogger<ChatRunWorker>.Instance);
+        using var first = Worker();
+        using var second = Worker();
+        await first.StartAsync(timeout.Token);
+        await second.StartAsync(timeout.Token);
+        async Task<List<ChatToolActivity>> ReadUntilAsync(int count)
         {
-            var next = events.Reader.ReadAsync(timeout.Token).AsTask();
-            if (await Task.WhenAny(next, turn) == turn)
-                throw new InvalidOperationException($"Turn ended before {names[i]} started: {await turn}");
-            var started = await next;
-            started.Label.Should().Be(names[i]);
-            started.Status.Should().Be("Running");
-            turn.IsCompleted.Should().BeFalse();
-            gates[i].SetResult();
-            var completed = await events.Reader.ReadAsync(timeout.Token);
-            completed.Should().Be(started with { Status = "Completed" });
-            expected.Add(completed);
+            while (true)
+            {
+                var page = await runs.ReadAsync(run, 0, timeout.Token);
+                var activity = new List<ChatToolActivity>();
+                foreach (var (_, frame) in page.Events)
+                {
+                    using var json = JsonDocument.Parse(frame);
+                    if (json.RootElement.TryGetProperty("activity", out var item))
+                        activity.Add(item.Deserialize<ChatToolActivity>(JsonSerializerOptions.Web)!);
+                }
+                if (activity.Count >= count) return activity;
+                await Task.Delay(25, timeout.Token);
+            }
         }
-        expected.Select(item => item.CallId).Should().OnlyHaveUniqueItems();
-        (await turn).Should().Be("Finished the two demo tool calls.");
-        (await store.GetSessionMessagesAsync(id))!.Last().Presentation!.Activity.Should().Equal(expected);
+        try
+        {
+            (await ReadUntilAsync(1)).Single().Status.Should().Be("Running");
+            gates[0].SetResult();
+            var beforeRefresh = await ReadUntilAsync(2);
+            (await store.EnsureConversationAsync(access, "synthetic-demo", timeout.Token)).Should().Be(id);
+            (await runs.LatestAsync(id, timeout.Token))!.Id.Should().Be(run);
+            (await runs.SubmitAsync(id, run, access, message, timeout.Token)).Should().BeTrue();
+            (await runs.SubmitAsync(id, Guid.NewGuid(), access, message, timeout.Token)).Should().BeFalse();
+            var replay = await ReadUntilAsync(3);
+            replay.Take(2).Should().Equal(beforeRefresh);
+            replay[2].Should().BeEquivalentTo(new { Label = names[1], Status = "Running" });
+            gates[1].SetResult();
+            while ((await runs.FindAsync(run, timeout.Token))!.State != "completed") await Task.Delay(25, timeout.Token);
+            var saved = (await store.GetSessionMessagesAsync(id))!;
+            saved.Should().HaveCount(2);
+            saved.Last().Content.Should().Be("Finished the two demo tool calls.");
+            saved.Last().Presentation!.Activity.Select(call => call.Status).Should().Equal("Completed", "Completed");
+            (await runs.ReadAsync(run, 0, timeout.Token)).Events.Should().OnlyContain(row => row.Frame.Contains("activity"));
+            await VerifyAbandonedRunAsync(runs, store, new("other", AgentRoles.Owner, "other"), timeout.Token);
+            invocations.Should().Equal(1, 1);
+
+            var stopped = Guid.NewGuid();
+            await using (var held = await runs.TryLockAsync(stopped, timeout.Token))
+            {
+                await runs.SubmitAsync(id, stopped, access, message, timeout.Token);
+                await runs.StopAsync(stopped, timeout.Token);
+            }
+            while ((await runs.FindAsync(stopped, timeout.Token))!.State == "queued") await Task.Delay(25, timeout.Token);
+            (await runs.FindAsync(stopped, timeout.Token))!.State.Should().Be("stopped");
+            (await store.GetSessionMessagesAsync(id))!.Last().Content.Should().Contain("Response stopped");
+            invocations.Should().Equal(1, 1);
+        }
+        finally
+        {
+            await first.StopAsync(CancellationToken.None);
+            await second.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task VerifyAbandonedRunAsync(ChatRunStore runs, PostgresAgentSessionStore store,
+        AgentAccessContext access, CancellationToken token)
+    {
+        var id = await store.EnsureConversationAsync(access, "synthetic-demo", token);
+        var run = Guid.NewGuid();
+        var activity = new ChatToolActivity(Guid.NewGuid(), "Create reminder", "Running");
+        await using (var lostProcess = await runs.TryLockAsync(run, token))
+        {
+            lostProcess.Should().NotBeNull();
+            await runs.SubmitAsync(id, run, access, "demo tool activity", token);
+            (await runs.TryStartAsync(run, token)).Should().BeTrue();
+            (await runs.TryStartAsync(run, token)).Should().BeFalse();
+            await runs.AppendAsync(run, JsonSerializer.Serialize(new { type = "activity", activity }, JsonSerializerOptions.Web), token);
+        }
+        while ((await runs.FindAsync(run, token))!.State == "running") await Task.Delay(25, token);
+        (await runs.FindAsync(run, token))!.State.Should().Be("interrupted");
+        var history = (await store.GetSessionMessagesAsync(id))!;
+        history.Should().HaveCount(2);
+        history.Last().Content.Should().Contain("Check tool outcomes");
+        history.Last().Presentation!.Activity.Should().Equal(activity with { Status = "Interrupted" });
     }
 
     [Fact]
