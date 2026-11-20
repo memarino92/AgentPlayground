@@ -17,6 +17,8 @@ Pin OpenCode 2.3.2 and expose a local MCP tool inside the coding image. The tool
 
 An explicit CI or review follow-up starts a fresh job against the existing PR's current head. The publisher rechecks repository, branch, PR marker, and review policy and adds a fast-forward commit after the test gate. Existing jobs can be selected after rollout. GitHub feedback and check diagnostics are inputs to the coding process. They carry no authority to call platform tools or publish changes.
 
+The live phone notification proof passed coding and validation with an intentionally empty diff, which the original exporter treated as an error. An owner can now opt a job into a no-change result at submission. The trusted exporter records the empty diff and OpenCode summary. After all checks pass, the worker records a terminal completion and the conversation receives the result. A normal change job still requires a diff.
+
 ## Alternatives and consequences
 
 A persistent Cloud Agent could preserve a checkout and conversation across a long wait. The existing sandbox already preserves its process while the job runs, and users can continue against the same PR after it ends. Keeping this bounded runner avoids changing the publication and isolation model. Unanswered questions expire with the job and are removed from the outstanding list.

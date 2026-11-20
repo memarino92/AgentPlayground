@@ -94,9 +94,13 @@ try {
     testProject: 'PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj', testFilter: 'FullyQualifiedName~AgentSkillsTests',
     model: responses ? 'gpt-6-astra' : 'openai/gpt-5.4-mini', responses, canAsk: true }));
   if (repositoryBase) await docker([...common, image, 'prepare']);
+  const exportArgs = [...common, '--user=65532:65532', '--network=none', image, 'export'];
+  const clean = JSON.parse(await docker(exportArgs));
+  assert.equal(clean.baseSha, baseSha);
+  assert.deepEqual(clean.files, []);
   await docker([...common, '--user=65532:65532', image, 'code']);
   if (repositoryBase) await docker([...common, '--user=65532:65532', image, 'validate']);
-  const artifact = JSON.parse(await docker([...common, '--user=65532:65532', '--network=none', image, 'export']));
+  const artifact = JSON.parse(await docker(exportArgs));
   assert.ok(calls > 0); assert.ok(asked); assert.ok(questionPolls >= 2); assert.ok(edited);
   assert.equal(artifact.files.find(f => f.path === 'coding-proof.txt')?.content, 'Synthetic coding proof.\n');
   console.log(`OpenCode image proof passed: ${calls} synthetic requests, question round trip, tool edit and isolated artifact export${repositoryBase ? ', public clone and Linux test gate' : ''}.`);

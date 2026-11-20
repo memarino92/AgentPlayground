@@ -8,7 +8,7 @@ h1 { font-size: 1.8rem; font-weight: 700; margin: 0 0 .5rem; }
 .job-header { justify-content: space-between; }
 .job-status { padding: .3rem .65rem; border-radius: .4rem; background: var(--surface-muted); font-size: .78rem; font-weight: 700; }
 .job-status[data-status=Running], .job-status[data-status=Publishing] { background: light-dark(#e0f2fe, #203b50); color: var(--info-color); }
-.job-status[data-status=PrOpened] { background: var(--accent-soft); color: var(--success-color); }
+.job-status[data-status=PrOpened], .job-status[data-status=CompletedNoChanges] { background: var(--accent-soft); color: var(--success-color); }
 .job-status[data-status=Failed] { background: light-dark(#fff1ed, #422b2a); color: var(--error-color); }
 time, .job-repository, .job-budget { color: var(--text-secondary); font-size: .85rem; }
 h2 { margin: 1rem 0 .4rem; font-size: 1.15rem; font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }

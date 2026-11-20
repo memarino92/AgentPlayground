@@ -105,6 +105,21 @@ public sealed class CodingJobStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task VerifiedNoChangeJobPostsAResultAndOnlyRemainsPendingForCleanup()
+    {
+        var Job = NewJob() with { SessionId = Guid.NewGuid(), AllowNoChanges = true };
+        await Store.CreateAsync(Job, Guid.NewGuid().ToString(), default);
+        await Store.ClaimAsync(Job.Id, "cap", "secret", "env", default);
+        await Store.AttachSandboxAsync(Job.Id, "vm", default);
+        (await Store.SaveAsync(Job with { Status = CodingJobs.CompletedNoChanges }, "Running", default)).Should().BeTrue();
+        (await Store.UnpostedResultsAsync(default)).Should().ContainSingle().Which.Id.Should().Be(Job.Id);
+        CodingJobs.Terminal((await Store.GetAsync(Job.Id, default))!.Status).Should().BeTrue();
+        (await Store.PendingAsync(default)).Should().ContainSingle().Which.Id.Should().Be(Job.Id);
+        await Store.ClearLeaseAsync(Job.Id, default);
+        (await Store.PendingAsync(default)).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task FreshSettingsEncryptSecretsAndRejectStaleWrites()
     {
         using var Rsa = RSA.Create(2048); var Pem = Rsa.ExportRSAPrivateKeyPem();

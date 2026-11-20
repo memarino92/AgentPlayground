@@ -1,6 +1,7 @@
 using MassTransit;
 
 using PersonalAgent.Api.Services;
+using PersonalAgent.Contracts.Coding;
 using PersonalAgent.Contracts.Messaging.Events;
 using PersonalAgent.Integrations;
 
@@ -54,9 +55,9 @@ internal sealed class CodingConversation(CodingJobStore Store, PostgresAgentSess
         foreach (var Job in await Store.UnpostedResultsAsync(Token))
         {
             if (Job.SessionId is not { } Session) continue;
-            var State = Job.Status == "PrOpened" ? Job.RootJobId is null ? "Draft PR opened" : "Pull request updated" : Job.Status;
+            var State = CodingJobs.StatusLabel(Job.Status, Job.RootJobId is not null);
             var Checks = Job.Artifact?.Checks.Select(Check => $"- `{Check.Command.Replace("`", "")}` (exit {Check.ExitCode})") ?? [];
-            var Summary = Job.Status == "PrOpened" && Job.Artifact?.Summary is { } Report
+            var Summary = Job.Status is "PrOpened" or CodingJobs.CompletedNoChanges && Job.Artifact?.Summary is { } Report
                 ? Quote(Report[..Math.Min(Report.Length, 600)]) : "";
             var Text = $"""
                 **Coding job: {State}**

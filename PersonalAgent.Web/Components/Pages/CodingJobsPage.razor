@@ -28,7 +28,7 @@
             {
                 <article class="job-card" @key="Job.Id">
                     <header class="job-header">
-                        <span class="job-status" data-status="@Job.Status">@(Job.Status == "PrOpened" ? Job.PreviousJobId is null ? "PR opened" : "PR updated" : Job.Status)</span>
+                        <span class="job-status" data-status="@Job.Status">@Job.DisplayStatus</span>
                         <time datetime="@Job.CreatedAt.ToString("O")">@Job.CreatedAt.ToUniversalTime().ToString("MMM d, yyyy · HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture)</time>
                     </header>
                     <h2>@(Job.Instruction.Length > 140 ? Job.Instruction[..140].TrimEnd() + "…" : Job.Instruction)</h2>
@@ -51,7 +51,7 @@
                         <div class="job-actions">
                             @if (Job.PullRequestUrl is { } Url) { <a class="review-link" href="@Url" target="_blank" rel="noopener noreferrer">Review pull request ↗</a> }
                             <button type="button" disabled="@Busy" @onclick="() => LoadArtifactAsync(Job.Id)">Load validation and files</button>
-                            @if (!PersonalAgent.Contracts.Coding.CodingJobs.Terminal(Job.Status) && Job.Status != "Publishing")
+                            @if (Job.CanCancel)
                             { <button class="cancel-button" type="button" disabled="@Busy" @onclick="() => CancelAsync(Job.Id)">Cancel job</button> }
                         </div>
                     </footer>

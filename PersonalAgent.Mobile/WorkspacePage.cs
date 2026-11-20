@@ -154,7 +154,11 @@ internal sealed partial class WorkspacePage : ContentPage
                 break;
             case "Coding jobs":
                 Link("Outstanding questions");
-                await ListAsync("coding-jobs", "Coding job", "instruction"); break;
+                var codingJobs = (await Read("coding-jobs"))!.AsArray();
+                foreach (var item in codingJobs)
+                    Link("Coding job", IdOf(item), $"{Text(item, "instruction")} · {item?["displayStatus"]?.ToString() ?? Text(item, "status")}");
+                if (codingJobs.Count == 0) Label("No coding jobs.");
+                break;
             case "Outstanding questions":
                 var questions = (await Read("coding-questions"))!.AsArray();
                 if (questions.Count == 0) Label("No coding jobs are waiting for an answer.");
@@ -176,10 +180,19 @@ internal sealed partial class WorkspacePage : ContentPage
                 }
                 break;
             case "Coding job":
-                var codingJob = await Read("coding-job"); Details(codingJob);
+                var codingJob = await Read("coding-job");
+                var codingStatus = Text(codingJob, "status");
+                if (codingJob is JsonObject codingDetails && codingJob["displayStatus"]?.ToString() is { } label)
+                {
+                    codingDetails["status"] = label;
+                    codingDetails.Remove("displayStatus");
+                }
+                var canCancel = codingJob?["canCancel"]?.GetValue<bool>() ?? codingStatus is not ("PrOpened" or "Failed" or "Cancelled" or "Publishing");
+                (codingJob as JsonObject)?.Remove("canCancel");
+                Details(codingJob);
                 if (Uri.TryCreate(Text(codingJob, "pullRequestUrl"), UriKind.Absolute, out var pr) && pr.Scheme == "https")
                     Button("Review pull request", () => Browser.Default.OpenAsync(pr, BrowserLaunchMode.SystemPreferred));
-                if (Text(codingJob, "status") is not ("PrOpened" or "Failed" or "Cancelled" or "Publishing")) Button("Cancel job", () => Change("cancel-coding"));
+                if (canCancel) Button("Cancel job", () => Change("cancel-coding"));
                 break;
             case "Coach recordings":
                 if (_client.IsOwner) Button("Upload recording", () => TransferAsync("upload"));
