@@ -1,5 +1,9 @@
+using System.Collections.ObjectModel;
+using System.Text;
+
 using Microsoft.Maui.Controls.Shapes;
 
+using PersonalAgent.Contracts;
 using PersonalAgent.Mobile.Models;
 using PersonalAgent.Mobile.Services;
 using PersonalAgent.Mobile.ViewModels;
@@ -8,9 +12,12 @@ namespace PersonalAgent.Mobile;
 
 public partial class MainPage : ContentPage
 {
+    private const string WaitingForReply = "Waiting for a reply…";
     private readonly MainViewModel _viewModel;
     private readonly NotificationRoutingService _notificationRoutingService;
     private readonly NativeChatClient _chat;
+    private ObservableCollection<NativeChatMessage> _messages = [];
+    private bool _followTranscript = true;
     private Guid? _conversation;
     private bool _chatBusy;
     private Guid? _run;
@@ -75,7 +82,7 @@ public partial class MainPage : ContentPage
 
     private async Task OpenSettingsAsync()
     {
-        var page = new ContentPage { Title = "Settings", BindingContext = _viewModel, Content = BuildContent() };
+        var page = new ContentPage { Title = "Settings", SafeAreaEdges = SafeAreaEdges.All, BindingContext = _viewModel, Content = BuildContent() };
         var done = new ToolbarItem { Text = "Done" };
         done.Clicked += async (_, _) => await Navigation.PopModalAsync();
         page.ToolbarItems.Add(done);
@@ -96,24 +103,102 @@ public partial class MainPage : ContentPage
         ShowConversation(null);
     }
 
-    private void ShowConversation(NativeConversation? conversation)
+    private void ShowConversation(NativeConversation? conversation, bool preservePosition = false)
     {
+        var messages = conversation?.Messages ?? [];
+        if (!preservePosition || _conversation != conversation?.SessionId)
+        {
+            _followTranscript = true;
+            _messages = new(messages);
+            Transcript.ItemsSource = _messages;
+        }
+        else
+        {
+            for (var index = 0; index < messages.Count; index++)
+            {
+                var message = messages[index];
+                if (index == _messages.Count) _messages.Add(message);
+                else if (_messages[index] != message) _messages[index] = message;
+            }
+            while (_messages.Count > messages.Count) _messages.RemoveAt(_messages.Count - 1);
+        }
+
         _conversation = conversation?.SessionId;
-        Transcript.ItemsSource = conversation?.Messages;
         Composer.IsVisible = conversation is not null;
         SignIn.IsVisible = conversation is null;
         ChatStatus.Text = conversation is null ? "Sign in to open your conversation." :
             conversation.Messages.Count == 0 ? "Start your conversation." : string.Empty;
-        if (conversation?.Messages.Count > 0)
-            Transcript.ScrollTo(conversation.Messages[^1], position: ScrollToPosition.End, animate: false);
+        RequestTranscriptFollow();
+    }
+
+    private void OnPendingActivityClicked(object? sender, EventArgs e) =>
+        PendingActivity.IsVisible = !PendingActivity.IsVisible;
+
+    private async Task<NativeConversation> StreamReplyAsync(Guid session, string message, PendingChatRun? pendingRun)
+    {
+        var run = pendingRun?.Id ?? Guid.NewGuid();
+        _run = run;
+        _followTranscript = true;
+        StopReply.IsVisible = true;
+        PendingMessage.Text = message;
+        PendingTurn.IsVisible = true;
+        RequestTranscriptFollow();
+
+        var reply = new StringBuilder();
+        var renderedLength = 0;
+        var calls = new Dictionary<Guid, ChatToolActivity>();
+        var activityChanged = false;
+        var timer = Dispatcher.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(66);
+        timer.Tick += (_, _) =>
+        {
+            if (reply.Length != renderedLength || activityChanged) RequestTranscriptFollow();
+            if ((reply.Length != renderedLength || activityChanged) && ChatStatus.Text == WaitingForReply)
+                ChatStatus.Text = string.Empty;
+            if (reply.Length != renderedLength)
+            {
+                PendingReply.Text = reply.ToString();
+                renderedLength = reply.Length;
+            }
+            if (activityChanged)
+            {
+                if (!PendingActivityToggle.IsVisible) PendingActivity.IsVisible = true;
+                PendingActivityToggle.Text = $"View activity · {calls.Count}";
+                PendingActivityToggle.IsVisible = true;
+                PendingActivity.Text = string.Join("\n", calls.Values.Select(call => $"{call.Label} · {call.Status}"));
+                activityChanged = false;
+            }
+        };
+        timer.Start();
+        try
+        {
+            return await _chat.SendAsync(session, message, delta =>
+            {
+                reply.Append(delta);
+                return Task.CompletedTask;
+            }, CancellationToken.None, activity =>
+            {
+                calls[activity.CallId] = activity;
+                activityChanged = true;
+                return Task.CompletedTask;
+            }, run, pendingRun is not null);
+        }
+        finally
+        {
+            timer.Stop();
+            PendingTurn.IsVisible = PendingActivityToggle.IsVisible = PendingActivity.IsVisible = false;
+            PendingMessage.Text = PendingReply.Text = PendingActivity.Text = string.Empty;
+            RequestTranscriptFollow();
+        }
     }
 
     private async Task LoadChatAsync(bool signIn = false, string? message = null)
     {
         if (_chatBusy) return;
         _chatBusy = true;
+        if (message is not null) Draft.Unfocus();
         SignIn.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = false;
-        ChatStatus.Text = message is null ? "Opening conversation…" : "Waiting for a reply…";
+        ChatStatus.Text = message is null ? "Opening conversation…" : WaitingForReply;
         try
         {
             if (signIn)
@@ -127,48 +212,12 @@ public partial class MainPage : ContentPage
             {
                 ShowConversation(conversation);
                 message = pendingRun.Message;
+                ChatStatus.Text = WaitingForReply;
             }
             if (message is not null && _conversation is Guid id)
-            {
-                var run = pendingRun?.Id ?? Guid.NewGuid();
-                _run = run;
-                using var turn = new CancellationTokenSource();
-                StopReply.IsVisible = true;
-                var saved = Transcript.ItemsSource;
-                var pending = new System.Collections.ObjectModel.ObservableCollection<NativeChatMessage>(
-                    saved as IEnumerable<NativeChatMessage> ?? []);
-                pending.Add(new("user", message));
-                pending.Add(new("assistant", string.Empty));
-                Transcript.ItemsSource = pending;
-                Transcript.ScrollTo(pending.Count - 1, position: ScrollToPosition.End, animate: false);
-                try
-                {
-                    var reply = new System.Text.StringBuilder();
-                    var calls = new Dictionary<Guid, PersonalAgent.Contracts.ChatToolActivity>();
-                    var redraw = System.Diagnostics.Stopwatch.StartNew();
-                    conversation = await _chat.SendAsync(id, message, delta =>
-                    {
-                        reply.Append(delta);
-                        if (redraw.ElapsedMilliseconds >= 150 || pending[^1].Content.Length == 0)
-                        {
-                            ChatStatus.Text = string.Empty;
-                            pending[^1] = pending[^1] with { Content = reply.ToString() };
-                            Transcript.ScrollTo(pending.Count - 1, position: ScrollToPosition.End, animate: false);
-                            redraw.Restart();
-                        }
-                        return Task.CompletedTask;
-                    }, turn.Token, activity =>
-                    {
-                        calls[activity.CallId] = activity;
-                        pending[^1] = pending[^1] with { Presentation = new() { Activity = [.. calls.Values] } };
-                        ChatStatus.Text = string.Empty;
-                        return Task.CompletedTask;
-                    }, run, pendingRun is not null);
-                }
-                finally { Transcript.ItemsSource = saved; }
-            }
+                conversation = await StreamReplyAsync(id, message, pendingRun);
 
-            ShowConversation(conversation);
+            ShowConversation(conversation, preservePosition: message is not null);
             if (message is not null && pendingRun is null && conversation is not null) Draft.Text = string.Empty;
         }
         catch (TaskCanceledException) { ChatStatus.Text = "Request interrupted. Refresh to check the conversation."; }

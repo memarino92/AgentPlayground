@@ -20,7 +20,8 @@
                    TextColor="{AppThemeBinding Light=#425D58, Dark=#B5CEC6}" />
             <Button x:Name="StopReply" Grid.Column="1" Text="Stop" IsVisible="False" Clicked="OnStopClicked" />
         </Grid>
-        <CollectionView x:Name="Transcript" Grid.Row="1" SelectionMode="None" Margin="16,0">
+        <CollectionView x:Name="Transcript" Grid.Row="1" SelectionMode="None" Margin="16,0"
+                        Loaded="OnTranscriptLoaded" Unloaded="OnTranscriptUnloaded" SizeChanged="OnTranscriptSizeChanged">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="chat:NativeChatMessage">
                     <Border StrokeThickness="0" StrokeShape="RoundRectangle 16" BackgroundColor="Transparent"
@@ -43,6 +44,28 @@
                     </Border>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
+            <CollectionView.Footer>
+                <VerticalStackLayout>
+                    <VerticalStackLayout x:Name="PendingTurn" IsVisible="False" Spacing="5" Padding="0,14">
+                        <Border StrokeThickness="0" StrokeShape="RoundRectangle 16" Padding="14,11" Margin="36,0,0,12"
+                                HorizontalOptions="End" BackgroundColor="{AppThemeBinding Light=#DCEFE8, Dark=#23433D}">
+                            <VerticalStackLayout Spacing="5">
+                                <Label Text="You" FontFamily="OpenSansSemibold" FontSize="13"
+                                       TextColor="{AppThemeBinding Light=#30645A, Dark=#A4D9C8}" />
+                                <Label x:Name="PendingMessage" FontSize="16" LineHeight="1.16"
+                                       TextColor="{AppThemeBinding Light=#162C29, Dark=#E9F2EE}" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Label Text="PersonalAgent" FontFamily="OpenSansSemibold" FontSize="13"
+                               TextColor="{AppThemeBinding Light=#30645A, Dark=#A4D9C8}" />
+                        <Label x:Name="PendingReply" FontSize="16" LineHeight="1.16"
+                               TextColor="{AppThemeBinding Light=#162C29, Dark=#E9F2EE}" />
+                        <Button x:Name="PendingActivityToggle" IsVisible="False" Clicked="OnPendingActivityClicked" />
+                        <Label x:Name="PendingActivity" IsVisible="False"
+                               TextColor="{AppThemeBinding Light=#162C29, Dark=#E9F2EE}" />
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </CollectionView.Footer>
         </CollectionView>
         <Grid Grid.Row="2" Padding="12,8,12,12">
             <Button x:Name="SignIn" Text="Sign in" Style="{StaticResource PrimaryButtonStyle}" Clicked="OnSignInClicked" />

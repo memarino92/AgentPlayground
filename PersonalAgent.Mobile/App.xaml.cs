@@ -1,3 +1,6 @@
+using AndroidApplication = Microsoft.Maui.Controls.PlatformConfiguration.AndroidSpecific.Application;
+using WindowSoftInputModeAdjust = Microsoft.Maui.Controls.PlatformConfiguration.AndroidSpecific.WindowSoftInputModeAdjust;
+
 namespace PersonalAgent.Mobile;
 
 public partial class App : Application
@@ -8,6 +11,7 @@ public partial class App : Application
     {
         _services = Services;
         InitializeComponent();
+        AndroidApplication.SetWindowSoftInputModeAdjust(this, WindowSoftInputModeAdjust.Resize);
     }
 
     protected override Window CreateWindow(IActivationState? activationState)

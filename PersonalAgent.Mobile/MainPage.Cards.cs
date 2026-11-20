@@ -30,7 +30,12 @@ public partial class MainPage
         if (message.Presentation?.Activity is { Count: > 0 } activity)
         {
             var rows = new VerticalStackLayout { IsVisible = message.Sequence == 0 };
-            foreach (var call in activity) rows.Add(new Label { Text = $"{call.Label} · {call.Status}" });
+            foreach (var call in activity)
+            {
+                var detail = new Label { Text = $"{call.Label} · {call.Status}" };
+                detail.SetAppThemeColor(Label.TextColorProperty, Color.FromArgb("#162C29"), Color.FromArgb("#E9F2EE"));
+                rows.Add(detail);
+            }
             var toggle = new Button { Text = $"View activity · {activity.Count}" };
             toggle.Clicked += (_, _) => rows.IsVisible = !rows.IsVisible;
             layout.Add(toggle);
