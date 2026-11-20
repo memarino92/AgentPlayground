@@ -11,6 +11,7 @@ const packagePattern = /^([A-Za-z0-9_.-]{1,100})@([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Z
 // Run after the candidate exits. The host chooses both archive paths. Never follow candidate links.
 async function collectArtifacts(sandbox, destination, checkpointImage) {
   const command = `set -eu
+mkdir -p /job
 ulimit -f 147456
 docker run --rm --network=none --read-only --cap-drop=ALL --cap-add=DAC_OVERRIDE --security-opt=no-new-privileges --user=0 --mount type=volume,src=automation-artifacts,dst=/export,readonly --entrypoint /bin/sh ${checkpointImage} -ec '
 cd /export
