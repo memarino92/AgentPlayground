@@ -39,7 +39,7 @@ internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJo
         var Job = await Store.CreateAsync(new()
         {
             Id = Id, ActorId = Access.ActorId, Email = Access.Email, Subject = Access.SubjectProfileId,
-            Instruction = Request.Instruction.Trim(), Settings = Settings, BaseSha = BaseSha,
+            Instruction = Request.Instruction.Trim(), AllowNoChanges = Request.AllowNoChanges, Settings = Settings, BaseSha = BaseSha,
             Branch = Revision?.Parent.Branch ?? $"feat/platform-improvement-{Id:N}",
             SessionId = Revision?.Parent.SessionId ?? ConversationId(Access), PreviousJobId = Request.PreviousJobId,
             PullRequestUrl = Revision?.Parent.PullRequestUrl,
@@ -52,7 +52,7 @@ internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJo
         CodingJobView CheckRequest(CodingJob Saved)
         {
             if (Saved.Instruction != Request.Instruction.Trim() || Saved.PreviousJobId != Request.PreviousJobId
-                || Saved.FollowUp != Request.FollowUp || Saved.Subject != Access.SubjectProfileId)
+                || Saved.FollowUp != Request.FollowUp || Saved.AllowNoChanges != Request.AllowNoChanges || Saved.Subject != Access.SubjectProfileId)
                 throw new InvalidOperationException("requestKey already identifies a different request.");
             return Saved.View;
         }
@@ -81,9 +81,12 @@ internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJo
 internal sealed class CodingJobTools(IServiceScopeFactory Scopes)
 {
     public Task<string> StartAsync(AgentAccessContext Access, string Instruction, string RequestKey, CancellationToken Token,
-        Guid? PreviousJobId = null, string? FollowUp = null) => InvokeAsync(async Service =>
+        Guid? PreviousJobId = null, string? FollowUp = null, bool AllowNoChanges = false) => InvokeAsync(async Service =>
     {
-        var Job = await Service.StartAsync(Access, new(Instruction, RequestKey) { PreviousJobId = PreviousJobId, FollowUp = FollowUp }, Token);
+        var Job = await Service.StartAsync(Access, new(Instruction, RequestKey)
+        {
+            PreviousJobId = PreviousJobId, FollowUp = FollowUp, AllowNoChanges = AllowNoChanges
+        }, Token);
         return new { job = Job, dashboard = $"/coding-jobs?profileId={Uri.EscapeDataString(Access.SubjectProfileId)}",
             message = "Inspect this job for its status, validation and pull request." };
     });

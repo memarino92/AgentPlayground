@@ -36,22 +36,26 @@ export async function codingDispatch(request, api) {
       onStdout: x => { if ((bytes += Buffer.byteLength(x)) > 100000) throw new Error('Output limit'); },
       onStderr: x => { if ((bytes += Buffer.byteLength(x)) > 100000) throw new Error('Output limit'); }
     });
+    const exitCode = result.timedOut || result.truncated ? -1 : result.exitCode ?? -1;
     checks.push({ command: phase === 'validate' ? `dotnet test ${request.testProject} --filter ${request.testFilter}` : phase,
-      exitCode: result.exitCode ?? -1, output: (result.stdout + result.stderr).slice(-20000) });
-    if (result.exitCode !== 0 || result.timedOut || result.truncated) break;
+      exitCode, output: (result.stdout + result.stderr).slice(-20000) });
+    if (exitCode !== 0) break;
   }
   // Code container has exited (including descendants). Export uses a new trusted process and reads exact base diff.
   let artifact;
   try {
     const exported = await sandbox.exec(`docker run ${common} --user=65532:65532 --network=none --entrypoint node ${request.imageId} /opt/coding/workload.mjs export`, { timeoutSec: 30 });
-    if (exported.exitCode !== 0 || exported.truncated || exported.stdout.length > 1000000) throw new Error('Artifact unavailable');
+    if (exported.exitCode !== 0 || exported.timedOut || exported.truncated || exported.stdout.length > 1000000) throw new Error('Artifact unavailable');
     artifact = JSON.parse(exported.stdout);
+    if (artifact.baseSha !== request.baseSha || !Array.isArray(artifact.files)) throw new Error('Invalid artifact');
   } catch {
     checks.push({ command: 'export', exitCode: 1, output: 'No bounded text artifact could be exported.' });
     artifact = { baseSha: request.baseSha, files: [], summary: 'Coding failed; inspect retained phase checks.' };
   }
   artifact.checks = checks;
-  return { success: checks.length === 3 && checks.every(c => c.exitCode === 0), artifact };
+  const success = checks.length === 3 && checks.every(c => c.exitCode === 0)
+    && (artifact.files.length > 0 || request.allowNoChanges === true);
+  return { success, artifact };
 }
 
 function provisioningError(error) {
@@ -75,6 +79,7 @@ export function validateRequest(r) {
     || !/^[a-f0-9]{64}$/.test(r.capability) || !/^https:\/\/[^\s"\\]+\/coding-runtime\/[a-f0-9-]+\/v1$/.test(r.gateway)
     || typeof r.instruction !== 'string' || r.instruction.length > 8000
     || (r.canAsk !== undefined && typeof r.canAsk !== 'boolean')
+    || (r.allowNoChanges !== undefined && typeof r.allowNoChanges !== 'boolean')
     || (r.followUpEvidence != null && (typeof r.followUpEvidence !== 'string' || r.followUpEvidence.length > 12000))
     || (r.responses !== undefined && typeof r.responses !== 'boolean')
     || (r.model !== undefined && (typeof r.model !== 'string' || !/^[A-Za-z0-9_./-]{1,100}$/.test(r.model)))

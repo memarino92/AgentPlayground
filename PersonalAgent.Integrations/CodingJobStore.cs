@@ -24,6 +24,7 @@ public sealed record CodingJob
     public string? Email { get; init; }
     public string Subject { get; init; } = "";
     public string Instruction { get; init; } = "";
+    public bool AllowNoChanges { get; init; }
     public CodingSettings Settings { get; init; } = new();
     public string BaseSha { get; init; } = "";
     public string Branch { get; init; } = "";
@@ -248,7 +249,7 @@ public sealed partial class CodingJobStore(IntegrationDatabase Database)
     public async Task<IReadOnlyList<CodingJob>> PendingAsync(CancellationToken Token)
     {
         await using var C = await Database.OpenAsync(Token);
-        await using var Q = new NpgsqlCommand("SELECT payload,state,requests FROM app.coding_jobs WHERE state NOT IN ('PrOpened','Failed','Cancelled') OR payload::jsonb->>'cleanupState'='Pending' ORDER BY deadline LIMIT 200", C);
+        await using var Q = new NpgsqlCommand("SELECT payload,state,requests FROM app.coding_jobs WHERE state NOT IN ('PrOpened','CompletedNoChanges','Failed','Cancelled') OR payload::jsonb->>'cleanupState'='Pending' ORDER BY deadline LIMIT 200", C);
         await using var R = await Q.ExecuteReaderAsync(Token); var Jobs = new List<CodingJob>();
         while (await R.ReadAsync(Token)) Jobs.Add(Read(R));
         return Jobs;

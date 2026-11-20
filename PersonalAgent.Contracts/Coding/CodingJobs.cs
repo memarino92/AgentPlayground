@@ -16,7 +16,14 @@ public static class CodingJobs
             && System.Text.RegularExpressions.Regex.IsMatch(Slug, @"\A[A-Za-z0-9_.-]{1,100}\z");
     }
     public const int MaxArtifactBytes = 1_000_000;
-    public static bool Terminal(string Status) => Status is "PrOpened" or "Failed" or "Cancelled";
+    public const string CompletedNoChanges = "CompletedNoChanges";
+    public static bool Terminal(string Status) => Status is "PrOpened" or CompletedNoChanges or "Failed" or "Cancelled";
+    public static string StatusLabel(string Status, bool IsFollowUp = false) => Status switch
+    {
+        "PrOpened" => IsFollowUp ? "PR updated" : "PR opened",
+        CompletedNoChanges => "Completed without changes",
+        _ => Status
+    };
     public static DateTimeOffset? RulesetTimestamp(string? Value) => Value is not null
         && System.Text.RegularExpressions.Regex.IsMatch(Value, @"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,7})?(Z|[+-]\d{2}:\d{2})\z")
         && DateTimeOffset.TryParse(Value, System.Globalization.CultureInfo.InvariantCulture,
@@ -28,6 +35,7 @@ public sealed record StartCodingJob(string Instruction, string RequestKey)
 {
     public Guid? PreviousJobId { get; init; }
     public string? FollowUp { get; init; }
+    public bool AllowNoChanges { get; init; }
 }
 public sealed record CodingQuestion(Guid Id, Guid JobId, Guid SessionId, string Text, string? Answer, DateTimeOffset Deadline);
 public sealed record AskCodingQuestion(Guid Id, string Text);
@@ -40,6 +48,8 @@ public sealed record CodingJobView(Guid Id, string Instruction, string Repositor
     int ModelRequests, string? PullRequestUrl, string? Error, CodingArtifact? Artifact)
 {
     public Guid? PreviousJobId { get; init; }
+    public string DisplayStatus => CodingJobs.StatusLabel(Status, PreviousJobId is not null);
+    public bool CanCancel => !CodingJobs.Terminal(Status) && Status != "Publishing";
 }
 
 public sealed record CodingSettings

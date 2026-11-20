@@ -50,7 +50,7 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
                 operation = "coding-execute", token = Railway.Token, environmentId = Railway.Settings.EnvironmentId,
                 id = Job.SandboxId, imageId = Job.Settings.ImageId, repository = Job.Settings.Repository,
                 baseSha = Job.BaseSha, instruction = Job.Instruction, minutes = Job.Settings.MaxMinutes,
-                canAsk = Job.SessionId is not null, followUpEvidence = Job.FollowUpEvidence,
+                canAsk = Job.SessionId is not null, followUpEvidence = Job.FollowUpEvidence, allowNoChanges = Job.AllowNoChanges,
                 testProject = Job.Settings.TestProject, testFilter = Job.Settings.TestFilter,
                 model = CodingJobs.TrySubscriptionModel(Job.Settings.ModelId, out _, out var Slug) ? Slug : CodingJobs.Model,
                 responses = CodingJobs.IsSubscriptionModel(Job.Settings.ModelId),
@@ -58,9 +58,18 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
             }, Deadline.Token);
             phase = "reading validation results";
             var Artifact = Result.GetProperty("artifact").Deserialize<CodingArtifact>(Json) ?? throw new InvalidOperationException("Missing artifact.");
-            var Success = Result.GetProperty("success").GetBoolean();
-            Job = Job with { Artifact = Artifact, Status = Success ? "ReadyToPublish" : "Failed",
-                Error = Success ? null : "Coding or validation failed. Inspect retained checks." };
+            var VerifiedEmpty = Artifact.BaseSha == Job.BaseSha && Artifact.Files is { Length: 0 }
+                && Artifact.Checks is { Length: 3 } && Artifact.Checks.All(Check => Check.ExitCode == 0);
+            var Success = Result.GetProperty("success").GetBoolean()
+                && (Artifact.Files.Length > 0 || (Job.AllowNoChanges && VerifiedEmpty));
+            var Status = !Success ? "Failed" : VerifiedEmpty ? CodingJobs.CompletedNoChanges : "ReadyToPublish";
+            Job = Job with
+            {
+                Artifact = Artifact,
+                Status = Status,
+                Error = Success ? null : VerifiedEmpty && !Job.AllowNoChanges ? "No file changes were found. This job expected a diff."
+                    : "Coding or validation failed. Inspect retained checks."
+            };
             phase = "saving validation results";
             await Store.SaveAsync(Job, "Running", CancellationToken.None);
         }

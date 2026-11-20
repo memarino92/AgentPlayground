@@ -22,7 +22,7 @@ public sealed partial class CodingJobStore
         await using var Connection = await OpenAsync(Token);
         await using var Query = new NpgsqlCommand("""
             SELECT payload,state,requests FROM app.coding_jobs
-            WHERE NOT result_posted AND payload::jsonb->>'sessionId' IS NOT NULL AND state IN ('PrOpened','Failed','Cancelled')
+            WHERE NOT result_posted AND payload::jsonb->>'sessionId' IS NOT NULL AND state IN ('PrOpened','CompletedNoChanges','Failed','Cancelled')
             ORDER BY deadline LIMIT 50
             """, Connection);
         await using var Reader = await Query.ExecuteReaderAsync(Token);

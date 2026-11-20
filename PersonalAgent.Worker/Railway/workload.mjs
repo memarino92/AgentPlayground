@@ -55,7 +55,7 @@ try {
     run('git', ['-c', 'core.hooksPath=/dev/null', 'read-tree', r.baseSha], root, gitEnv);
     run('git', ['-c', 'core.hooksPath=/dev/null', 'add', '-A', '--', '.'], root, gitEnv);
     const names = run('git', ['-c', 'core.hooksPath=/dev/null', 'diff', '--cached', '--name-only', '-z', r.baseSha], root, gitEnv).split('\0').filter(Boolean);
-    if (!names.length || names.length > 50) throw new Error('Expected 1–50 changed files');
+    if (names.length > 50) throw new Error('Expected at most 50 changed files');
     const files = names.map(path => {
       if (!/^[A-Za-z0-9_./-]{1,240}$/.test(path) || path.split('/').some(p => !p || p === '.' || p === '..' || p.startsWith('.git'))) throw new Error('Unsupported path');
       const entry = run('git', ['ls-files', '--stage', '--', path], root, gitEnv);
@@ -66,7 +66,8 @@ try {
       if (content.includes('\0') || content.includes('\ufffd')) throw new Error('Text changes only');
       return { path, content, mode };
     });
-    let summary = 'Implements the requested platform change. Review the diff and recorded test results.';
+    let summary = names.length === 0 ? 'No file changes were found. See the recorded checks.'
+      : 'Implements the requested platform change. Review the diff and recorded test results.';
     try {
       const text = readFileSync('/work/agent-output.jsonl', 'utf8').split('\n').flatMap(line => {
         try { const event = JSON.parse(line); return event.type === 'text' && typeof event.part?.text === 'string' ? [event.part.text] : []; } catch { return []; }

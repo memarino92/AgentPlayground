@@ -67,6 +67,32 @@ test('failed coding retains phase diagnostics even when no diff can be exported'
   assert.equal(result.artifact.checks.find(c => c.command === 'code').output, 'Model unavailable');
 });
 
+test('an empty exported diff succeeds only with authorization and full validation', async () => {
+  const execute = (options, validation, exported) => codingDispatch({ ...request, ...options }, {
+    connect: async () => ({
+      networkIsolation: 'ISOLATED', files: { write: async () => {} },
+      exec: async command => {
+        if (command.startsWith('docker info')) return { exitCode: 0, stdout: JSON.stringify({ MemoryLimit: true, SwapLimit: true,
+          PidsLimit: true, CpuCfsQuota: true, SecurityOptions: ['name=seccomp,profile=builtin'] }) };
+        if (command.endsWith(' export')) return { exitCode: 0, stdout: JSON.stringify({ baseSha: request.baseSha, files: [],
+          summary: 'Verification complete' }), ...exported };
+        return { exitCode: 0, stdout: '', stderr: '', ...(command.endsWith(' validate') ? validation : {}) };
+      }
+    })
+  });
+  const allowed = { allowNoChanges: true };
+  const verified = await execute(allowed);
+  assert.equal(verified.success, true);
+  assert.deepEqual(verified.artifact.files, []);
+  assert.equal(verified.artifact.summary, 'Verification complete');
+  assert.equal(verified.artifact.checks.length, 3);
+  assert.equal((await execute({})).success, false);
+  assert.equal((await execute(allowed, { exitCode: 1 })).success, false);
+  assert.equal((await execute(allowed, { truncated: true })).success, false);
+  assert.equal((await execute(allowed, {}, { timedOut: true })).success, false);
+  assert.equal((await execute(allowed, {}, { stdout: '{"files":[]}' })).success, false);
+});
+
 test('subscription and follow-up context reach the workload without account credentials', async () => {
   let written;
   const sandbox = { networkIsolation: 'ISOLATED', files: { write: async (_, value) => written = JSON.parse(value) }, exec: async command => {
