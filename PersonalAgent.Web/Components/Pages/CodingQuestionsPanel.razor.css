@@ -1,0 +1,22 @@
+section {
+    padding: 1rem;
+    margin-block: .75rem;
+    border: 1px solid var(--border-color);
+    border-radius: .75rem;
+    background: var(--surface-color);
+}
+
+h2 { margin: 0 0 .5rem; font-size: 1rem; font-weight: 650; }
+p { margin: .5rem 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+article + article { border-top: 1px solid var(--border-color); margin-top: 1rem; padding-top: .75rem; }
+label { display: block; font-weight: 600; }
+textarea { display: block; width: 100%; min-height: 4rem; margin-block: .3rem .6rem; resize: vertical; }
+button, textarea {
+    font: inherit;
+    color: var(--text-primary);
+    background: var(--surface-muted);
+    border: 1px solid var(--border-color);
+    border-radius: .4rem;
+    padding: .4rem .65rem;
+}
+button:disabled { opacity: .55; }

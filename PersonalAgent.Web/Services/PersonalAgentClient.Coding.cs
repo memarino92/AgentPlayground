@@ -4,6 +4,31 @@ namespace PersonalAgent.Web.Services;
 
 internal partial class PersonalAgentClient
 {
+    public async Task<CodingQuestion[]> GetCodingQuestionsAsync(string Profile, Guid? Session, CancellationToken Token)
+    {
+        var Url = $"/api/coding-jobs/questions?profileId={Uri.EscapeDataString(Profile)}";
+        if (Session is not null) Url += $"&sessionId={Session:D}";
+        using var Response = await SendAsync(HttpMethod.Get, Url, cancellationToken: Token);
+        Response.EnsureSuccessStatusCode();
+        return (await Response.Content.ReadFromJsonAsync<CodingQuestion[]>(Token))!;
+    }
+
+    public async Task<bool> HasCodingMessagesAsync(string Profile, Guid Session, long After, CancellationToken Token)
+    {
+        using var Response = await SendAsync(HttpMethod.Get,
+            $"/api/coding-jobs/conversation-updates?profileId={Uri.EscapeDataString(Profile)}&sessionId={Session:D}&after={After}",
+            cancellationToken: Token);
+        Response.EnsureSuccessStatusCode();
+        return await Response.Content.ReadFromJsonAsync<bool>(Token);
+    }
+
+    public async Task AnswerCodingQuestionAsync(string Profile, Guid Id, string Answer, CancellationToken Token)
+    {
+        using var Response = await SendAsync(HttpMethod.Post, $"/api/coding-jobs/questions/{Id:D}/answer?profileId={Uri.EscapeDataString(Profile)}",
+            JsonContent.Create(new AnswerCodingQuestion(Answer)), cancellationToken: Token);
+        Response.EnsureSuccessStatusCode();
+    }
+
     public async Task<CodingModelOption[]> GetCodingModelsAsync(CancellationToken Token)
     {
         using var Response = await SendAsync(HttpMethod.Get, "/api/admin/coding/models", cancellationToken: Token);

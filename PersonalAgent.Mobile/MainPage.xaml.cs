@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Text;
+using System.Text.Json;
 
 using Microsoft.Maui.Controls.Shapes;
+using Microsoft.Maui.Dispatching;
 
 using PersonalAgent.Contracts;
 using PersonalAgent.Mobile.Models;
@@ -33,6 +35,8 @@ public partial class MainPage : ContentPage
         ? modal.CurrentPage : Shell.Current?.CurrentPage ?? this;
     private bool _isReviewingApproval;
     private bool _hasAppeared;
+    private IDispatcherTimer? _codingUpdates;
+    private bool _checkingCodingUpdates;
 
     public MainPage(MainViewModel viewModel, NotificationRoutingService notificationRoutingService, FirebaseCloudMessagingBridge firebaseBridge, NativeChatClient chat)
     {
@@ -41,6 +45,7 @@ public partial class MainPage : ContentPage
         _firebaseBridge = firebaseBridge;
         BindingContext = _viewModel;
         _notificationRoutingService.PendingApprovalReceived += OnPendingApprovalReceived;
+        _notificationRoutingService.CodingQuestionsRequested += OnCodingQuestionsRequested;
 
         _chat = chat;
         InitializeComponent();
@@ -53,7 +58,7 @@ public partial class MainPage : ContentPage
         {
             choices.AddRange(["Chat history", "Chat options", "Scheduled jobs", "Automations", "Coach recordings"]);
             if (_chat.Profiles.Length > 1) choices.Add("Change profile");
-            if (_chat.IsOwner) choices.AddRange(["Coding jobs", "Administration"]);
+            if (_chat.IsOwner) choices.AddRange(["Outstanding questions", "Coding jobs", "Administration"]);
         }
         choices.AddRange(["Approvals", "Settings", "Refresh"]);
         if (_chat.Profile is not null) choices.Add("Sign out");
@@ -233,12 +238,20 @@ public partial class MainPage : ContentPage
             _chatBusy = false;
             SignIn.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = true;
         }
+        await OpenRequestedCodingQuestionsAsync();
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
         _isVisible = true;
+        if (_codingUpdates is null)
+        {
+            _codingUpdates = Dispatcher.CreateTimer();
+            _codingUpdates.Interval = TimeSpan.FromSeconds(10);
+            _codingUpdates.Tick += OnCodingUpdateTick;
+        }
+        _codingUpdates.Start();
         var firstAppearance = !_hasAppeared;
         _hasAppeared = true;
         if (firstAppearance || _conversation.HasValue) await LoadChatAsync();
@@ -247,10 +260,38 @@ public partial class MainPage : ContentPage
         await ReviewPendingApprovalsAsync();
     }
 
+    protected override void OnDisappearing()
+    {
+        _codingUpdates?.Stop();
+        base.OnDisappearing();
+    }
+
+    private async void OnCodingUpdateTick(object? Sender, EventArgs Args)
+    {
+        if (!_isVisible || _chatBusy || _checkingCodingUpdates || !_chat.IsOwner || _conversation is not { } Session) return;
+        var Profile = _chat.Profile;
+        var After = _messages.LastOrDefault()?.Sequence ?? 0;
+        _checkingCodingUpdates = true;
+        try
+        {
+            if ((await _chat.WorkspaceAsync("coding-updates", Session, Sequence: After))?.GetValue<bool>() != true) return;
+            var History = (await _chat.WorkspaceAsync("session", Session))?.Deserialize<NativeConversation>(JsonSerializerOptions.Web);
+            if (_isVisible && !_chatBusy && _chat.Profile == Profile && _conversation == Session
+                && (_messages.LastOrDefault()?.Sequence ?? 0) == After && History?.SessionId == Session)
+                ShowConversation(History, preservePosition: true);
+        }
+        catch (Exception Error) when (Error is HttpRequestException or JsonException or InvalidOperationException) { }
+        finally { _checkingCodingUpdates = false; }
+    }
+
     public async Task SetActiveAsync(bool Active)
     {
         _isVisible = Active;
-        if (Active && _hasAppeared) await ReviewPendingApprovalsAsync();
+        if (Active && _hasAppeared)
+        {
+            await OpenRequestedCodingQuestionsAsync();
+            await ReviewPendingApprovalsAsync();
+        }
     }
 
 
@@ -287,6 +328,17 @@ public partial class MainPage : ContentPage
     private async void OnPendingApprovalReceived(object? sender, PendingApprovalNotification notification)
     {
         await MainThread.InvokeOnMainThreadAsync(() => ReviewPendingApprovalsAsync());
+    }
+
+    private async void OnCodingQuestionsRequested(object? Sender, EventArgs Args) =>
+        await MainThread.InvokeOnMainThreadAsync(OpenRequestedCodingQuestionsAsync);
+
+    private Task OpenRequestedCodingQuestionsAsync()
+    {
+        if (!_isVisible || !_hasAppeared || _chatBusy || !_chat.IsOwner || !_notificationRoutingService.TakeCodingQuestionsRequest())
+            return Task.CompletedTask;
+        if (Navigation.NavigationStack.LastOrDefault()?.Title == "Outstanding questions") return Task.CompletedTask;
+        return Navigation.PushAsync(new WorkspacePage(_chat, "Outstanding questions"));
     }
 
     private async Task ReviewPendingApprovalsAsync(bool ShowEmpty = false)

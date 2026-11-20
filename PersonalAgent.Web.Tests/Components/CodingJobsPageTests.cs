@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Claims;
 
 using Bunit;
@@ -40,6 +41,21 @@ public sealed class CodingJobsPageTests : TestContext
         Page.Markup.Should().NotContain("Railway sandbox ID:");
     }
 
+    [Fact]
+    public async Task OutstandingQuestionCanBeAnsweredFromTheDashboard()
+    {
+        var Question = new CodingQuestion(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Which database?", null, DateTimeOffset.UtcNow.AddMinutes(10));
+        using var Handler = new Handler { Question = Question };
+        Configure(Handler);
+        var Page = RenderComponent<CodingJobsPage>();
+        Page.WaitForAssertion(() => Page.Find("#outstanding-questions").TextContent.Should().Contain(Question.Text));
+        Page.Find("#outstanding-questions a").GetAttribute("href").Should().Be($"/chat?sessionId={Question.SessionId:D}");
+        await Page.Find("textarea").InputAsync(new Microsoft.AspNetCore.Components.ChangeEventArgs { Value = "PostgreSQL" });
+        await Page.Find("#outstanding-questions button").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        Page.WaitForAssertion(() => Page.Find("#outstanding-questions").TextContent.Should().Contain("No coding jobs are waiting"));
+        Handler.Answer.Should().Be(new AnswerCodingQuestion("PostgreSQL"));
+    }
+
     private void Configure(Handler Handler)
     {
         Services.AddLogging();
@@ -60,17 +76,27 @@ public sealed class CodingJobsPageTests : TestContext
     {
         public string? SandboxId = "sandbox-123";
         public string Status = "Running";
+        public CodingQuestion? Question;
+        public AnswerCodingQuestion? Answer;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Token)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken Token)
         {
             Request.Headers.Contains("X-Agent-Signature").Should().BeTrue();
+            if (Request.RequestUri!.AbsolutePath == "/api/coding-jobs/questions")
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(Question is { } Waiting ? new[] { Waiting } : Array.Empty<CodingQuestion>()) };
+            if (Question is { } Open && Request.RequestUri.AbsolutePath == $"/api/coding-jobs/questions/{Open.Id:D}/answer")
+            {
+                Answer = await Request.Content!.ReadFromJsonAsync<AnswerCodingQuestion>(Token);
+                Question = null;
+                return new(HttpStatusCode.OK);
+            }
 
             var Date = DateTimeOffset.Parse("2026-09-27T12:00:00Z");
             var Job = new CodingJobView(Guid.Parse("11111111-1111-1111-1111-111111111111"), "Implement dashboard updates",
                 "memarino92/AgentPlayground", "base-sha", "feature/coding-dashboard", Status, Date, Date.AddHours(1), SandboxId,
                 "Active", 2, null, null, null);
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new[] { Job }) });
+            return new(HttpStatusCode.OK) { Content = JsonContent.Create(new[] { Job }) };
         }
     }
 }

@@ -10,7 +10,7 @@ using PersonalAgent.Integrations;
 
 namespace PersonalAgent.Api.Coding;
 
-internal sealed class CodingJobService(CodingJobStore Store, ScheduledJobAuthorization Subjects, ToolAccessService Tools, ICodingPublisher Publisher,
+internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJobAuthorization Subjects, ToolAccessService Tools, ICodingPublisher Publisher,
     ChatGptModelCatalog Models)
 {
     public async Task RequireAsync(string Actor, string? Email, string Subject, CancellationToken Token)
@@ -26,21 +26,36 @@ internal sealed class CodingJobService(CodingJobStore Store, ScheduledJobAuthori
         await RequireAsync(Access.ActorId, Access.Email, Access.SubjectProfileId, Token);
         if (string.IsNullOrWhiteSpace(Request.Instruction) || Request.Instruction.Length > 8000 || !Guid.TryParse(Request.RequestKey, out var RequestId))
             throw new ArgumentException("An instruction of 1–8000 characters and a stable UUID requestKey are required.");
+        var Key = RequestId.ToString("D");
+        if (await Store.FindRequestAsync(Access.ActorId, Key, Token) is { } Existing) return CheckRequest(Existing);
         var Settings = (await Store.SettingsAsync(Token)).View.Settings;
         if (!Settings.Enabled) throw new InvalidOperationException("Configure and enable platform coding in Settings first.");
         if (CodingJobs.IsSubscriptionModel(Settings.ModelId)
             && !(await Models.GetModelsAsync(Access.ActorId, Token)).Any(Model => Model.Id == Settings.ModelId))
             throw new InvalidOperationException("The selected ChatGPT coding model is unavailable to this owner. Connect your account and select a model in Platform coding settings.");
-        var BaseSha = await Publisher.PrepareAsync(Settings, Token);
+        var Revision = await PrepareRevisionAsync(Access, Request, Settings, Token);
+        var BaseSha = Revision?.Target.Head ?? await Publisher.PrepareAsync(Settings, Token);
         var Id = Guid.NewGuid(); var Now = DateTimeOffset.UtcNow;
         var Job = await Store.CreateAsync(new()
         {
             Id = Id, ActorId = Access.ActorId, Email = Access.Email, Subject = Access.SubjectProfileId,
             Instruction = Request.Instruction.Trim(), Settings = Settings, BaseSha = BaseSha,
-            Branch = $"feat/platform-improvement-{Id:N}", CreatedAt = Now, Deadline = Now.AddMinutes(Settings.MaxMinutes + 5)
-        }, RequestId.ToString("D"), Token);
-        if (Job.Instruction != Request.Instruction.Trim()) throw new InvalidOperationException("requestKey already identifies a different instruction.");
-        return Job.View;
+            Branch = Revision?.Parent.Branch ?? $"feat/platform-improvement-{Id:N}",
+            SessionId = Revision?.Parent.SessionId ?? ConversationId(Access), PreviousJobId = Request.PreviousJobId,
+            PullRequestUrl = Revision?.Parent.PullRequestUrl,
+            RootJobId = Revision is { } FollowUpTarget ? FollowUpTarget.Parent.RootJobId ?? FollowUpTarget.Parent.Id : null,
+            FollowUp = Request.FollowUp, FollowUpEvidence = Revision?.Target.Evidence, PullRequestNumber = Revision?.Target.Number,
+            CreatedAt = Now, Deadline = Now.AddMinutes(Settings.MaxMinutes + 5)
+        }, Key, Token);
+        return CheckRequest(Job);
+
+        CodingJobView CheckRequest(CodingJob Saved)
+        {
+            if (Saved.Instruction != Request.Instruction.Trim() || Saved.PreviousJobId != Request.PreviousJobId
+                || Saved.FollowUp != Request.FollowUp || Saved.Subject != Access.SubjectProfileId)
+                throw new InvalidOperationException("requestKey already identifies a different request.");
+            return Saved.View;
+        }
     }
 
     public async Task<IReadOnlyList<CodingJobView>> ListAsync(AgentAccessContext Access, CancellationToken Token)
@@ -65,13 +80,19 @@ internal sealed class CodingJobService(CodingJobStore Store, ScheduledJobAuthori
 
 internal sealed class CodingJobTools(IServiceScopeFactory Scopes)
 {
-    public Task<string> StartAsync(AgentAccessContext Access, string Instruction, string RequestKey, CancellationToken Token) => InvokeAsync(async Service =>
+    public Task<string> StartAsync(AgentAccessContext Access, string Instruction, string RequestKey, CancellationToken Token,
+        Guid? PreviousJobId = null, string? FollowUp = null) => InvokeAsync(async Service =>
     {
-        var Job = await Service.StartAsync(Access, new(Instruction, RequestKey), Token);
-        return new { job = Job, dashboard = $"/coding-jobs?profileId={Uri.EscapeDataString(Access.SubjectProfileId)}", message = "Queued. A PR has not been created yet. Inspect this job for results." };
+        var Job = await Service.StartAsync(Access, new(Instruction, RequestKey) { PreviousJobId = PreviousJobId, FollowUp = FollowUp }, Token);
+        return new { job = Job, dashboard = $"/coding-jobs?profileId={Uri.EscapeDataString(Access.SubjectProfileId)}",
+            message = "Inspect this job for its status, validation and pull request." };
     });
     public Task<string> InspectAsync(AgentAccessContext Access, Guid? Id, bool Cancel, CancellationToken Token) => InvokeAsync(async Service =>
         Id is { } Value ? (object)await Service.InspectAsync(Access, Value, Cancel, Token) : await Service.ListAsync(Access, Token));
+    public Task<string> QuestionsAsync(AgentAccessContext Access, Guid? Id, string? Answer, CancellationToken Token) => InvokeAsync(async Service =>
+        Id is { } Value
+            ? await Service.AnswerQuestionAsync(Access, Value, Answer ?? "", true, Token)
+            : await Service.QuestionsAsync(Access, CodingJobService.ConversationId(Access) ?? throw new UnauthorizedAccessException(), Token));
     private async Task<string> InvokeAsync(Func<CodingJobService, Task<object>> Action)
     {
         using var Scope = Scopes.CreateScope();
@@ -103,6 +124,15 @@ internal sealed class CodingJobCoordinator(CodingJobStore Store, IServiceScopeFa
         if (!(bool)(await Lock.ExecuteScalarAsync(Token))!) return;
         try
         {
+            try
+            {
+                using var DeliveryScope = Scopes.CreateScope();
+                await DeliveryScope.ServiceProvider.GetRequiredService<CodingConversation>().DeliverAsync(Token);
+            }
+            catch (Exception E) when (!Token.IsCancellationRequested)
+            {
+                Logger.LogWarning(new EventId(4405), "Coding conversation delivery will retry after {ExceptionType}", E.GetType().Name);
+            }
             foreach (var Job in await Store.PendingAsync(Token))
             {
                 if (CodingJobs.Terminal(Job.Status)) continue;
@@ -133,6 +163,8 @@ internal sealed class CodingJobCoordinator(CodingJobStore Store, IServiceScopeFa
                 { await Store.SaveAsync(Job with { Status = "Failed", Error = "Coding permission revoked or runtime disabled. Check the stable branch for any publication already in flight." }, ExpectedStatus, Token); }
                 catch (ArgumentException)
                 { await Store.SaveAsync(Job with { Status = "Failed", Error = "Invalid coding artifact. Inspect diagnostics." }, ExpectedStatus, Token); }
+                catch (CodingRevisionConflict E)
+                { await Store.SaveAsync(Job with { Status = "Failed", Error = E.Message }, ExpectedStatus, Token); }
                 catch (Exception E) when (E is HttpRequestException or InvalidOperationException)
                 {
                     // Publication may already have succeeded: preserve intent and reconcile its stable marker next sweep.

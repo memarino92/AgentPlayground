@@ -14,11 +14,15 @@ namespace PersonalAgent.Api.Coding;
 internal interface ICodingPublisher
 {
     Task<string> PrepareAsync(CodingSettings Settings, CancellationToken Token);
+    Task<CodingRevisionTarget> PrepareRevisionAsync(CodingSettings Settings, CodingJob Parent, string FollowUp, CancellationToken Token);
     Task<string> PublishAsync(CodingJob Job, CancellationToken Token);
 }
 
+internal sealed record CodingRevisionTarget(int Number, string Head, string Evidence);
+internal sealed class CodingRevisionConflict(string Message) : InvalidOperationException(Message);
+
 // Git data APIs construct a tree without checking out or executing candidate code in the publisher.
-internal sealed class GitHubCodingPublisher(HttpClient Http, CodingJobStore Store) : ICodingPublisher
+internal sealed partial class GitHubCodingPublisher(HttpClient Http, CodingJobStore Store) : ICodingPublisher
 {
     public async Task<string> PrepareAsync(CodingSettings Settings, CancellationToken Token)
     {
@@ -36,15 +40,18 @@ internal sealed class GitHubCodingPublisher(HttpClient Http, CodingJobStore Stor
         var Credential = await CredentialAsync(Job.Settings, Token);
         await VerifyProtectionAsync(Job.Settings, Credential, Token);
         var Root = $"repos/{Job.Settings.Repository}";
-        var Existing = await SendAsync(HttpMethod.Get,
-            $"{Root}/pulls?state=all&head={Uri.EscapeDataString(Job.Settings.Repository.Split('/')[0] + ":" + Job.Branch)}", Credential, null, Token);
-        if (Existing.GetArrayLength() > 0)
+        if (Job.RootJobId is null)
         {
-            var Pr = Existing[0];
-            if (!(Pr.GetProperty("body").GetString() ?? "").Contains(Marker(Job), StringComparison.Ordinal)
-                || Pr.GetProperty("base").GetProperty("ref").GetString() != Job.Settings.BaseBranch)
-                throw new InvalidOperationException("Existing PR does not match this job.");
-            return Pr.GetProperty("html_url").GetString()!;
+            var Existing = await SendAsync(HttpMethod.Get,
+                $"{Root}/pulls?state=all&head={Uri.EscapeDataString(Job.Settings.Repository.Split('/')[0] + ":" + Job.Branch)}", Credential, null, Token);
+            if (Existing.GetArrayLength() > 0)
+            {
+                var Pr = Existing[0];
+                if (!(Pr.GetProperty("body").GetString() ?? "").Contains(Marker(Job), StringComparison.Ordinal)
+                    || Pr.GetProperty("base").GetProperty("ref").GetString() != Job.Settings.BaseBranch)
+                    throw new InvalidOperationException("Existing PR does not match this job.");
+                return Pr.GetProperty("html_url").GetString()!;
+            }
         }
         var Commit = await SendAsync(HttpMethod.Get, $"{Root}/git/commits/{Job.BaseSha}", Credential, null, Token);
         var Tree = await SendAsync(HttpMethod.Post, $"{Root}/git/trees", Credential, new
@@ -57,12 +64,13 @@ internal sealed class GitHubCodingPublisher(HttpClient Http, CodingJobStore Stor
         // Stable metadata produces a stable commit SHA on publication retries.
         var NewCommit = await SendAsync(HttpMethod.Post, $"{Root}/git/commits", Credential, new
         {
-            message = $"feat: implement platform improvement {Job.Id:N}",
+            message = Job.RootJobId is null ? $"feat: implement platform improvement {Job.Id:N}" : $"fix: revise platform improvement ({Job.Id:N})",
             tree = Tree.GetProperty("sha").GetString(), parents = new[] { Job.BaseSha },
             author = new { name = "Platform improvements", email = "platform-improvements@users.noreply.github.com", date = Job.CreatedAt },
             committer = new { name = "Platform improvements", email = "platform-improvements@users.noreply.github.com", date = Job.CreatedAt }
         }, Token);
         var Sha = NewCommit.GetProperty("sha").GetString();
+        if (Job.RootJobId is not null) return await UpdateRevisionAsync(Job, Root, Credential, Sha!, Token);
         try { await SendAsync(HttpMethod.Post, $"{Root}/git/refs", Credential, new { @ref = "refs/heads/" + Job.Branch, sha = Sha }, Token); }
         catch (HttpRequestException E) when (E.StatusCode == HttpStatusCode.UnprocessableEntity)
         {
@@ -83,7 +91,8 @@ internal sealed class GitHubCodingPublisher(HttpClient Http, CodingJobStore Stor
     {
         var A = Job.Artifact;
         if (A is null || A.BaseSha != Job.BaseSha || !Regex.IsMatch(Job.BaseSha, "\\A[a-f0-9]{40}\\z")
-            || Job.Branch != $"feat/platform-improvement-{Job.Id:N}" || A.Files is not { Length: > 0 and <= 50 }
+            || Job.Branch != $"feat/platform-improvement-{Job.RootJobId ?? Job.Id:N}"
+            || (Job.RootJobId is not null && Job.PullRequestNumber is not > 0) || A.Files is not { Length: > 0 and <= 50 }
             || A.Checks is not { Length: > 0 and <= 4 } || A.Checks.Any(C => C is null || C.ExitCode != 0)
             || string.IsNullOrWhiteSpace(A.Summary) || A.Summary.Length > 4000
             || Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(A)) > CodingJobs.MaxArtifactBytes)
@@ -165,7 +174,7 @@ internal sealed class GitHubCodingPublisher(HttpClient Http, CodingJobStore Stor
     private async Task<JsonElement> SendAsync(HttpMethod Method, string Path, string Credential, object? Body, CancellationToken Token)
     {
         using var Request = new HttpRequestMessage(Method, "https://api.github.com/" + Path);
-        Request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Credential);
+        if (Credential.Length > 0) Request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Credential);
         Request.Headers.UserAgent.ParseAdd("AgentPlayground-Coding/1.0");
         Request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
         if (Body is not null) Request.Content = JsonContent.Create(Body);

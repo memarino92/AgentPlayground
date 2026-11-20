@@ -172,6 +172,56 @@ internal partial class PostgresAgentSessionStore(IOptions<AgentMemoryOptions> op
     public Task<bool> SaveInteractionAsync(Guid sessionId, string userMessage, string assistantMessage, string sessionStateJson, CancellationToken cancellationToken = default)
         => SaveInteractionCoreAsync(sessionId, userMessage, assistantMessage, sessionStateJson, null, cancellationToken);
 
+    // Null means an active chat turn owns the conversation lock. The coordinator retries on its next sweep.
+    internal async Task<bool?> PostCodingMessageAsync(Guid Session, string Actor, string Profile, Guid EventId, string Content, CancellationToken Token)
+    {
+        await using var Connection = await OpenConnectionAsync(Token);
+        await using var Transaction = await Connection.BeginTransactionAsync(Token);
+        await using var Guard = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@key)", Connection, Transaction);
+        Guard.Parameters.AddWithValue("key", ConversationLockKey(Session));
+        if (await Guard.ExecuteScalarAsync(Token) is not true) return null;
+        await using var Lock = new NpgsqlCommand($"""
+            SELECT last_message_seq FROM {SessionsTable}
+            WHERE session_id=@session AND actor_id=@actor AND lower(profile_id)=lower(@profile) FOR UPDATE
+            """, Connection, Transaction);
+        Lock.Parameters.AddWithValue("session", Session);
+        Lock.Parameters.AddWithValue("actor", Actor);
+        Lock.Parameters.AddWithValue("profile", Profile);
+        if (await Lock.ExecuteScalarAsync(Token) is not long Previous) return false;
+        await using var Insert = new NpgsqlCommand($"""
+            WITH message AS (
+                INSERT INTO {TranscriptMessagesTable}(session_id,message_seq,role,content,created_at,metadata)
+                SELECT @session,@sequence,'assistant',@content,now(),jsonb_build_object('codingEvent',@event)
+                WHERE NOT EXISTS(SELECT 1 FROM {TranscriptMessagesTable} WHERE session_id=@session AND metadata->>'codingEvent'=@event)
+                RETURNING message_seq,created_at
+            )
+            UPDATE {SessionsTable} SET last_message_seq=message.message_seq,updated_at=message.created_at,last_message_at=message.created_at
+            FROM message WHERE session_id=@session
+            """, Connection, Transaction);
+        Insert.Parameters.AddWithValue("session", Session);
+        Insert.Parameters.AddWithValue("sequence", Previous + 1);
+        Insert.Parameters.AddWithValue("content", Content);
+        Insert.Parameters.AddWithValue("event", EventId.ToString("D"));
+        await Insert.ExecuteNonQueryAsync(Token);
+        await Transaction.CommitAsync(Token);
+        return true;
+    }
+
+    internal async Task<bool> HasCodingMessagesAsync(Guid Session, string Actor, string Profile, long After, CancellationToken Token)
+    {
+        await using var Connection = await OpenConnectionAsync(Token);
+        await using var Query = new NpgsqlCommand($"""
+            SELECT EXISTS(SELECT 1 FROM {TranscriptMessagesTable} m JOIN {SessionsTable} s ON s.session_id=m.session_id
+                WHERE s.session_id=@session AND s.actor_id=@actor AND lower(s.profile_id)=lower(@profile)
+                AND m.message_seq>@after AND m.metadata ? 'codingEvent')
+            """, Connection);
+        Query.Parameters.AddWithValue("session", Session);
+        Query.Parameters.AddWithValue("actor", Actor);
+        Query.Parameters.AddWithValue("profile", Profile);
+        Query.Parameters.AddWithValue("after", After);
+        return await Query.ExecuteScalarAsync(Token) is true;
+    }
+
     private async Task<bool> SaveInteractionCoreAsync(Guid sessionId, string userMessage, string assistantMessage, string sessionStateJson, PersonalAgent.Contracts.ChatPresentation? Presentation, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;

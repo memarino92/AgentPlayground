@@ -27,6 +27,12 @@ public sealed record CodingJob
     public CodingSettings Settings { get; init; } = new();
     public string BaseSha { get; init; } = "";
     public string Branch { get; init; } = "";
+    public Guid? SessionId { get; init; }
+    public Guid? RootJobId { get; init; }
+    public Guid? PreviousJobId { get; init; }
+    public string? FollowUp { get; init; }
+    public int? PullRequestNumber { get; init; }
+    public string? FollowUpEvidence { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset Deadline { get; init; }
     public string Status { get; init; } = "Queued";
@@ -37,11 +43,11 @@ public sealed record CodingJob
     public CodingArtifact? Artifact { get; init; }
     public int ModelRequests { get; init; }
     [JsonIgnore] public CodingJobView View => new(Id, Instruction, Settings.Repository, BaseSha, Branch, Status, CreatedAt,
-        Deadline, SandboxId, CleanupState, ModelRequests, PullRequestUrl, Error, Artifact);
+        Deadline, SandboxId, CleanupState, ModelRequests, PullRequestUrl, Error, Artifact) { PreviousJobId = PreviousJobId };
 }
 
 // A committed job is also durable dispatch intent. Repeated sends are safe: only Queued can be claimed.
-public sealed class CodingJobStore(IntegrationDatabase Database)
+public sealed partial class CodingJobStore(IntegrationDatabase Database)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public async Task InitializeAsync(CancellationToken Token)
@@ -58,6 +64,11 @@ public sealed class CodingJobStore(IntegrationDatabase Database)
                 capability_hash text NOT NULL DEFAULT '', requests int NOT NULL DEFAULT 0,
                 lease_credential text NOT NULL DEFAULT '', lease_environment text NOT NULL DEFAULT '',
                 UNIQUE(actor, request_key));
+            ALTER TABLE app.coding_jobs ADD COLUMN IF NOT EXISTS result_posted boolean NOT NULL DEFAULT false;
+            CREATE TABLE IF NOT EXISTS app.coding_questions(
+                id uuid PRIMARY KEY, job_id uuid NOT NULL REFERENCES app.coding_jobs(id) ON DELETE CASCADE,
+                question text NOT NULL, answer text, posted boolean NOT NULL DEFAULT false);
+            CREATE UNIQUE INDEX IF NOT EXISTS coding_questions_one_open ON app.coding_questions(job_id) WHERE answer IS NULL;
             COMMIT;
             """, C);
         await Q.ExecuteNonQueryAsync(Token);

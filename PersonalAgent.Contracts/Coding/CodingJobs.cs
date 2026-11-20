@@ -24,13 +24,23 @@ public static class CodingJobs
 }
 
 public sealed record ExecuteCodingJob(Guid JobId);
-public sealed record StartCodingJob(string Instruction, string RequestKey);
+public sealed record StartCodingJob(string Instruction, string RequestKey)
+{
+    public Guid? PreviousJobId { get; init; }
+    public string? FollowUp { get; init; }
+}
+public sealed record CodingQuestion(Guid Id, Guid JobId, Guid SessionId, string Text, string? Answer, DateTimeOffset Deadline);
+public sealed record AskCodingQuestion(Guid Id, string Text);
+public sealed record AnswerCodingQuestion(string Answer);
 public sealed record CodingFile(string Path, string? Content, string Mode = "100644");
 public sealed record CodingValidation(string Command, int ExitCode, string Output);
 public sealed record CodingArtifact(string BaseSha, CodingFile[] Files, CodingValidation[] Checks, string Summary);
 public sealed record CodingJobView(Guid Id, string Instruction, string Repository, string BaseSha, string Branch,
     string Status, DateTimeOffset CreatedAt, DateTimeOffset Deadline, string? SandboxId, string CleanupState,
-    int ModelRequests, string? PullRequestUrl, string? Error, CodingArtifact? Artifact);
+    int ModelRequests, string? PullRequestUrl, string? Error, CodingArtifact? Artifact)
+{
+    public Guid? PreviousJobId { get; init; }
+}
 
 public sealed record CodingSettings
 {

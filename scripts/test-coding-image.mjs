@@ -15,23 +15,43 @@ const folder = await mkdtemp(join(tmpdir(), 'coding-smoke-'));
 await chmod(folder, 0o755);
 let calls = 0;
 let edited = false;
+let asked = false;
+let questionPolls = 0;
+let questionId;
+const question = 'What text should the proof contain?';
+const answer = 'Synthetic owner answer';
 const server = createServer(async (req, res) => {
   let body = '';
   for await (const part of req) body += part;
   const input = JSON.parse(body);
   assert.equal(req.headers.authorization, 'Bearer synthetic-proof-capability');
+  if (req.url.endsWith('/question')) {
+    assert.equal(input.text, question);
+    questionId ??= input.id;
+    assert.equal(input.id, questionId);
+    questionPolls++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ answer: questionPolls >= 2 ? answer : null }));
+    return;
+  }
   assert.equal(input.model, responses ? 'gpt-6-astra' : 'openai/gpt-5.4-mini');
   calls++;
-  const canEdit = input.tools?.some(t => (responses ? t.name : t.function?.name) === 'bash');
-  const delta = canEdit && !edited
-    ? { tool_calls: [{ index: 0, id: 'proof-edit', type: 'function', function: { name: 'bash', arguments: JSON.stringify({ command: "printf 'Synthetic coding proof.\\n' > coding-proof.txt", description: 'Write synthetic proof file' }) } }] }
-    : { content: 'Synthetic coding proof complete.' };
-  if (canEdit) edited = true;
+  const names = input.tools?.map(t => responses ? t.name : t.function?.name) ?? [];
+  const shell = names.find(t => t === 'shell' || t === 'bash');
+  const call = (id, name, args) => ({ tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+  let delta = { content: 'Synthetic coding proof complete.' };
+  if (!asked && names.includes('owner_ask')) {
+    asked = true;
+    delta = call('proof-question', 'owner_ask', { text: question });
+  } else if (!edited && shell && JSON.stringify(responses ? input.input : input.messages).includes(answer)) {
+    edited = true;
+    delta = call('proof-edit', shell, { command: "printf 'Synthetic coding proof.\\n' > coding-proof.txt", description: 'Write synthetic proof file' });
+  }
   res.writeHead(200, { 'content-type': 'text/event-stream' });
   if (responses) {
     assert.ok(req.url.endsWith('/responses'));
     const output = delta.tool_calls
-      ? [{ id: 'fc_proof', type: 'function_call', call_id: 'proof-edit', name: 'bash', namespace: 'coding', arguments: delta.tool_calls[0].function.arguments, status: 'completed' }]
+      ? [{ id: 'fc_proof', type: 'function_call', call_id: delta.tool_calls[0].id, name: delta.tool_calls[0].function.name, arguments: delta.tool_calls[0].function.arguments, status: 'completed' }]
       : [{ id: 'msg_proof', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: delta.content, annotations: [] }] }];
     let sequence = 0;
     function event(type, data) { res.write(`event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: sequence++, ...data })}\n\n`); }
@@ -72,14 +92,14 @@ try {
   await writeFile(join(folder, 'job.json'), JSON.stringify({ repository: 'memarino92/AgentPlayground', baseSha,
     gateway: `http://host.docker.internal:${server.address().port}/v1`, capability: 'synthetic-proof-capability', instruction: 'Create coding-proof.txt containing Synthetic coding proof.',
     testProject: 'PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj', testFilter: 'FullyQualifiedName~AgentSkillsTests',
-    model: responses ? 'gpt-6-astra' : 'openai/gpt-5.4-mini', responses }));
+    model: responses ? 'gpt-6-astra' : 'openai/gpt-5.4-mini', responses, canAsk: true }));
   if (repositoryBase) await docker([...common, image, 'prepare']);
   await docker([...common, '--user=65532:65532', image, 'code']);
   if (repositoryBase) await docker([...common, '--user=65532:65532', image, 'validate']);
   const artifact = JSON.parse(await docker([...common, '--user=65532:65532', '--network=none', image, 'export']));
-  assert.ok(calls > 0); assert.ok(edited);
+  assert.ok(calls > 0); assert.ok(asked); assert.ok(questionPolls >= 2); assert.ok(edited);
   assert.equal(artifact.files.find(f => f.path === 'coding-proof.txt')?.content, 'Synthetic coding proof.\n');
-  console.log(`OpenCode image proof passed: ${calls} synthetic requests, tool edit and isolated artifact export${repositoryBase ? ', public clone and Linux test gate' : ''}.`);
+  console.log(`OpenCode image proof passed: ${calls} synthetic requests, question round trip, tool edit and isolated artifact export${repositoryBase ? ', public clone and Linux test gate' : ''}.`);
 } finally {
   server.closeAllConnections(); server.close();
   await docker(['volume', 'rm', volume]);

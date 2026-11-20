@@ -1,0 +1,104 @@
+@using PersonalAgent.Contracts.Coding
+@implements IAsyncDisposable
+@inject PersonalAgentClient Client
+
+@if (Session is null || Questions.Length > 0)
+{
+    <section id="outstanding-questions">
+        <h2>Outstanding questions</h2>
+        @if (Error is not null) { <p role="alert">@Error</p> }
+        @if (!Loaded) { <p>Loading questions…</p> }
+        else if (Questions.Length == 0 && Error is null) { <p>No coding jobs are waiting for an answer.</p> }
+        @foreach (var Question in Questions)
+        {
+            <article @key="Question.Id">
+                <p>@Question.Text</p>
+                @if (Session is null)
+                {
+                    <p><a href="@($"/chat?sessionId={Question.SessionId:D}")">Open originating chat</a></p>
+                }
+                <p>Job deadline <time datetime="@Question.Deadline.ToString("O")">@Question.Deadline.ToUniversalTime().ToString("MMM d, HH:mm 'UTC'")</time></p>
+                <label for="@($"answer-{Question.Id:D}")">Your answer</label>
+                <textarea id="@($"answer-{Question.Id:D}")" maxlength="4000" value="@Drafts.GetValueOrDefault(Question.Id)"
+                          @oninput="ChangeEvent => Drafts[Question.Id] = ChangeEvent.Value?.ToString() ?? string.Empty"></textarea>
+                <button type="button" disabled="@(Saving || string.IsNullOrWhiteSpace(Drafts.GetValueOrDefault(Question.Id)))"
+                        @onclick="() => AnswerAsync(Question.Id)">Send answer</button>
+            </article>
+        }
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Profile { get; set; } = "";
+    [Parameter] public Guid? Session { get; set; }
+    private readonly CancellationTokenSource Lifetime = new();
+    private readonly Dictionary<Guid, string> Drafts = [];
+    private CodingQuestion[] Questions = [];
+    private string? Error;
+    private bool Loaded, Saving;
+    private Task? Poll;
+
+    protected override async Task OnAfterRenderAsync(bool FirstRender)
+    {
+        if (!FirstRender) return;
+        await RefreshAsync();
+        if (Lifetime.IsCancellationRequested) return;
+        Poll = PollAsync();
+        StateHasChanged();
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            Questions = await Client.GetCodingQuestionsAsync(Profile, Session, Lifetime.Token);
+            Loaded = true;
+            foreach (var Id in Drafts.Keys.Except(Questions.Select(Question => Question.Id)).ToArray()) Drafts.Remove(Id);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested) { }
+        catch (HttpRequestException ErrorResponse) when (ErrorResponse.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            Questions = [];
+            Loaded = true;
+        }
+        catch (Exception Failure) when (Failure is HttpRequestException or System.Text.Json.JsonException)
+        {
+            Error = "Coding questions are temporarily unavailable.";
+            Loaded = true;
+        }
+    }
+
+    private async Task AnswerAsync(Guid Id)
+    {
+        if (Saving || !Drafts.TryGetValue(Id, out var Answer) || string.IsNullOrWhiteSpace(Answer)) return;
+        Saving = true;
+        Error = null;
+        try { await Client.AnswerCodingQuestionAsync(Profile, Id, Answer, Lifetime.Token); }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested) { }
+        catch (HttpRequestException) { Error = "The answer could not be sent. Check whether the question is still open."; }
+        finally { Saving = false; }
+        if (!Lifetime.IsCancellationRequested) await RefreshAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        try
+        {
+            while (!Lifetime.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(7), Lifetime.Token);
+                if (Saving) continue;
+                await RefreshAsync();
+                if (!Lifetime.IsCancellationRequested) StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Lifetime.CancelAsync();
+        if (Poll is not null) await Poll;
+        Lifetime.Dispose();
+    }
+}

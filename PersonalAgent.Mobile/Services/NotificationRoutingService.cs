@@ -8,8 +8,26 @@ public class NotificationRoutingService(TimeProvider? Clock = null)
     private readonly Dictionary<Guid, PendingApprovalNotification> _pendingApprovals = [];
     private readonly TimeProvider _clock = Clock ?? TimeProvider.System;
     private Guid? _reviewFirstId;
+    private bool _openCodingQuestions;
 
     public event EventHandler<PendingApprovalNotification>? PendingApprovalReceived;
+    public event EventHandler? CodingQuestionsRequested;
+
+    public void RequestCodingQuestions()
+    {
+        lock (_syncRoot) _openCodingQuestions = true;
+        CodingQuestionsRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    public bool TakeCodingQuestionsRequest()
+    {
+        lock (_syncRoot)
+        {
+            var requested = _openCodingQuestions;
+            _openCodingQuestions = false;
+            return requested;
+        }
+    }
 
     public void RoutePendingApproval(PendingApprovalNotification Notification, bool RequestReview = false)
     {

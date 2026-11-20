@@ -21,6 +21,7 @@ export async function codingDispatch(request, api) {
   // Inputs are JSON file data, never shell fragments. Only validated image/duration enter commands.
   await sandbox.files.write('/coding/request.json', JSON.stringify({ repository: request.repository, baseSha: request.baseSha,
     instruction: request.instruction, gateway: request.gateway, capability: request.capability,
+    minutes: request.minutes, canAsk: request.canAsk, followUpEvidence: request.followUpEvidence,
     testProject: request.testProject, testFilter: request.testFilter, model: request.model, responses: request.responses }));
   const readable = await sandbox.exec('chmod 0444 /coding/request.json', { timeoutSec: 15 });
   if (readable.exitCode !== 0) throw new Error('Request mount unavailable');
@@ -73,6 +74,8 @@ export function validateRequest(r) {
     || !Number.isInteger(r.minutes) || r.minutes < 5 || r.minutes > 30
     || !/^[a-f0-9]{64}$/.test(r.capability) || !/^https:\/\/[^\s"\\]+\/coding-runtime\/[a-f0-9-]+\/v1$/.test(r.gateway)
     || typeof r.instruction !== 'string' || r.instruction.length > 8000
+    || (r.canAsk !== undefined && typeof r.canAsk !== 'boolean')
+    || (r.followUpEvidence != null && (typeof r.followUpEvidence !== 'string' || r.followUpEvidence.length > 12000))
     || (r.responses !== undefined && typeof r.responses !== 'boolean')
     || (r.model !== undefined && (typeof r.model !== 'string' || !/^[A-Za-z0-9_./-]{1,100}$/.test(r.model)))
     || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.csproj$/.test(r.testProject) || r.testProject.includes('..')

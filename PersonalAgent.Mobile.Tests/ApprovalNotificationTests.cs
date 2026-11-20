@@ -96,6 +96,15 @@ public class ApprovalNotificationTests
     }
 
     [Fact]
+    public void CodingQuestionTapSurvivesUntilTheAppCanOpenTheQuestionList()
+    {
+        var Routing = new NotificationRoutingService(new TestClock());
+        Routing.RequestCodingQuestions();
+        Assert.True(Routing.TakeCodingQuestionsRequest());
+        Assert.False(Routing.TakeCodingQuestionsRequest());
+    }
+
+    [Fact]
     public void OtherProfilesCannotConsumeTheRequest()
     {
         var Routing = new NotificationRoutingService(new TestClock());
