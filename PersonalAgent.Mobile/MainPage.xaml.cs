@@ -22,6 +22,7 @@ public partial class MainPage : ContentPage
     private bool _followTranscript = true;
     private Guid? _conversation;
     private bool _chatBusy;
+    private readonly ChatComposer _composer = new();
     private Guid? _run;
     private async void OnStopClicked(object? sender, EventArgs e)
     {
@@ -110,6 +111,7 @@ public partial class MainPage : ContentPage
 
     private void ShowConversation(NativeConversation? conversation, bool preservePosition = false)
     {
+        ClearPendingTurn();
         var messages = conversation?.Messages ?? [];
         if (!preservePosition || _conversation != conversation?.SessionId)
         {
@@ -136,11 +138,18 @@ public partial class MainPage : ContentPage
         RequestTranscriptFollow();
     }
 
+    private void ClearPendingTurn()
+    {
+        PendingTurn.IsVisible = PendingActivityToggle.IsVisible = PendingActivity.IsVisible = false;
+        PendingMessage.Text = PendingReply.Text = PendingActivity.Text = string.Empty;
+    }
+
     private void OnPendingActivityClicked(object? sender, EventArgs e) =>
         PendingActivity.IsVisible = !PendingActivity.IsVisible;
 
     private async Task<NativeConversation> StreamReplyAsync(Guid session, string message, PendingChatRun? pendingRun)
     {
+        ClearPendingTurn();
         var run = pendingRun?.Id ?? Guid.NewGuid();
         _run = run;
         _followTranscript = true;
@@ -191,8 +200,9 @@ public partial class MainPage : ContentPage
         finally
         {
             timer.Stop();
-            PendingTurn.IsVisible = PendingActivityToggle.IsVisible = PendingActivity.IsVisible = false;
-            PendingMessage.Text = PendingReply.Text = PendingActivity.Text = string.Empty;
+            // Keep an uncertain turn visible until an authoritative refresh replaces it,
+            // including when a newer draft prevents restoring the submitted text.
+            PendingReply.Text = reply.ToString();
             RequestTranscriptFollow();
         }
     }
@@ -202,7 +212,7 @@ public partial class MainPage : ContentPage
         if (_chatBusy) return;
         _chatBusy = true;
         if (message is not null) Draft.Unfocus();
-        SignIn.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = false;
+        SignIn.IsEnabled = SendMessage.IsEnabled = WorkspaceAction.IsEnabled = false;
         ChatStatus.Text = message is null ? "Opening conversation…" : WaitingForReply;
         try
         {
@@ -220,10 +230,13 @@ public partial class MainPage : ContentPage
                 ChatStatus.Text = WaitingForReply;
             }
             if (message is not null && _conversation is Guid id)
-                conversation = await StreamReplyAsync(id, message, pendingRun);
+            {
+                if (pendingRun is not null) conversation = await StreamReplyAsync(id, message, pendingRun);
+                else await _composer.SendAsync(() => Draft.Text, Text => Draft.Text = Text,
+                    async Text => { conversation = await StreamReplyAsync(id, Text, null); });
+            }
 
             ShowConversation(conversation, preservePosition: message is not null);
-            if (message is not null && pendingRun is null && conversation is not null) Draft.Text = string.Empty;
         }
         catch (TaskCanceledException) { ChatStatus.Text = "Request interrupted. Refresh to check the conversation."; }
         catch (OperationCanceledException) { ChatStatus.Text = "Sign-in canceled."; }
@@ -236,7 +249,7 @@ public partial class MainPage : ContentPage
             _run = null;
             StopReply.IsVisible = false;
             _chatBusy = false;
-            SignIn.IsEnabled = Composer.IsEnabled = WorkspaceAction.IsEnabled = true;
+            SignIn.IsEnabled = SendMessage.IsEnabled = WorkspaceAction.IsEnabled = true;
         }
         await OpenRequestedCodingQuestionsAsync();
     }
