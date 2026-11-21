@@ -76,7 +76,7 @@
                             AutoSize="TextChanges" FontSize="16" VerticalOptions="Center" BackgroundColor="Transparent"
                             TextColor="{AppThemeBinding Light=#162C29, Dark=#E9F2EE}"
                             PlaceholderColor="{AppThemeBinding Light=#526A64, Dark=#B5CEC6}" />
-                    <Button Grid.Column="1" Text="Send" Style="{StaticResource PrimaryButtonStyle}" CornerRadius="16"
+                    <Button x:Name="SendMessage" Grid.Column="1" Text="Send" Style="{StaticResource PrimaryButtonStyle}" CornerRadius="16"
                             MinimumHeightRequest="48" VerticalOptions="End" Clicked="OnSendClicked" />
                 </Grid>
             </Border>
