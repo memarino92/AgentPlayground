@@ -132,6 +132,8 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton(sp => PersonalAgentSkills.Create(sp.GetRequiredService<ILoggerFactory>()));
         services.AddSingleton<WorkJournalService>();
         services.AddSingleton<CoachCheckinService>();
+        services.AddSingleton<ICoachUploadStore>(Services => Services.GetRequiredService<CoachCheckinService>());
+        services.AddSingleton<CoachUploadActions>();
         services.AddSingleton<CoachCallExecutiveSummaryService>();
         services.AddSingleton<ICoachEvidenceService, CoachEvidenceService>();
         services.AddSingleton<SchedulingService>();

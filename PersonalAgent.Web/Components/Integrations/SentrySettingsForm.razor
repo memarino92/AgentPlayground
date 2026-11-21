@@ -7,7 +7,7 @@
         <DataAnnotationsValidator />
         <ValidationSummary />
         <fieldset disabled="@Busy">
-            <label class="toggle"><InputCheckbox @bind-Value="Model.Enabled" /> Enable error reporting</label>
+            <label class="toggle"><InputCheckbox id="sentry-enabled" @bind-Value="Model.Enabled" /> Enable error reporting</label>
             <label for="sentry-environment">Environment</label>
             <InputText id="sentry-environment" @bind-Value="Model.Environment" />
             <ValidationMessage For="() => Model.Environment" />

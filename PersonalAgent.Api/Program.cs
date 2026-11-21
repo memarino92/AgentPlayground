@@ -20,6 +20,8 @@ builder.AddApplicationObservability("Api");
 builder.Services.AddSingleton<IIntegrationSettingsService, IntegrationSettingsService>();
 builder.Services.AddSingleton<OtelSettingsService>();
 builder.Services.AddSingleton<DatabaseSettingsStore>();
+builder.Services.AddSingleton<IDatabaseSettingsStore>(sp => sp.GetRequiredService<DatabaseSettingsStore>());
+builder.Services.AddSingleton<SiteSettingsActions>();
 builder.Services.AddSingleton<BackupSettingsStore>();
 builder.Services.AddSingleton<IWhatboxSettingsStore, WhatboxSettingsStore>();
 builder.Services.AddSingleton<IWhatboxSshTransport, WhatboxSshTransport>();

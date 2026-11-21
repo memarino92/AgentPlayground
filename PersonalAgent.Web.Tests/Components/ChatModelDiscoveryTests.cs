@@ -7,6 +7,7 @@ using Bunit;
 using Bunit.TestDoubles;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -21,6 +22,55 @@ namespace PersonalAgent.Web.Tests.Components;
 
 public sealed class ChatModelDiscoveryTests : TestContext
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CoachingM4a_WithNoContextUsesOwnedPipeline_WithDraftRequiresExplicitChoice(bool WithDraft)
+    {
+        using var Handler = new CatalogHandler();
+        Configure(Handler);
+        var Cut = RenderComponent<Chat>();
+        Cut.WaitForElement("textarea");
+        if (WithDraft) Cut.Find("textarea").Input("Please inspect this before deciding what to do.");
+        var File = CoachingFile();
+        await Cut.InvokeAsync(() => Cut.FindComponent<InputFile>().Instance.OnChange.InvokeAsync(new InputFileChangeEventArgs([File])));
+        if (WithDraft)
+        {
+            Handler.CoachingUploads.Should().Be(0);
+            Cut.FindAll("button").Single(B => B.TextContent == "Submit to coaching").Click();
+        }
+        Cut.WaitForAssertion(() => Handler.CoachingUploads.Should().Be(1));
+        Cut.Find("[role=status]").TextContent.Should().Contain("Uploaded").And.Contain("not a claim that processing is complete");
+        Handler.CoachingBody.Should().Contain("owner").And.Contain("call.m4a");
+        Cut.Find("textarea").GetAttribute("value").Should().Contain("Coaching audio upload reference");
+    }
+
+    [Fact]
+    public async Task ContraryContextOrCancel_DoesNotEnqueue_AndFailureDoesNotClaimAcceptance()
+    {
+        using var Handler = new CatalogHandler { FailUpload = true, Conversation = [new("user", "Use the next file as sandbox input, do not transcribe it.")] };
+        Configure(Handler);
+        var Cut = RenderComponent<Chat>();
+        Cut.WaitForElement("textarea");
+        await Cut.InvokeAsync(() => Cut.FindComponent<InputFile>().Instance.OnChange.InvokeAsync(new InputFileChangeEventArgs([CoachingFile()])));
+        Handler.CoachingUploads.Should().Be(0);
+        Cut.FindAll("button").Single(B => B.TextContent == "Cancel upload").Click();
+        Handler.CoachingUploads.Should().Be(0);
+        await Cut.InvokeAsync(() => Cut.FindComponent<InputFile>().Instance.OnChange.InvokeAsync(new InputFileChangeEventArgs([CoachingFile()])));
+        Cut.FindAll("button").Single(B => B.TextContent == "Submit to coaching").Click();
+        Cut.WaitForAssertion(() => Cut.Markup.Should().Contain("could not be confirmed"));
+        Cut.Markup.Should().NotContain("Coaching audio accepted");
+        Cut.Find("textarea").GetAttribute("value").Should().NotContain("upload reference");
+    }
+
+    private static IBrowserFile CoachingFile()
+    {
+        var File = new Mock<IBrowserFile>();
+        File.SetupGet(F => F.Name).Returns("call.m4a");
+        File.Setup(F => F.OpenReadStream(25 * 1024 * 1024, It.IsAny<CancellationToken>())).Returns(() => new MemoryStream([1, 2, 3]));
+        return File.Object;
+    }
+
     [Fact]
     public async Task SourceLinkToCurrentConversation_OpensReadonlyHistoryAtTheMessage()
     {
@@ -228,6 +278,9 @@ public sealed class ChatModelDiscoveryTests : TestContext
         public Guid? ObservedRun;
         public Stream? StreamBody;
         public int SendCount;
+        public int CoachingUploads;
+        public string? CoachingBody;
+        public bool FailUpload;
         public int CatalogReads { get; private set; }
         public int OpenCount { get; private set; }
         public int ClearCount { get; private set; }
@@ -237,6 +290,13 @@ public sealed class ChatModelDiscoveryTests : TestContext
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage Request, CancellationToken CancellationToken)
         {
+            if (Request.RequestUri!.AbsolutePath == "/api/coach-checkins/uploads")
+            {
+                CoachingUploads++;
+                CoachingBody = await Request.Content!.ReadAsStringAsync(CancellationToken);
+                return FailUpload ? new(HttpStatusCode.ServiceUnavailable) : new(HttpStatusCode.OK)
+                { Content = JsonContent.Create(new CoachCheckinUploadResponse(Guid.NewGuid(), Guid.NewGuid(), "Uploaded", DateTimeOffset.UtcNow, false)) };
+            }
             if (Request.RequestUri!.AbsolutePath == "/api/coding-jobs/questions")
                 return new(HttpStatusCode.OK) { Content = JsonContent.Create(Array.Empty<PersonalAgent.Contracts.Coding.CodingQuestion>()) };
             if (Request.RequestUri.AbsolutePath == "/api/coding-jobs/conversation-updates")

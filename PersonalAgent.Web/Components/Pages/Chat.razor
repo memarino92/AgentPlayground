@@ -74,7 +74,14 @@
                 {
                 @if (role == "Owner" && profileId is not null)
                 {
-                    <label>Attach sandbox input <InputFile OnChange="AttachInputAsync" disabled="@isBusy" /></label>
+                    <label>Attach file (.m4a for coaching; other files for sandbox) <InputFile OnChange="AttachInputAsync" disabled="@isBusy" /></label>
+                    <small>A .m4a with no accompanying draft is submitted for coaching transcription and processing. With a draft, choose explicitly below.</small>
+                    @if (pendingCoachingFile is not null)
+                    {
+                        <p>Submit @pendingCoachingFile.File.Name to the coaching transcription/processing pipeline?</p>
+                        <button disabled="@isBusy" @onclick="ConfirmCoachingUploadAsync">Submit to coaching</button>
+                        <button disabled="@isBusy" @onclick="() => pendingCoachingFile = null">Cancel upload</button>
+                    }
                 }
                 <ChatComposer CurrentMessage="@currentMessage"
                               CurrentMessageChanged="HandleCurrentMessageChanged"

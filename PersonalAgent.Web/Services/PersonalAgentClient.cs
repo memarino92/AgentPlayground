@@ -225,7 +225,7 @@ internal partial class PersonalAgentClient : IDisposable
         fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(contentType) ? "audio/m4a" : contentType);
         form.Add(fileContent, "file", fileName);
 
-        var response = await SendAsync(HttpMethod.Post, "/api/coach-checkins/uploads", form);
+        using var response = await SendAsync(HttpMethod.Post, "/api/coach-checkins/uploads", form);
         if (!response.IsSuccessStatusCode)
             throw await CreateRequestExceptionAsync("upload coach check-in", response);
 
@@ -376,6 +376,19 @@ internal partial class PersonalAgentClient : IDisposable
     {
         using var response = await SendAsync(HttpMethod.Put, "/api/admin/settings", JsonContent.Create(Request, options: JsonOptions), CancellationToken);
         response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<CoachingSettingProposal> ReviewCoachingSettingAsync(Guid Id)
+    {
+        using var Response = await SendAsync(HttpMethod.Get, $"/api/admin/settings/proposals/{Id}");
+        Response.EnsureSuccessStatusCode();
+        return (await Response.Content.ReadFromJsonAsync<CoachingSettingProposal>(JsonOptions))!;
+    }
+
+    public async Task ConfirmCoachingSettingAsync(Guid Id)
+    {
+        using var Response = await SendAsync(HttpMethod.Post, $"/api/admin/settings/proposals/{Id}/confirm", JsonContent.Create(new ConfirmCoachingSetting(true)));
+        Response.EnsureSuccessStatusCode();
     }
 
     public async Task<BackupSettingsResponse> GetBackupSettingsAsync(CancellationToken CancellationToken = default)

@@ -30,6 +30,32 @@ window.isNearChatBottom = function(containerId, thresholdPx) {
   return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
 };
 
+// Settings forms load asynchronously, after the browser's initial fragment navigation.
+// Navigation only: never set values, click controls, or submit a form.
+window.focusSettingsInput = function() {
+  const href = window.location.href;
+  let id;
+  try { id = decodeURIComponent(window.location.hash.slice(1)); }
+  catch { return; }
+  if (!id || !/^(setting-|openrouter-|sentry-|otel-|backup-|runner-|coding-)/.test(id)) return;
+  let observer;
+  let timeout;
+  const focus = function() {
+    if (window.location.href !== href) { observer?.disconnect(); clearTimeout(timeout); return true; }
+    const input = document.getElementById(id);
+    if (!input) return false;
+    observer?.disconnect();
+    clearTimeout(timeout);
+    input.scrollIntoView({ block: "center" });
+    input.focus({ preventScroll: true });
+    return true;
+  };
+  if (focus()) return;
+  observer = new MutationObserver(focus);
+  observer.observe(document.body, { childList: true, subtree: true });
+  timeout = setTimeout(() => observer.disconnect(), 15000);
+};
+
 document.addEventListener("keydown", function(event) {
   if (event.key !== "Enter" || event.shiftKey || !event.target.matches("textarea[data-send-on-enter='true']")) return;
   event.preventDefault();

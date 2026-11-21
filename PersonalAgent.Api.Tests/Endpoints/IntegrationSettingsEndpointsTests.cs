@@ -83,6 +83,15 @@ public sealed class IntegrationSettingsEndpointsTests
             using var response = await client.SendAsync(request);
             ((int)response.StatusCode).Should().Be(Expected);
         }
+        foreach (var Method in new[] { HttpMethod.Get, HttpMethod.Post })
+        {
+            using var Client = app.GetTestClient();
+            Sign(Client, Actor, Role, InternalKey, ForgeSignature);
+            using var Request = new HttpRequestMessage(Method, $"/api/admin/settings/proposals/{Guid.NewGuid()}" + (Method == HttpMethod.Post ? "/confirm" : ""));
+            if (Method == HttpMethod.Post) Request.Content = JsonContent.Create(new ConfirmCoachingSetting(true));
+            using var Response = await Client.SendAsync(Request);
+            ((int)Response.StatusCode).Should().Be(Expected);
+        }
     }
 
     [Fact]
@@ -103,7 +112,24 @@ public sealed class IntegrationSettingsEndpointsTests
         service.Verify(Service => Service.SaveAsync(It.IsAny<SaveIntegrationRequest>(), "admin", It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private static async Task<WebApplication> CreateAsync(IIntegrationSettingsService Service)
+    [Fact]
+    public async Task ProposalRoute_RequiresSeparateExactConfirmationAndCannotChangeItsPayload()
+    {
+        var Store = new Mock<IDatabaseSettingsStore>(MockBehavior.Strict);
+        Store.Setup(S => S.ReadAsync(It.IsAny<CancellationToken>())).ReturnsAsync([new("Api", "CoachCheckins:CoachName", "1", "Old", false, true)]);
+        Store.Setup(S => S.SaveAsync(It.Is<SaveDatabaseSettingsRequest>(R => R.Changes.Count == 1 && R.Changes[0].Value == "New" && R.Changes[0].Version == "1"), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        await using var App = await CreateAsync(Mock.Of<IIntegrationSettingsService>(), Store.Object);
+        var Proposal = await App.Services.GetRequiredService<SiteSettingsActions>().ProposeAsync(new("admin", "Owner", "admin"), "Api", "CoachCheckins:CoachName", "New", default);
+        using var Client = App.GetTestClient();
+        Sign(Client, "admin", "Owner", true, false);
+        (await Client.GetAsync($"/api/admin/settings/proposals/{Proposal.Id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        Store.Verify(S => S.SaveAsync(It.IsAny<SaveDatabaseSettingsRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        (await Client.PostAsJsonAsync($"/api/admin/settings/proposals/{Proposal.Id}/confirm", new { confirm = false })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Client.PostAsJsonAsync($"/api/admin/settings/proposals/{Proposal.Id}/confirm", new { confirm = true, value = "forged", actorId = "victim", role = "Owner" })).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        Store.Verify(S => S.SaveAsync(It.IsAny<SaveDatabaseSettingsRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private static async Task<WebApplication> CreateAsync(IIntegrationSettingsService Service, IDatabaseSettingsStore? Settings = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -115,6 +141,8 @@ public sealed class IntegrationSettingsEndpointsTests
         builder.Services.AddSingleton<OtelRuntime>();
         builder.Services.AddSingleton<OtelSettingsService>();
         builder.Services.AddSingleton(new DatabaseSettingsStore(new IntegrationDatabase("", "")));
+        builder.Services.AddSingleton<IDatabaseSettingsStore>(S => Settings ?? S.GetRequiredService<DatabaseSettingsStore>());
+        builder.Services.AddSingleton<SiteSettingsActions>();
         builder.Services.AddSingleton<DatabaseCredentialRuntime>();
         builder.Services.AddSingleton(new AutomationRuntimeStore(new IntegrationDatabase("", "")));
         builder.Services.AddSingleton(new Mock<IWhatboxSettingsStore>(MockBehavior.Strict).Object);

@@ -19,6 +19,9 @@ internal record SaveToolAccessRequest(IReadOnlyList<ToolRolePermission> Permissi
 
 internal static class AgentToolKeys
 {
+    public const string FindSettingInput = "Local:find_setting_input";
+    public const string ProposeCoachingSetting = "Local:propose_coaching_setting";
+    public const string CoachingUploadStatus = "Local:coaching_upload_status";
     public const string ReadRailwayLogs = "Local:read_railway_logs";
     public const string ResearchSwarm = "Local:research_swarm";
     public const string ReadWhatboxDiskUsage = "Local:read_whatbox_disk_usage";

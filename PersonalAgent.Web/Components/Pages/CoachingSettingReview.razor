@@ -1,0 +1,57 @@
+@using PersonalAgent.Integrations
+@inject PersonalAgentClient Client
+
+<section aria-label="Review coaching setting change">
+    <h2>Confirm exact coaching setting change</h2>
+    @if (Error is not null) { <p role="alert">@Error</p> }
+    @if (Saved) { <p role="status">Saved to the database. Restart API for participant names to take effect.</p> }
+    else if (Proposal is not null)
+    {
+        <p>This proposal has not been saved. Confirm only if this is the change you want.</p>
+        <dl><dt>Service scope</dt><dd>@Proposal.Scope</dd><dt>Setting</dt><dd>@Proposal.Key</dd>
+            <dt>Before</dt><dd>@Proposal.Before</dd><dt>After</dt><dd>@Proposal.After</dd></dl>
+        <p>API restart required. Changes to names affect presentation, not stored speaker roles.</p>
+        <button disabled="@Busy" @onclick="ConfirmAsync">Confirm this exact change</button>
+    }
+    <a href="/admin/settings?section=database">Cancel / return to settings</a>
+</section>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private CoachingSettingProposal? Proposal;
+    private bool Busy, Saved;
+    private string? Error;
+    protected override async Task OnParametersSetAsync()
+    {
+        Proposal = null;
+        Saved = false;
+        Error = null;
+        var RequestedId = Id;
+        try
+        {
+            var Response = await Client.ReviewCoachingSettingAsync(RequestedId);
+            if (Id == RequestedId) Proposal = Response;
+        }
+        catch (HttpRequestException)
+        {
+            if (Id == RequestedId) Error = "Proposal unavailable, expired, changed, or not yours. Ask for a new proposal.";
+        }
+    }
+    private async Task ConfirmAsync()
+    {
+        if (Busy || Proposal is null) return;
+        Busy = true;
+        Error = null;
+        var ConfirmedId = Proposal.Id;
+        try
+        {
+            await Client.ConfirmCoachingSettingAsync(ConfirmedId);
+            if (Proposal?.Id == ConfirmedId) Saved = true;
+        }
+        catch (HttpRequestException)
+        {
+            if (Proposal?.Id == ConfirmedId) Error = "Save could not be confirmed. Check settings before requesting a fresh proposal; nothing is assumed saved.";
+        }
+        finally { Busy = false; }
+    }
+}

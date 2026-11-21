@@ -17,7 +17,7 @@ internal class CoachCheckinService(
     IOptions<AgentMemoryOptions> memoryOptions,
     IOptions<CoachCheckinOptions> coachOptions,
     IAgentEmbeddingService embeddingService,
-    ILogger<CoachCheckinService> logger)
+    ILogger<CoachCheckinService> logger) : ICoachUploadStore
 {
     private readonly string _connectionString = sqlOptions.Value.ConnectionString ?? string.Empty;
     private readonly string _schema = memoryOptions.Value.Schema;

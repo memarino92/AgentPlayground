@@ -41,7 +41,7 @@
                 @if (!Subscription) { <div class="settings-editor__field"><label for="coding-budget">Model budget (USD, up to 5)</label><InputNumber id="coding-budget" @bind-Value="Model.Budget" /></div> }
                 <div class="settings-editor__field"><label for="coding-tests">Required test project</label><InputText id="coding-tests" @bind-Value="Model.TestProject" /></div>
                 <div class="settings-editor__field"><label for="coding-filter">Test filter (empty for all tests)</label><InputText id="coding-filter" @bind-Value="Model.TestFilter" /></div>
-                <label><InputCheckbox @bind-Value="Model.Enabled" /> Enable coding jobs</label>
+                <label><InputCheckbox id="coding-enabled" @bind-Value="Model.Enabled" /> Enable coding jobs</label>
                 <p>Also enable “Implement platform change” and “Inspect platform changes” in Integrations. Main must require maintainer review without a publisher bypass. New jobs use saved settings; disabling blocks model calls and publication.</p>
                 <button type="submit">Save coding settings</button>
             </fieldset>

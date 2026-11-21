@@ -27,7 +27,7 @@ public class AgentToolRegistryTests
         using var Services = BuildServices(Provider, Store);
         var Binder = Services.GetRequiredService<AgentToolBinder>();
         var Tools = await Binder.BindAsync(new("owner", AgentRoles.Owner, "subject"));
-        Tools.Should().HaveCount(21);
+        Tools.Should().HaveCount(24);
         var DirectMessages = new Dictionary<string, string>
         {
             [AgentToolKeys.PublishMobileNotification] = "notify me: drink water",
@@ -88,7 +88,7 @@ public class AgentToolRegistryTests
         research.OwnerDefault.Should().BeFalse();
         research.CoachDefault.Should().BeFalse();
         research.IsAvailable.Should().BeFalse();
-        tools.Should().HaveCount(16);
+        tools.Should().HaveCount(19);
         foreach (var tool in tools)
         {
             tool.Function.Name.Should().Be(tool.Descriptor.Name);
@@ -100,7 +100,7 @@ public class AgentToolRegistryTests
             [AgentToolKeys.PublishMobileNotification, AgentToolKeys.SyncWorkJournal, AgentToolKeys.ScheduleNotification, AgentToolKeys.ScheduleAgentTask,
                 AgentToolKeys.UpdateScheduledJob, AgentToolKeys.CancelScheduledJob, "Local:save_automation", "Local:control_automation",
                 "Local:start_coding_job", "Local:inspect_coding_job", "Local:run_railway_sandbox", "Local:run_python", "Local:schedule_python",
-                AgentToolKeys.ResearchSwarm, "Local:run_supervised_workflow"]);
+                AgentToolKeys.ResearchSwarm, "Local:run_supervised_workflow", AgentToolKeys.ProposeCoachingSetting]);
     }
 
     [Fact]
