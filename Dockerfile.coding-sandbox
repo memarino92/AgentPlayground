@@ -6,9 +6,9 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates ripgrep unzip libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*
 ENV ANDROID_SDK_ROOT=/opt/android-sdk JAVA_HOME=/opt/android-jdk
-RUN dotnet workload install maui-android --skip-manifest-update \
+RUN dotnet workload install maui-android --version 11.0.100 \
     && dotnet new android --output /tmp/android-dependencies \
-    && dotnet build /tmp/android-dependencies -t:InstallAndroidDependencies \
+    && USER=root LOGNAME=root dotnet build /tmp/android-dependencies -t:InstallAndroidDependencies \
         -p:AndroidSdkDirectory=$ANDROID_SDK_ROOT -p:JavaSdkDirectory=$JAVA_HOME -p:AcceptAndroidSDKLicenses=True \
     && test -x "$JAVA_HOME/bin/javac" \
     && rm -rf /tmp/android-dependencies
