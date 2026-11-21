@@ -5,6 +5,7 @@ const r = JSON.parse(readFileSync('/run/job.json', 'utf8'));
 const phase = process.argv[2];
 const root = '/work/repo';
 const env = { PATH: process.env.PATH, HOME: '/work/home', DOTNET_CLI_HOME: '/work/home', NUGET_PACKAGES: '/work/packages',
+  ANDROID_SDK_ROOT: process.env.ANDROID_SDK_ROOT, JAVA_HOME: process.env.JAVA_HOME,
   DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
   GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'safe.directory', GIT_CONFIG_VALUE_0: root };
 function run(command, args, cwd = root, extra = {}) {
@@ -32,6 +33,7 @@ try {
         models: { [model]: { name: 'Coding', tool_call: true, limit: { context: 400000, output: r.responses ? 32768 : 8192 } } } } } };
     const prompt = [
       'Implement the request in this repository. Read AGENTS.md and applicable documentation. Make a focused change and appropriate tests.',
+      'The checkout starts without restored NuGet assets. Run dotnet test or dotnet build with their normal restore, or explicitly restore the target project before using --no-restore. Build the Android app by targeting PersonalAgent.Mobile/PersonalAgent.Mobile.csproj directly.',
       'Do not push, open PRs, deploy, change credentials, or modify .github files. Describe the change and validation in your final response.',
       r.canAsk ? 'If an owner decision is needed to proceed, call owner_ask. It waits for an answer in the originating chat. Ask one focused question at a time. Never ask for secrets.'
         : 'If blocked, explain in your final response.',

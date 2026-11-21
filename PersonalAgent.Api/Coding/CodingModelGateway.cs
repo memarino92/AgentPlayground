@@ -66,8 +66,18 @@ internal sealed class CodingModelGateway(CodingJobStore Store, CodingJobService 
         if (Remaining <= TimeSpan.Zero) throw new UnauthorizedAccessException();
         var RequestLimit = TimeSpan.FromMinutes(Subscription ? 10 : 3);
         Deadline.CancelAfter(Remaining < RequestLimit ? Remaining : RequestLimit);
-        var Input = await Context.Request.ReadFromJsonAsync<JsonObject>(Deadline.Token) ?? throw new ArgumentException();
-        var Clean = Subscription ? CodingSubscriptionRequest.Sanitize(Input, Slug) : Sanitize(Input);
+        JsonObject Clean;
+        try
+        {
+            var Input = await Context.Request.ReadFromJsonAsync<JsonObject>(Deadline.Token) ?? throw new ArgumentException();
+            Clean = Subscription ? CodingSubscriptionRequest.Sanitize(Input, Slug) : Sanitize(Input);
+        }
+        catch (Exception E) when (E is ArgumentException or JsonException or InvalidOperationException)
+        {
+            Logger.LogWarning(new EventId(4406), "Coding gateway rejected the input for {JobId} before inference ({ExceptionType})",
+                Id, E.GetType().Name);
+            throw new CodingGatewayException(400, "The coding gateway rejected the request. Use the selected model and text-only context with local tools.");
+        }
         var Credential = Current.Secrets.OpenRouterKey;
         if (Subscription)
         {
