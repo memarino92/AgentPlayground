@@ -56,6 +56,33 @@ public sealed class CodingSubscriptionTests
     }
 
     [Theory]
+    [InlineData("""[{"type":"input_image","image_url":"https://example.invalid/image"}]""")]
+    [InlineData("""[{"type":"input_text","text":17}]""")]
+    [InlineData("""{"text":"unsupported"}""")]
+    public void ToolOutputRejectsNonText(string Output)
+    {
+        var Input = ToolReplay(Output);
+        FluentActions.Invoking(() => CodingSubscriptionRequest.Sanitize(Input, "gpt-6-astra"))
+            .Should().Throw<ArgumentException>().WithMessage("Text tool output required.");
+    }
+
+    [Fact]
+    public void ResponsesReplayTextBlocksFromAFailedLocalCommand()
+    {
+        var Input = ToolReplay("""[{"type":"input_text","text":"Missing project.assets.json"},{"type":"input_text","text":"Exit code: 1"}]""");
+        var Safe = CodingSubscriptionRequest.Sanitize(Input, "gpt-6-astra");
+        Safe["input"]![1]!["call_id"]!.GetValue<string>().Should().Be("call_build");
+        Safe["input"]![1]!["output"]!.GetValue<string>().Should().Be("Missing project.assets.json\nExit code: 1");
+    }
+
+    private static JsonObject ToolReplay(string Output) => JsonNode.Parse($$"""
+        {"model":"gpt-6-astra","input":[
+            {"type":"function_call","call_id":"call_build","name":"shell","arguments":"{}"},
+            {"type":"function_call_output","call_id":"call_build","output":{{Output}}}
+        ]}
+        """)!.AsObject();
+
+    [Theory]
     [InlineData("{\"model\":\"different\",\"input\":[{\"role\":\"user\",\"content\":\"hi\"}]}")]
     [InlineData("{\"model\":\"gpt-6-astra\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_image\",\"image_url\":\"remote\"}]}]}")]
     [InlineData("{\"model\":\"gpt-6-astra\",\"input\":[{\"type\":\"item_reference\",\"id\":\"remote\"}]}")]

@@ -41,9 +41,7 @@ internal static class CodingSubscriptionRequest
                     break;
                 case "function_call_output":
                     Copy(Value, Safe, "call_id");
-                    if (Value["output"] is not JsonValue Output || !Output.TryGetValue<string>(out _))
-                        throw new ArgumentException("Text tool output required.");
-                    Safe["output"] = Output.DeepClone();
+                    Safe["output"] = ReadToolOutput(Value["output"]);
                     break;
                 case "reasoning":
                     // Encrypted reasoning can be replayed without server-side response storage.
@@ -76,6 +74,23 @@ internal static class CodingSubscriptionRequest
                 Result["tool_choice"] = new JsonObject { ["type"] = "function", ["name"] = Required["name"]!.DeepClone(), ["namespace"] = "coding" };
         }
         return Result;
+    }
+
+    private static string ReadToolOutput(JsonNode? Output)
+    {
+        if (Output is JsonValue Text && Text.TryGetValue<string>(out var Value)) return Value;
+        if (Output is not JsonArray Parts) throw new ArgumentException("Text tool output required.");
+
+        var TextParts = new List<string>(Parts.Count);
+        foreach (var Part in Parts)
+        {
+            if (Part is not JsonObject Content || Content["type"] is not JsonValue Type
+                || !Type.TryGetValue<string>(out var Kind) || Kind != "input_text"
+                || Content["text"] is not JsonValue TextPart || !TextPart.TryGetValue<string>(out var PartValue))
+                throw new ArgumentException("Text tool output required.");
+            TextParts.Add(PartValue);
+        }
+        return string.Join('\n', TextParts);
     }
 
     private static void Copy(JsonObject Source, JsonObject Target, params string[] Keys)

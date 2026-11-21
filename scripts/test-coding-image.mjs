@@ -14,6 +14,8 @@ const folder = await mkdtemp(join(tmpdir(), 'coding-smoke-'));
 // Linux mkdtemp defaults to 0700; the container UID must traverse this synthetic request mount.
 await chmod(folder, 0o755);
 let calls = 0;
+let ranFailingCommand = false;
+let replayedFailure = false;
 let edited = false;
 let asked = false;
 let questionPolls = 0;
@@ -38,12 +40,19 @@ const server = createServer(async (req, res) => {
   calls++;
   const names = input.tools?.map(t => responses ? t.name : t.function?.name) ?? [];
   const shell = names.find(t => t === 'shell' || t === 'bash');
+  const toolResults = responses
+    ? input.input?.filter(item => item.type === 'function_call_output').map(item => item.output)
+    : input.messages?.filter(message => message.role === 'tool').map(message => message.content);
   const call = (id, name, args) => ({ tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
   let delta = { content: 'Synthetic coding proof complete.' };
   if (!asked && names.includes('owner_ask')) {
     asked = true;
     delta = call('proof-question', 'owner_ask', { text: question });
-  } else if (!edited && shell && JSON.stringify(responses ? input.input : input.messages).includes(answer)) {
+  } else if (!ranFailingCommand && shell && JSON.stringify(responses ? input.input : input.messages).includes(answer)) {
+    ranFailingCommand = true;
+    delta = call('proof-failure', shell, { command: "printf 'Synthetic missing dependency.\\n'; exit 1", description: 'Produce a recoverable command failure' });
+  } else if (ranFailingCommand && !edited && shell && JSON.stringify(toolResults ?? []).includes('Exit code: 1')) {
+    replayedFailure = true;
     edited = true;
     delta = call('proof-edit', shell, { command: "printf 'Synthetic coding proof.\\n' > coding-proof.txt", description: 'Write synthetic proof file' });
   }
@@ -101,9 +110,9 @@ try {
   await docker([...common, '--user=65532:65532', image, 'code']);
   if (repositoryBase) await docker([...common, '--user=65532:65532', image, 'validate']);
   const artifact = JSON.parse(await docker(exportArgs));
-  assert.ok(calls > 0); assert.ok(asked); assert.ok(questionPolls >= 2); assert.ok(edited);
+  assert.ok(calls > 0); assert.ok(asked); assert.ok(questionPolls >= 2); assert.ok(replayedFailure); assert.ok(edited);
   assert.equal(artifact.files.find(f => f.path === 'coding-proof.txt')?.content, 'Synthetic coding proof.\n');
-  console.log(`OpenCode image proof passed: ${calls} synthetic requests, question round trip, tool edit and isolated artifact export${repositoryBase ? ', public clone and Linux test gate' : ''}.`);
+  console.log(`OpenCode image proof passed: ${calls} synthetic requests, question round trip, command failure recovery, tool edit and isolated artifact export${repositoryBase ? ', public clone and Linux test gate' : ''}.`);
 } finally {
   server.closeAllConnections(); server.close();
   await docker(['volume', 'rm', volume]);
