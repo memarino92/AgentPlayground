@@ -256,7 +256,7 @@ internal static partial class PersonalAgentEndpoints
                 : Results.Ok(approval);
         });
 
-        apiGroup.MapPost("/coach-checkins/uploads", async (HttpRequest request, AgentService agentService, IOptions<CoachCheckinOptions> options) =>
+        apiGroup.MapPost("/coach-checkins/uploads", async (HttpRequest request, CoachUploadActions actions, IOptions<CoachCheckinOptions> options) =>
         {
             if (!request.HasFormContentType)
                 return Results.BadRequest(new { error = "Expected multipart form data" });
@@ -276,17 +276,19 @@ internal static partial class PersonalAgentEndpoints
                 return Results.BadRequest(new { error = "Only .m4a files are supported" });
 
             var maxSizeBytes = options.Value.MaxUploadMb * 1024L * 1024L;
+            if (file.Length == 0)
+                return Results.BadRequest(new { error = "Choose a non-empty .m4a file" });
             if (file.Length > maxSizeBytes)
                 return Results.BadRequest(new { error = $"File size exceeds {options.Value.MaxUploadMb}MB limit" });
 
             await using var stream = file.OpenReadStream();
             await using var memory = new MemoryStream();
-            await stream.CopyToAsync(memory);
-            var result = await agentService.CreateCoachCheckinUploadAsync(
-                profileId,
+            await stream.CopyToAsync(memory, request.HttpContext.RequestAborted);
+            var actor = SignedActorFilter.Get(request.HttpContext);
+            var result = await actions.UploadAsync(new(actor.ActorId, actor.Role, actor.ActorId),
                 file.FileName,
                 string.IsNullOrWhiteSpace(file.ContentType) ? MediaTypeNames.Application.Octet : file.ContentType,
-                memory.ToArray());
+                memory.ToArray(), request.HttpContext.RequestAborted);
 
             return Results.Ok(new
             {

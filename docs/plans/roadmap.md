@@ -1,5 +1,11 @@
 # Roadmap
 
+## Permission-scoped site actions — local first slice 2026-11-21
+
+Implemented locally: shared manual/agent action services, non-secret coaching name proposals with separate authenticated exact-change confirmation, secret-free exact input navigation, chat `.m4a` ingestion through the existing owned/deduplicated coaching workflow, and subject-scoped actual upload status. See [decision 0053](../decisions/0053-permission-scoped-site-actions.md), [coverage and limits](../runbooks/site-actions.md), and [local draft PR evidence](draft-pr-site-actions.md).
+
+Remaining acceptance: Docker-backed storage/outbox tests in a capable environment; real authenticated review/input navigation and audio-to-final-processing checks; provider/live-model interaction quality. Proposals currently expire on API restart/eviction and require instance affinity across replicas. Operational/security/account mutations, text-transcript imports and native Android upload UI remain outside this slice. No live completion or deployment is claimed.
+
 ## Railway read-only log tool — local implementation, live acceptance pending
 
 `read_railway_logs` now uses documented fixed GraphQL queries, an environment-scoped project token, encrypted Api settings, administrator service aliases and invocation-time Owner/tool authorization. Retrieval has bounded time/line/response/output limits, redaction before truncation and no streaming or mutation. Default selection uses the active deployment; explicit recent deployment IDs remain available for failure diagnosis. See [setup and local validation](../runbooks/railway-logs.md) and [proposed decision 0045](../decisions/0045-railway-log-tool.md).

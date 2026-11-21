@@ -8,6 +8,13 @@ namespace PersonalAgent.Web.Components.Pages;
 public partial class DatabaseSettings : IAsyncDisposable
 {
     [Inject] private PersonalAgentClient ApiClient { get; set; } = default!;
+    [Parameter] public string? SettingScope { get; set; }
+    [Parameter] public string? SettingKey { get; set; }
+    protected override void OnParametersSet()
+    {
+        if (SettingScope is not null) Scope = SettingScope;
+        if (SettingKey is not null) Search = SettingKey;
+    }
     private readonly CancellationTokenSource Lifetime = new();
     private List<SettingRow>? Rows;
     private bool Busy;
@@ -75,7 +82,7 @@ public partial class DatabaseSettings : IAsyncDisposable
     private sealed class SettingRow(DatabaseSetting Setting)
     {
         public DatabaseSetting Original { get; } = Setting;
-        public string Id { get; } = $"setting-{Guid.NewGuid():N}";
+        public string Id { get; } = "setting-" + Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(Setting.Scope + ":" + Setting.Key));
         public string Value { get; set; } = Setting.Value ?? "";
         public bool IsActive { get; set; } = Setting.IsActive;
         public string SecretAction { get; set; } = "keep";

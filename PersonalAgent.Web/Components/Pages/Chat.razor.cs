@@ -28,15 +28,31 @@ public partial class Chat
     private List<AvailableChatModelResponse> availableModels = new();
     private string currentMessage = string.Empty;
     private bool uploadingInput;
+    private sealed record PendingCoachingUpload(IBrowserFile File, string Profile, string? Session);
+    private PendingCoachingUpload? pendingCoachingFile;
 
     private async Task AttachInputAsync(InputFileChangeEventArgs Args)
     {
         if (profileId is not { } Profile || uploadingInput) return;
         var Session = sessionId;
+        pendingCoachingFile = null;
         uploadingInput = true;
         try
         {
             var File = Args.File;
+            if (File.Name.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase))
+            {
+                // Owner's explicit preference: context-free coaching audio goes straight to the existing pipeline.
+                // With any accompanying draft, do not guess its intent or interpret file contents as instructions.
+                var LastUserMessage = messages.LastOrDefault(Message => Message.Role == "user")?.Content ?? "";
+                if (!ChatUploadIntent.AutoSubmitCoaching(currentMessage, LastUserMessage))
+                {
+                    pendingCoachingFile = new(File, Profile, Session);
+                    return;
+                }
+                await SubmitCoachingFileAsync(File, Profile, Session);
+                return;
+            }
             using var Stream = File.OpenReadStream(PersonalAgent.Contracts.Automations.SandboxInputFile.MaxBytes);
             using var Buffer = new MemoryStream();
             await Stream.CopyToAsync(Buffer);
@@ -44,8 +60,32 @@ public partial class Chat
             if (profileId == Profile && sessionId == Session)
                 currentMessage = (currentMessage + $"\nAttached file {File.Name} (attachment:{Id})").TrimStart();
         }
-        catch (Exception Error) { errorMessage = Error.Message; }
+        catch (Exception) { errorMessage = "File upload could not be confirmed. For coaching audio, check the upload queue before retrying; identical audio is deduplicated."; }
         finally { uploadingInput = false; }
+    }
+
+    private async Task ConfirmCoachingUploadAsync()
+    {
+        if (pendingCoachingFile is not { } Pending || profileId is not { } Profile || isBusy) return;
+        pendingCoachingFile = null;
+        if (Pending.Profile != Profile || Pending.Session != sessionId) return;
+        uploadingInput = true;
+        try { await SubmitCoachingFileAsync(Pending.File, Profile, sessionId); }
+        catch (Exception) { errorMessage = "Coaching upload could not be confirmed. Check the coaching upload queue before retrying; retrying the same audio is deduplicated."; }
+        finally { uploadingInput = false; }
+    }
+
+    private async Task SubmitCoachingFileAsync(IBrowserFile File, string Profile, string? Session)
+    {
+        // The API enforces the configured limit too; this is the manual UI's 25MB browser limit.
+        await using var Stream = File.OpenReadStream(25 * 1024 * 1024);
+        using var Buffer = new MemoryStream();
+        await Stream.CopyToAsync(Buffer);
+        var Result = await ApiClient.UploadCoachCheckinAsync(Profile, File.Name, "audio/mp4", Buffer.ToArray())
+            ?? throw new IOException("No coaching upload response.");
+        if (profileId != Profile || sessionId != Session) return;
+        notice = $"Coaching audio {(Result.IsDuplicate ? "already exists" : "accepted")}. Actual status: {Result.Status}. Upload: {Result.UploadId}. This is not a claim that processing is complete.";
+        currentMessage = (currentMessage + $"\nCoaching audio upload reference: {Result.UploadId}. Please check its actual processing status.").TrimStart();
     }
 
     private bool isChangingModel;

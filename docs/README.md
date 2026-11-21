@@ -25,6 +25,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Synthetic demo](runbooks/synthetic-demo.md): start API/Web/Worker without private data or provider accounts.
 - [Snapshot commands](runbooks/snapshot-commands.md): implemented export and guarded local restore.
 - [Adding agent tools](runbooks/adding-agent-tools.md): register a capability with shared metadata, binding, and authorization.
+- [Chat site actions](runbooks/site-actions.md): permission-scoped coaching setting proposals, exact manual input links, owned audio ingestion and action coverage; [decision 0053](decisions/0053-permission-scoped-site-actions.md).
 - [Runtime agent skills](runbooks/agent-skills.md): package conditional domain guidance without bypassing authorized tools.
 - [Runtime chat models](runbooks/runtime-chat-models.md): API discovery, policy, and fallback behavior.
 - [Navigation and playback](runbooks/navigation.md): query state, draft chats, saved models and shared recording views.

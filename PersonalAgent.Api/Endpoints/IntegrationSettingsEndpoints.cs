@@ -19,11 +19,18 @@ internal static class IntegrationSettingsEndpoints
         settings.MapPost("/reload", ([Microsoft.AspNetCore.Mvc.FromServices] DatabaseCredentialRuntime Runtime, CancellationToken CancellationToken) =>
             ExecuteAsync(async () => TypedResults.Ok(await Runtime.ReloadAsync(CancellationToken))))
             .WithName("ReloadDatabaseCredentials").WithSummary("Reload supported API provider credentials; other settings retain startup values");
-        settings.MapPut("", (SaveDatabaseSettingsRequest Request, [Microsoft.AspNetCore.Mvc.FromServices] DatabaseSettingsStore Store, CancellationToken CancellationToken) =>
+        settings.MapGet("/proposals/{Id:guid}", (Guid Id, HttpContext Context, [Microsoft.AspNetCore.Mvc.FromServices] SiteSettingsActions Actions) =>
+            ExecuteAsync(() => Task.FromResult<IResult>(TypedResults.Ok(Actions.Review(Current(Context), Id)))));
+        settings.MapPost("/proposals/{Id:guid}/confirm", (Guid Id, ConfirmCoachingSetting Request, HttpContext Context,
+            [Microsoft.AspNetCore.Mvc.FromServices] SiteSettingsActions Actions, CancellationToken CancellationToken) => ExecuteAsync(async () =>
+            {
+                await Actions.ConfirmAsync(Current(Context), Id, Request.Confirm, CancellationToken);
+                return TypedResults.NoContent();
+            }));
+        settings.MapPut("", (SaveDatabaseSettingsRequest Request, [Microsoft.AspNetCore.Mvc.FromServices] SiteSettingsActions Actions, CancellationToken CancellationToken) =>
             ExecuteAsync(async () =>
             {
-                JevRoutingRuntime.ValidateEdits(Request);
-                await Store.SaveAsync(Request, CancellationToken);
+                await Actions.SaveManualAsync(Request, CancellationToken);
                 return TypedResults.NoContent();
             }))
             .WithName("SaveDatabaseSettings").WithSummary("Save existing settings atomically; affected services require restart");
@@ -84,9 +91,16 @@ internal static class IntegrationSettingsEndpoints
             .WithName("TestSentrySettings").WithSummary("Queue a synthetic event using the requested active API revision");
     }
 
+    private static PersonalAgent.Api.Models.AgentAccessContext Current(HttpContext Context)
+    {
+        var Actor = SignedActorFilter.Get(Context);
+        return new(Actor.ActorId, Actor.Role, Actor.ActorId);
+    }
+
     private static async Task<IResult> ExecuteAsync(Func<Task<IResult>> Operation, ILogger? Logger = null, string OperationName = "integration settings operation")
     {
         try { return await Operation(); }
+        catch (UnauthorizedAccessException) { return Results.StatusCode(403); }
         catch (IntegrationValidationException Exception) { return Results.ValidationProblem(Exception.Errors); }
         catch (IntegrationConflictException) { return Results.Problem(statusCode: 409, title: "Settings changed. Refresh before saving or applying."); }
         catch (Exception Exception) when (Exception is Npgsql.NpgsqlException or InvalidOperationException or System.Security.Cryptography.CryptographicException)

@@ -45,7 +45,7 @@
                                 <small>@(row.Original.IsLiveRailwayLogPolicy ? "Live in API · validated on each log call; invalid settings block retrieval" : row.Original.IsLiveJevPolicy ? "Live in API within 15 seconds · applies to new routing calls" : row.Original.IsLiveChatModelPolicy ? "Live in API · reload chat choices; existing chats keep their model" : row.Original.SupportsLiveReload ? "Live reload in API · new provider requests" : "Restart required for affected services")</small>
                                 @if (row.Original.IsSecret)
                                 {
-                                    <label>Secret action <select aria-label="@($"{row.Original.Key} secret action")" value="@row.SecretAction" @onchange="Event => ChangeSecretAction(row, Event)">
+                                     <label>Secret action <select id="@(row.Id + "-action")" aria-label="@($"{row.Original.Key} secret action")" value="@row.SecretAction" @onchange="Event => ChangeSecretAction(row, Event)">
                                         <option value="keep">Keep stored secret (hidden)</option>
                                         <option value="replace">Replace secret</option>
                                         @if (!row.Original.SupportsLiveReload) { <option value="clear">Clear secret</option> }

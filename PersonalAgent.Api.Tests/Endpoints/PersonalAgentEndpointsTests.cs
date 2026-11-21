@@ -359,6 +359,43 @@ public class PersonalAgentEndpointsTests
     }
 
     [Fact]
+    public async Task CoachingUploadRoute_BindsSignedOwnerAndReturnsActualDuplicateStatus()
+    {
+        var Store = new Mock<ICoachUploadStore>(MockBehavior.Strict);
+        var Result = new CoachCallUploadResult(Guid.NewGuid(), Guid.NewGuid(), CoachCallUploadStatus.Processing, DateTimeOffset.UtcNow, true);
+        Store.Setup(S => S.CreateUploadAsync("test-user", "synthetic.m4a", "audio/mp4", It.Is<byte[]>(B => B.SequenceEqual(new byte[] { 1, 2, 3 })), It.IsAny<CancellationToken>())).ReturnsAsync(Result);
+        await using var App = await BuildAppAsync(uploadStore: Store.Object);
+        using var Client = App.GetTestClient();
+        using var Form = new MultipartFormDataContent();
+        Form.Add(new StringContent("test-user"), "profileId");
+        using var File = new ByteArrayContent([1, 2, 3]);
+        File.Headers.ContentType = new("audio/mp4");
+        Form.Add(File, "file", "synthetic.m4a");
+        using var Response = await Client.PostAsync("/api/coach-checkins/uploads", Form);
+        Response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var Json = await ReadJsonAsync(Response);
+        Json.GetProperty("status").GetString().Should().Be("Processing");
+        Json.GetProperty("isDuplicate").GetBoolean().Should().BeTrue();
+        Store.VerifyAll();
+    }
+
+    [Theory]
+    [InlineData("victim", "synthetic.m4a", 403)]
+    [InlineData("test-user", "synthetic.txt", 400)]
+    public async Task CoachingUploadRoute_RejectsForeignSubjectAndTextBeforeStorage(string Profile, string Name, int Expected)
+    {
+        var Store = new Mock<ICoachUploadStore>(MockBehavior.Strict);
+        await using var App = await BuildAppAsync(uploadStore: Store.Object);
+        using var Client = App.GetTestClient();
+        using var Form = new MultipartFormDataContent();
+        Form.Add(new StringContent(Profile), "profileId");
+        Form.Add(new ByteArrayContent([1]), "file", Name);
+        using var Response = await Client.PostAsync("/api/coach-checkins/uploads", Form);
+        ((int)Response.StatusCode).Should().Be(Expected);
+        Store.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task CoachCheckinsStatus_ReturnsBadRequest_WhenProfileIdMissing()
     {
         await using var app = await BuildAppAsync();
@@ -561,7 +598,7 @@ public class PersonalAgentEndpointsTests
         return doc.RootElement.Clone();
     }
 
-    private static async Task<WebApplication> BuildAppAsync(string? internalApiKey = null, bool addSignedActor = true, IChatModelCatalog? modelCatalog = null)
+    private static async Task<WebApplication> BuildAppAsync(string? internalApiKey = null, bool addSignedActor = true, IChatModelCatalog? modelCatalog = null, ICoachUploadStore? uploadStore = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -624,6 +661,8 @@ public class PersonalAgentEndpointsTests
         builder.Services.AddSingleton<PushNotificationService>();
         builder.Services.AddSingleton<IOptions<PushNotificationsOptions>>(Options.Create(new PushNotificationsOptions()));
         builder.Services.AddSingleton<CoachCheckinService>();
+        builder.Services.AddSingleton<ICoachUploadStore>(S => uploadStore ?? S.GetRequiredService<CoachCheckinService>());
+        builder.Services.AddSingleton<CoachUploadActions>();
         builder.Services.AddSingleton<ICoachEvidenceService, CoachEvidenceService>();
         builder.Services.AddSingleton<AgentChatService>();
         builder.Services.AddSingleton<AgentService>();

@@ -3,6 +3,7 @@
 @page "/admin/integration-settings"
 @attribute [Authorize(Policy = ServiceCollectionAuthenticationExtensions.OwnerPolicy)]
 @inject NavigationManager Navigation
+@inject IJSRuntime JsRuntime
 
 <PageTitle>Settings</PageTitle>
 <div class="settings-hub">
@@ -23,7 +24,10 @@
         case "backup": <BackupSettingsPage /> break;
         case "whatbox": <WhatboxSettingsPage /> break;
         case "integrations": <IntegrationsAdmin /> break;
-        default: <DatabaseSettings /> break;
+        default:
+            @if (Proposal is { } Id) { <CoachingSettingReview Id="Id" /> }
+            else { <DatabaseSettings SettingScope="SettingScope" SettingKey="SettingKey" /> }
+            break;
     }
 </div>
 
@@ -31,5 +35,17 @@
     private static readonly PersonalAgent.Presentation.SettingsSection WhatboxSection = new("whatbox", "Whatbox");
 
     [SupplyParameterFromQuery(Name = "section")] public string? Section { get; set; }
+    [SupplyParameterFromQuery(Name = "proposal")] public Guid? Proposal { get; set; }
+    [SupplyParameterFromQuery(Name = "scope")] public string? SettingScope { get; set; }
+    [SupplyParameterFromQuery(Name = "key")] public string? SettingKey { get; set; }
     private string CurrentSection => Section ?? (Navigation.Uri.Contains("/admin/integrations") ? "integrations" : "database");
+    private string? FocusedUri;
+    protected override async Task OnAfterRenderAsync(bool FirstRender)
+    {
+        if (FocusedUri == Navigation.Uri) return;
+        FocusedUri = Navigation.Uri;
+        if (new Uri(Navigation.Uri).Fragment.Length == 0) return;
+        try { await JsRuntime.InvokeVoidAsync("focusSettingsInput"); }
+        catch (JSDisconnectedException) { }
+    }
 }

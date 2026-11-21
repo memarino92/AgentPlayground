@@ -16,7 +16,16 @@ public sealed record SaveDatabaseSettingsRequest(List<DatabaseSettingEdit> Chang
 public sealed record SaveProviderCredentialRequest(string? ExpectedVersion, string Value);
 
 /// <summary>Edits startup configuration in place. Null values retain existing secrets.</summary>
-public sealed class DatabaseSettingsStore(IntegrationDatabase Database)
+public interface IDatabaseSettingsStore
+{
+    Task<List<DatabaseSetting>> ReadAsync(CancellationToken CancellationToken);
+    Task SaveAsync(SaveDatabaseSettingsRequest Request, CancellationToken CancellationToken);
+}
+
+public sealed record CoachingSettingProposal(Guid Id, string Scope, string Key, string? Before, string After, string Link);
+public sealed record ConfirmCoachingSetting(bool Confirm);
+
+public sealed class DatabaseSettingsStore(IntegrationDatabase Database) : IDatabaseSettingsStore
 {
     public async Task<List<DatabaseSetting>> ReadAsync(CancellationToken CancellationToken)
     {

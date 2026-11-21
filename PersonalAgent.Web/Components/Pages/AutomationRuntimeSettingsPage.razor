@@ -67,7 +67,7 @@
                     <p>Jev cannot override permissions or package approvals. These checks cover package restore and gateway tools, not arbitrary Internet traffic.</p>
                 </div>
                 <div class="settings-editor__group">
-                    <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.Enabled" /> Enable Railway execution</label>
+                    <label class="settings-editor__toggle"><InputCheckbox id="runner-enabled" @bind-Value="Model.Enabled" /> Enable Railway execution</label>
                     <p>Enable after the token and sandbox image are configured. Also allow C# automation authoring under Integrations.</p>
                 </div>
                 <div class="settings-editor__footer">

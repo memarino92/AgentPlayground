@@ -8,12 +8,12 @@
         <ValidationSummary />
         <fieldset disabled="@Busy">
             <div class="settings-editor__group">
-                <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.Enabled" /> Enable telemetry export</label>
+                <label class="settings-editor__toggle"><InputCheckbox id="otel-enabled" @bind-Value="Model.Enabled" /> Enable telemetry export</label>
                 <h3>Signals</h3>
                 <div class="settings-editor__signals">
-                    <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.TracesEnabled" /> Traces</label>
-                    <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.MetricsEnabled" /> Metrics</label>
-                    <label class="settings-editor__toggle"><InputCheckbox @bind-Value="Model.LogsEnabled" /> Redacted logs</label>
+                    <label class="settings-editor__toggle"><InputCheckbox id="otel-traces" @bind-Value="Model.TracesEnabled" /> Traces</label>
+                    <label class="settings-editor__toggle"><InputCheckbox id="otel-metrics" @bind-Value="Model.MetricsEnabled" /> Metrics</label>
+                    <label class="settings-editor__toggle"><InputCheckbox id="otel-logs" @bind-Value="Model.LogsEnabled" /> Redacted logs</label>
                 </div>
             </div>
             <div class="settings-editor__group">
