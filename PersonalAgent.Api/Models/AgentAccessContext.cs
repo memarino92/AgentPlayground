@@ -4,6 +4,7 @@ internal record AgentAccessContext(string ActorId, string Role, string SubjectPr
 {
     public string? Email { get; init; }
     public string? SessionId { get; init; }
+    public string? ChatModelId { get; init; }
     public Guid? ScheduledTaskId { get; init; }
     public ScheduledRunContext? ScheduledRun { get; init; }
     public Func<CancellationToken, Task<bool>>? InvocationAuthorized { get; init; }

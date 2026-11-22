@@ -23,6 +23,7 @@ jobs:
         run: |
           node scripts/test-coding-image.mjs
           node scripts/test-coding-image.mjs agentplayground-coding-sandbox:1 - responses
+          node scripts/test-coding-image.mjs agentplayground-coding-sandbox:1 - responses supervise
       - name: Build Android app with the coding image
         run: |
           docker run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges \
@@ -50,7 +51,7 @@ jobs:
         working-directory: PersonalAgent.Worker/Railway
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          node --test bridge.test.mjs coding.test.mjs
+          node --test bridge.test.mjs coding.test.mjs coding-checkpoint.test.mjs
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30

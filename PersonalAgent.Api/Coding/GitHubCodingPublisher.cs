@@ -97,14 +97,8 @@ internal sealed partial class GitHubCodingPublisher(HttpClient Http, CodingJobSt
             || string.IsNullOrWhiteSpace(A.Summary) || A.Summary.Length > 4000
             || Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(A)) > CodingJobs.MaxArtifactBytes)
             throw new ArgumentException("A bounded change with matching base and passing validation is required.");
-        var Paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var F in A.Files)
-            if (F is null || F.Path is null || !Regex.IsMatch(F.Path, @"\A[A-Za-z0-9_./-]{1,240}\z") || F.Path.StartsWith('/')
-                || F.Path.Split('/').Any(P => P is "" or "." or ".." || P.StartsWith(".git", StringComparison.OrdinalIgnoreCase))
-                || F.Path.EndsWith(".pem", StringComparison.OrdinalIgnoreCase) || F.Path.EndsWith(".key", StringComparison.OrdinalIgnoreCase)
-                || F.Path.Split('/').Any(P => P is ".env" or "node_modules" or "bin" or "obj")
-                || F.Mode is not ("100644" or "100755") || !Paths.Add(F.Path))
-                throw new ArgumentException("Artifact contains a forbidden, duplicate or unsupported path/mode.");
+        if (!CodingArtifactFiles.AreAllowed(A.Files))
+            throw new ArgumentException("Artifact contains a forbidden, duplicate or unsupported path/mode.");
     }
 
     private static string Marker(CodingJob Job) => $"<!-- coding-job:{Job.Id:D} -->";

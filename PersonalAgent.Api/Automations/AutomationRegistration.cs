@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PersonalAgent.Api.Configuration;
 using PersonalAgent.Contracts.Automations;
+using PersonalAgent.Contracts.Coding;
+using PersonalAgent.Integrations;
 
 namespace PersonalAgent.Api.Automations;
 
@@ -133,18 +135,55 @@ internal sealed class AutomationScheduler(IServiceScopeFactory Scopes, TimeProvi
             var ImageCutoff = Now.AddMinutes(-18);
             var Stale = await Db.Runs.Where(R => R.CurrentState == "Running" && R.StartedAt < Cutoff
                 && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.CompletedAt > Cutoff)
+                && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.Index == R.StepIndex && S.Action == "coding_job")
                 && (!Db.Steps.Any(S => S.RunId == R.CorrelationId && S.Index == R.StepIndex && S.Action == "dockerfile")
                     || (R.StartedAt < ImageCutoff && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.CompletedAt > ImageCutoff)))).Take(50).ToListAsync(Token);
             var Sender = Scope.ServiceProvider.GetRequiredService<ISendEndpointProvider>();
             foreach (var Run in Stale)
                 await (await Sender.GetSendEndpoint(AutomationRegistration.SagaAddress)).Send(
                     new AutomationStepFailed(Run.CorrelationId, Run.StepIndex, "Step progress deadline expired. The automation was paused."), Token);
+            await ReconcileCodingAsync(Db, Scope.ServiceProvider, Sender, Now, Token);
             await Db.SaveChangesAsync(Token);
         }
         foreach (var Id in Due)
         {
             await using var Scope = Scopes.CreateAsyncScope();
             await Scope.ServiceProvider.GetRequiredService<AutomationService>().StartAsync(Id, null, Token);
+        }
+    }
+
+    private static async Task ReconcileCodingAsync(AutomationDbContext Db, IServiceProvider Services, ISendEndpointProvider Sender,
+        DateTimeOffset Now, CancellationToken Token)
+    {
+        var Pending = await (from Run in Db.Runs.AsNoTracking()
+            join Step in Db.Steps on new { RunId = Run.CorrelationId, Index = Run.StepIndex } equals new { Step.RunId, Step.Index }
+            join Definition in Db.Automations on Run.AutomationId equals Definition.Id
+            where Run.CurrentState == "Running" && Step.Action == "coding_job"
+            orderby Run.StartedAt
+            select new
+            {
+                Run.CorrelationId, Run.StepIndex, Definition.ActorId, Definition.SubjectProfileId,
+                StepStarted = Db.Steps.Where(S => S.RunId == Run.CorrelationId && S.Index < Run.StepIndex).Max(S => S.CompletedAt)
+                    ?? Run.StartedAt
+            }).Take(50).ToListAsync(Token);
+        if (Pending.Count == 0) return;
+        var Coding = Services.GetRequiredService<CodingJobStore>();
+        foreach (var Step in Pending)
+        {
+            var Key = AutomationStepConsumer.CodingRequestKey(Step.CorrelationId, Step.StepIndex);
+            var Job = await Coding.FindRequestAsync(Step.ActorId, Key, Token);
+            if (Job is not null && Job.Subject == Step.SubjectProfileId && CodingJobs.Terminal(Job.Status))
+            {
+                await (await Sender.GetSendEndpoint(AutomationRegistration.StepAddress)).Send(
+                    new ExecuteAutomationStep(Step.CorrelationId, Step.StepIndex), Token);
+                continue;
+            }
+            var Deadline = Job?.Deadline.AddMinutes(5) ?? Step.StepStarted?.AddMinutes(5);
+            if (Deadline > Now || Deadline is null) continue;
+            await (await Sender.GetSendEndpoint(AutomationRegistration.SagaAddress)).Send(
+                new AutomationStepFailed(Step.CorrelationId, Step.StepIndex,
+                    Job is null ? "The coding child did not start before the dispatch deadline."
+                        : "The coding child did not report a terminal result before its deadline. Inspect Coding Jobs."), Token);
         }
     }
 }

@@ -44,7 +44,7 @@ public sealed class CodingJobStoreTests : IAsyncLifetime
         var Requests = await Task.WhenAll(Enumerable.Range(0, 30).Select(_ => Store.ReserveModelRequestAsync(Job.Id, "cap", 12, default)));
         Requests.Count(R => R).Should().Be(12);
         (await Store.ReserveModelRequestAsync(Job.Id, "wrong", 100, default)).Should().BeFalse();
-        await Store.SaveAsync(Job with { Status = "Cancelled" }, "Running", default);
+        await Store.CancelAsync(Job.Id, default);
         (await Store.ReserveModelRequestAsync(Job.Id, "cap", 100, default)).Should().BeFalse();
     }
 
@@ -53,12 +53,12 @@ public sealed class CodingJobStoreTests : IAsyncLifetime
     {
         var Job = NewJob(); await Store.CreateAsync(Job, Guid.NewGuid().ToString(), default);
         await Store.ClaimAsync(Job.Id, "cap", "secret", "env", default);
-        await Store.SaveAsync(Job with { Status = "Cancelled" }, "Running", default);
+        await Store.CancelAsync(Job.Id, default);
         await Store.AttachSandboxAsync(Job.Id, "vm", default);
         var Cancelled = (await Store.GetAsync(Job.Id, default))!;
         Cancelled.Status.Should().Be("Cancelled"); Cancelled.SandboxId.Should().Be("vm");
         (await Store.LeaseAsync(Job.Id, default)).Credential.Should().Be("secret");
-        await Store.ClearLeaseAsync(Job.Id, default);
+        await Store.ClearLeaseAsync(Job.Id, "vm", default);
         await Store.SaveAsync(Cancelled with { Error = "updated" }, "Cancelled", default);
         (await Store.GetAsync(Job.Id, default))!.CleanupState.Should().Be("Destroyed");
         (await Store.LeaseAsync(Job.Id, default)).Credential.Should().BeEmpty();
@@ -96,7 +96,7 @@ public sealed class CodingJobStoreTests : IAsyncLifetime
         (await Store.QuestionsAsync("owner", "owner", Job.SessionId, false, default)).Should().BeEmpty();
         var Second = Request with { Id = Guid.NewGuid(), Text = "What version?" };
         (await Store.AskAsync(Job.Id, "cap", Second, default)).Should().NotBeNull();
-        await Store.SaveAsync(Job with { Status = "Cancelled" }, "Running", default);
+        await Store.CancelAsync(Job.Id, default);
         (await Store.AnswerAsync(Second.Id, "owner", "owner", Job.SessionId, "18", default)).Should().BeFalse();
         (await Store.QuestionsAsync("owner", "owner", Job.SessionId, false, default)).Should().BeEmpty();
         (await Store.UnpostedResultsAsync(default)).Should().ContainSingle().Which.Id.Should().Be(Job.Id);
@@ -111,12 +111,47 @@ public sealed class CodingJobStoreTests : IAsyncLifetime
         await Store.CreateAsync(Job, Guid.NewGuid().ToString(), default);
         await Store.ClaimAsync(Job.Id, "cap", "secret", "env", default);
         await Store.AttachSandboxAsync(Job.Id, "vm", default);
-        (await Store.SaveAsync(Job with { Status = CodingJobs.CompletedNoChanges }, "Running", default)).Should().BeTrue();
+        var Running = (await Store.GetAsync(Job.Id, default))!;
+        (await Store.SaveAsync(Running with { Status = CodingJobs.CompletedNoChanges }, "Running", default)).Should().BeTrue();
         (await Store.UnpostedResultsAsync(default)).Should().ContainSingle().Which.Id.Should().Be(Job.Id);
         CodingJobs.Terminal((await Store.GetAsync(Job.Id, default))!.Status).Should().BeTrue();
         (await Store.PendingAsync(default)).Should().ContainSingle().Which.Id.Should().Be(Job.Id);
-        await Store.ClearLeaseAsync(Job.Id, default);
+        await Store.ClearLeaseAsync(Job.Id, "vm", default);
         (await Store.PendingAsync(default)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CheckpointWaitsForCleanupAndTheOwnerAndPreservesTheSharedBudget()
+    {
+        var Job = NewJob() with { AttemptLimit = 2, SessionId = Guid.NewGuid(), BaseSha = new string('a', 40) };
+        await Store.CreateAsync(Job, Guid.NewGuid().ToString(), default);
+        (await Store.ClaimAsync(Job.Id, "first", "secret", "env", default)).Should().BeTrue();
+        await Store.AttachSandboxAsync(Job.Id, "first-vm", default);
+        (await Store.ReserveModelRequestAsync(Job.Id, "first", 2, default)).Should().BeTrue();
+        var Question = new AskCodingQuestion(Guid.NewGuid(), "Which profile?");
+        (await Store.AskAsync(Job.Id, "first", Question, default)).Should().NotBeNull();
+        var First = (await Store.GetAsync(Job.Id, default))!;
+        var Artifact = new CodingArtifact(Job.BaseSha, [new("src/example.cs", "partial")], [], "Work in progress");
+        (await Store.SaveAsync(First with { Status = CodingJobs.Resuming, ResumePhase = "code", Artifact = Artifact }, "Running", default)).Should().BeTrue();
+        (await Store.ClaimAsync(Job.Id, "too-early", "secret", "env", default)).Should().BeFalse();
+        (await Store.AuthorizeModelRequestAsync(Job.Id, "first", default)).Should().BeFalse();
+        await Store.ClearLeaseAsync(Job.Id, "first-vm", default);
+        (await Store.QuestionsAsync("owner", "owner", Job.SessionId, false, default)).Should().ContainSingle();
+        (await Store.ClaimAsync(Job.Id, "without-answer", "secret", "env", default)).Should().BeFalse();
+        (await Store.AnswerAsync(Question.Id, "owner", "owner", Job.SessionId, "Existing owner", default)).Should().BeTrue();
+        (await Store.ClaimAsync(Job.Id, "second", "secret", "env", default)).Should().BeTrue();
+        await Store.AttachSandboxAsync(Job.Id, "second-vm", default);
+        await Store.ClearLeaseAsync(Job.Id, "first-vm", default);
+        (await Store.SaveAsync(First with { Status = "Failed" }, "Running", default)).Should().BeFalse();
+        var Second = (await Store.GetAsync(Job.Id, default))!;
+        Second.Attempt.Should().Be(2);
+        Second.SandboxId.Should().Be("second-vm");
+        Second.CleanupState.Should().Be("Pending");
+        Second.Artifact.Should().BeEquivalentTo(Artifact);
+        Second.ModelRequests.Should().Be(1);
+        (await Store.ReadClarificationsAsync(Job.Id, default)).Should().ContainSingle().Which.Answer.Should().Be("Existing owner");
+        (await Store.ReserveModelRequestAsync(Job.Id, "second", 2, default)).Should().BeTrue();
+        (await Store.ReserveModelRequestAsync(Job.Id, "second", 2, default)).Should().BeFalse();
     }
 
     [Fact]

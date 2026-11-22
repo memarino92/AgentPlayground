@@ -5,9 +5,11 @@ import { loadCodingPreparationFiles } from './coding-preparation-files.mjs';
 
 test('coding preparation loads the repository Dockerfile and immutable workload before provisioning', async () => {
   const files = new Map(await loadCodingPreparationFiles());
-  assert.equal(files.size, 3);
+  assert.equal(files.size, 5);
   assert.ok(files.get('Dockerfile.coding-sandbox').includes('@opencode/cli@2.3.2'));
   assert.ok(files.has('PersonalAgent.Worker/Railway/coding-questions.mjs'));
+  assert.ok(files.has('PersonalAgent.Worker/Railway/coding-checkpoint.mjs'));
+  assert.ok(files.has('PersonalAgent.Worker/Railway/coding-supervision.mjs'));
   assert.ok(files.get('PersonalAgent.Worker/Railway/workload.mjs').includes("phase === 'export'"));
 });
 
@@ -108,4 +110,108 @@ test('subscription and follow-up context reach the workload without account cred
   assert.equal(written.followUpEvidence, 'Failing validation');
   assert.equal(written.token, undefined);
   assert.throws(() => validateRequest({ ...request, model: 'x;id' }));
+});
+
+const snapshot = { baseSha: request.baseSha, files: [{ path: 'src/work.cs', content: 'partial', mode: '100644' }],
+  checks: [], summary: 'A worktree diff was saved.' };
+const softTimeout = "timeout: sending signal TERM to command 'node'\n";
+
+function checkpointSandbox(handlers = {}, exported = { ...snapshot, checkpointVersion: 1 }, imageLabel = '1') {
+  const commands = [], requests = [];
+  const ok = (stdout = '') => ({ exitCode: 0, stdout, stderr: '' });
+  const sandbox = { networkIsolation: 'ISOLATED', files: { write: async (_, data) => requests.push(JSON.parse(data)) },
+    exec: async (command, options) => {
+      commands.push(command);
+      if (command.startsWith('docker info')) return ok(JSON.stringify({ MemoryLimit: true, SwapLimit: true, CpuCfsQuota: true,
+        PidsLimit: true, SecurityOptions: ['name=seccomp,profile=builtin'] }));
+      if (command.startsWith('docker image inspect')) return ok(imageLabel);
+      if (command.endsWith(' export')) return ok(JSON.stringify(exported));
+      return handlers[command.split(' ').at(-1)]?.(command, options) ?? ok();
+    } };
+  return { commands, requests, api: { connect: async () => sandbox } };
+}
+
+test('a cumulative soft timeout returns a bounded checkpoint for a fresh sandbox', async () => {
+  let now = 500;
+  const sandbox = checkpointSandbox({
+    prepare: () => { now += 21_000; return { exitCode: 0 }; },
+    code: (command, options) => {
+      assert.match(command, /--signal=TERM --kill-after=3 79 node/);
+      assert.equal(options.timeoutSec, 89);
+      now += 79_000;
+      return { exitCode: 124, stderr: softTimeout + 'Build did not finish.' };
+    },
+    validate: () => assert.fail('Validation must wait for a complete code phase.')
+  }, { ...snapshot, checkpointVersion: 1, hasProgress: true, progressSummary: 'Finish the API tests.' });
+  const result = await codingDispatch({ ...request, executionSeconds: 100 }, sandbox.api, () => now);
+  assert.equal(result.success, false);
+  assert.equal(result.hasProgress, true);
+  assert.equal(result.resumePhase, 'code');
+  assert.deepEqual(result.artifact.files, snapshot.files);
+  assert.equal(result.artifact.summary, 'Finish the API tests.');
+  assert.equal(result.artifact.checkpointVersion, undefined);
+  assert.equal(result.artifact.progressSummary, undefined);
+  assert.ok(sandbox.commands.at(-1).includes('--network=none'));
+});
+
+test('a validation timeout resumes with the original code check and reruns the complete validation gate', async () => {
+  let now = 0;
+  const first = checkpointSandbox({
+    code: () => { now += 80_000; return { exitCode: 0, stdout: 'Code completed.' }; },
+    validate: () => { now += 20_000; return { exitCode: 124, stderr: softTimeout }; }
+  });
+  const stopped = await codingDispatch({ ...request, executionSeconds: 100 }, first.api, () => now);
+  assert.equal(stopped.resumePhase, 'validate');
+  assert.equal(stopped.success, false);
+  const second = checkpointSandbox({ code: () => assert.fail('A proven successful code phase should not rerun.') });
+  const result = await codingDispatch({ ...request, executionSeconds: 100, resumePhase: stopped.resumePhase,
+    resumeArtifact: stopped.artifact, ownerClarifications: [{ question: 'Which option?', answer: 'The first.' }] }, second.api);
+  assert.equal(result.success, true);
+  assert.deepEqual(result.artifact.checks[1], stopped.artifact.checks[1]);
+  assert.equal(second.requests[0].resumeArtifact.checks, undefined);
+  assert.deepEqual(second.requests[0].resumeArtifact.files, snapshot.files);
+  assert.deepEqual(second.requests[0].ownerClarifications, [{ question: 'Which option?', answer: 'The first.' }]);
+});
+
+test('a SIGKILL without a timer signal and an uncertain transport timeout do not trigger continuation', async () => {
+  const early = checkpointSandbox({ code: () => ({ exitCode: 137 }) });
+  const failed = await codingDispatch({ ...request, executionSeconds: 100 }, early.api, () => 0);
+  assert.equal(failed.resumePhase, undefined);
+  assert.deepEqual(failed.artifact.files, snapshot.files);
+  let now = 0;
+  const late = checkpointSandbox({ code: () => { now += 100_000; return { exitCode: 137 }; } });
+  assert.equal((await codingDispatch({ ...request, executionSeconds: 100 }, late.api, () => now)).resumePhase, undefined);
+  const uncertain = checkpointSandbox({ code: () => ({ timedOut: true, exitCode: 124 }) });
+  const notExported = await codingDispatch({ ...request, executionSeconds: 100 }, uncertain.api, () => 100_000);
+  assert.equal(notExported.resumePhase, undefined);
+  assert.equal(notExported.artifact.files.length, 0);
+  assert.ok(!uncertain.commands.some(command => command.endsWith(' export')));
+});
+
+test('empty checkpoints preserve an explicit timeout and legacy images retain their original phase timing', async () => {
+  let now = 0;
+  const empty = checkpointSandbox({ code: () => { now += 100_000; return { exitCode: 124, stderr: softTimeout }; } },
+    { ...snapshot, files: [], checkpointVersion: 1, hasProgress: false });
+  const result = await codingDispatch({ ...request, executionSeconds: 100 }, empty.api, () => now);
+  assert.equal(result.resumePhase, 'code');
+  assert.equal(result.hasProgress, false);
+  const legacy = checkpointSandbox({}, snapshot, '');
+  const normal = await codingDispatch({ ...request, executionSeconds: 100 }, legacy.api);
+  assert.equal(normal.success, true);
+  assert.ok(legacy.commands.some(command => command.includes('--signal=KILL 1200 ')));
+  const unsupported = checkpointSandbox({}, snapshot, '');
+  const grouped = await codingDispatch({ ...request, supervise: true }, unsupported.api);
+  assert.equal(grouped.success, false);
+  assert.match(grouped.artifact.summary, /current checkpoint/);
+  assert.equal(unsupported.requests.length, 0);
+});
+
+test('resume data rejects unauthorized paths and a fabricated validation shortcut', () => {
+  for (const path of ['../outside', 'src/.git/config', '.ENV/test.key', '.agentplayground-coding-progress.md', 'app/bin/compiled']) {
+    assert.throws(() => validateRequest({ ...request, resumePhase: 'code',
+      resumeArtifact: { ...snapshot, files: [{ ...snapshot.files[0], path }] } }), /checkpoint file/);
+  }
+  assert.throws(() => validateRequest({ ...request, resumePhase: 'validate', resumeArtifact: snapshot }), /earlier successful code phase/);
+  assert.throws(() => validateRequest({ ...request, resumeArtifact: snapshot }), /resume phase/);
+  assert.throws(() => validateRequest({ ...request, executionSeconds: '30; id' }), /Invalid coding request/);
 });

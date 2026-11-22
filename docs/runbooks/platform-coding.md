@@ -63,6 +63,12 @@ Artifacts are limited to 50 UTF-8 text files and 1 MB, matching the pinned base.
 
 ## Recovery and rollback
 
+A new coding job can use up to three fresh sandboxes. Each attempt uses the existing per-sandbox runtime setting. The overall deadline includes five minutes of queue and cleanup allowance per attempt. The model request limit applies to the whole job. The dashboard shows the attempt number and the last saved artifact. Deploy the updated API, Web and Worker and prepare a new coding checkpoint from the matching image.
+
+The runner stops coding before the hard deadline to export a bounded text diff and progress note. The new sandbox restores the diff against the pinned base. Owner answers carry forward. An outstanding question remains answerable through chat or the dashboard. After exhausting attempts or model budget, the job shows the last saved checkpoint and failure. A provider or Worker outage can interrupt an attempt before it exports.
+
+For broad coding requests, chat can set `supervise=true`. The coding supervisor delegates independent, read-only analysis and integrates specialist findings into one validated change. For requests that also need public research or other work, start one [supervised workflow](automations.md#supervised-workflows).
+
 If a coding run stops immediately after a shell command with an empty HTTP 400, check API event 4406 and the retained coding output. OpenCode can replay command results as text blocks. The updated API accepts those blocks and returns a bounded diagnostic for unsupported input. Deploy the API update and switch to a fresh coding checkpoint for the Android toolchain. Previous failures retain their candidate diffs in **Coding jobs**.
 
 Cancel from the dashboard before Publishing. Cancellation/disablement revokes new model calls and publication and stops the worker through its poll/cancellation path. A request already in flight may complete. Publishing cannot be cancelled blindly: a lost GitHub response may already have created the PR. Reconciliation uses the stable branch, deterministic commit and job marker to discover it without duplicating or overwriting the branch. Transient/ambiguous publication failures remain Publishing for retry; inspect the stable branch and GitHub App setup if this persists. Disabling blocks further publication attempts; existing PRs are not closed or merged.

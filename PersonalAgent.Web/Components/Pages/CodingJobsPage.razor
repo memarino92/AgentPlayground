@@ -44,6 +44,10 @@
                             <p><span class="metadata-label">Railway sandbox ID:</span> <code>@Job.SandboxId</code></p>
                         }
                         <p><span class="metadata-label">Job ID:</span> <code>@Job.Id</code></p>
+                        @if (Job.Attempt > 0)
+                        {
+                            <p>Sandbox attempt @Job.Attempt of @Job.AttemptLimit</p>
+                        }
                         <p><span class="metadata-label">Cleanup:</span> @Job.CleanupState</p>
                     </div>
                     <footer class="job-footer">
@@ -59,6 +63,7 @@
                     @if (Artifacts.TryGetValue(Job.Id, out var Artifact))
                     {
                         <details><summary>Validation and proposed files</summary>
+                            <p>@Artifact.Summary</p>
                             @foreach (var Check in Artifact.Checks)
                             { <h3>@Check.Command — exit @Check.ExitCode</h3><pre>@Check.Output</pre> }
                             @foreach (var File in Artifact.Files)

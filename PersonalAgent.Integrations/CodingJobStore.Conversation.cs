@@ -74,7 +74,8 @@ public sealed partial class CodingJobStore
         await using var Query = new NpgsqlCommand("""
             SELECT q.id,q.job_id,(j.payload::jsonb->>'sessionId')::uuid,q.question,q.answer,j.deadline
             FROM app.coding_questions q JOIN app.coding_jobs j ON j.id=q.job_id
-            WHERE (@unposted AND NOT q.posted OR NOT @unposted AND q.answer IS NULL AND j.state='Running' AND j.deadline>now()
+            WHERE (@unposted AND NOT q.posted OR NOT @unposted AND q.answer IS NULL
+                AND (j.state IN ('Running','Resuming') OR j.state='Queued' AND j.payload::jsonb->>'resumePhase' IS NOT NULL) AND j.deadline>now()
                 AND j.actor=@actor AND j.payload::jsonb->>'subject'=@subject)
               AND (@session IS NULL OR j.payload::jsonb->>'sessionId'=@session)
             ORDER BY j.deadline,q.id LIMIT 50
@@ -97,7 +98,8 @@ public sealed partial class CodingJobStore
                 SELECT j.id FROM app.coding_jobs j JOIN app.coding_questions q ON q.job_id=j.id
                 WHERE q.id=@id AND j.actor=@actor AND j.payload::jsonb->>'subject'=@subject
                   AND (@session IS NULL OR j.payload::jsonb->>'sessionId'=@session)
-                  AND j.state='Running' AND j.deadline>now() FOR UPDATE OF j
+                  AND (j.state IN ('Running','Resuming') OR j.state='Queued' AND j.payload::jsonb->>'resumePhase' IS NOT NULL)
+                  AND j.deadline>now() FOR UPDATE OF j
             )
             UPDATE app.coding_questions q SET answer=@answer FROM job j
             WHERE q.id=@id AND q.job_id=j.id AND (q.answer IS NULL OR q.answer=@answer)
@@ -113,4 +115,18 @@ public sealed partial class CodingJobStore
     private static CodingQuestion ReadQuestion(NpgsqlDataReader Reader) =>
         new(Reader.GetGuid(0), Reader.GetGuid(1), Reader.GetGuid(2), Reader.GetString(3),
             Reader.IsDBNull(4) ? null : Reader.GetString(4), Reader.GetFieldValue<DateTimeOffset>(5));
+
+    public async Task<IReadOnlyList<CodingClarification>> ReadClarificationsAsync(Guid Id, CancellationToken Token)
+    {
+        await using var Connection = await OpenAsync(Token);
+        await using var Query = new NpgsqlCommand("""
+            SELECT question,answer FROM app.coding_questions WHERE job_id=@id ORDER BY id
+            """, Connection);
+        Query.Parameters.AddWithValue("id", Id);
+        await using var Reader = await Query.ExecuteReaderAsync(Token);
+        var Clarifications = new List<CodingClarification>();
+        while (await Reader.ReadAsync(Token))
+            Clarifications.Add(new(Reader.GetString(0), Reader.IsDBNull(1) ? null : Reader.GetString(1)));
+        return Clarifications;
+    }
 }

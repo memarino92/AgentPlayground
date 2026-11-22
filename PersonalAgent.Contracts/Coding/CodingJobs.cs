@@ -16,12 +16,15 @@ public static class CodingJobs
             && System.Text.RegularExpressions.Regex.IsMatch(Slug, @"\A[A-Za-z0-9_.-]{1,100}\z");
     }
     public const int MaxArtifactBytes = 1_000_000;
+    public const int MaxAttempts = 3;
+    public const string Resuming = "Resuming";
     public const string CompletedNoChanges = "CompletedNoChanges";
     public static bool Terminal(string Status) => Status is "PrOpened" or CompletedNoChanges or "Failed" or "Cancelled";
     public static string StatusLabel(string Status, bool IsFollowUp = false) => Status switch
     {
         "PrOpened" => IsFollowUp ? "PR updated" : "PR opened",
         CompletedNoChanges => "Completed without changes",
+        Resuming => "Preparing to resume",
         _ => Status
     };
     public static DateTimeOffset? RulesetTimestamp(string? Value) => Value is not null
@@ -36,10 +39,14 @@ public sealed record StartCodingJob(string Instruction, string RequestKey)
     public Guid? PreviousJobId { get; init; }
     public string? FollowUp { get; init; }
     public bool AllowNoChanges { get; init; }
+    public bool Supervise { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? WorkflowEvidence { get; init; }
 }
 public sealed record CodingQuestion(Guid Id, Guid JobId, Guid SessionId, string Text, string? Answer, DateTimeOffset Deadline);
 public sealed record AskCodingQuestion(Guid Id, string Text);
 public sealed record AnswerCodingQuestion(string Answer);
+public sealed record CodingClarification(string Question, string? Answer);
 public sealed record CodingFile(string Path, string? Content, string Mode = "100644");
 public sealed record CodingValidation(string Command, int ExitCode, string Output);
 public sealed record CodingArtifact(string BaseSha, CodingFile[] Files, CodingValidation[] Checks, string Summary);
@@ -48,6 +55,9 @@ public sealed record CodingJobView(Guid Id, string Instruction, string Repositor
     int ModelRequests, string? PullRequestUrl, string? Error, CodingArtifact? Artifact)
 {
     public Guid? PreviousJobId { get; init; }
+    public int Attempt { get; init; }
+    public int AttemptLimit { get; init; } = 1;
+    public bool Supervise { get; init; }
     public string DisplayStatus => CodingJobs.StatusLabel(Status, PreviousJobId is not null);
     public bool CanCancel => !CodingJobs.Terminal(Status) && Status != "Publishing";
 }

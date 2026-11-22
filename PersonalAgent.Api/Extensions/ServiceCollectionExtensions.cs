@@ -152,6 +152,7 @@ internal static class ServiceCollectionExtensions
         services.AddHttpClient("RailwayLogs", Client => Client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
+        services.AddSingleton<ResearchSwarm>();
         services.AddSingleton<AgentToolBinder>();
         services.AddSingleton<JevRoutingRuntime>();
         services.AddSingleton<IJevRoutingSettings>(sp => sp.GetRequiredService<JevRoutingRuntime>());

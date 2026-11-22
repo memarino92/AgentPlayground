@@ -22,7 +22,8 @@ internal sealed class CodingConversation(CodingJobStore Store, PostgresAgentSess
         {
             var Job = await Store.GetAsync(Question.JobId, Token);
             if (Job is null) continue;
-            var Open = Job.Status == "Running" && Question.Answer is null && Question.Deadline > DateTimeOffset.UtcNow;
+            var Open = (Job.Status is "Running" or CodingJobs.Resuming || Job.Status == "Queued" && Job.ResumePhase is not null)
+                && Question.Answer is null && Question.Deadline > DateTimeOffset.UtcNow;
             var Reply = Open
                 ? $"Reply here or use [Outstanding questions]({Dashboard(Job)}#outstanding-questions)."
                 : Question.Answer is null ? "The coding job ended before an answer arrived." : "This question has been answered.";

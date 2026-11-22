@@ -20,6 +20,7 @@ internal record SaveToolAccessRequest(IReadOnlyList<ToolRolePermission> Permissi
 internal static class AgentToolKeys
 {
     public const string ReadRailwayLogs = "Local:read_railway_logs";
+    public const string ResearchSwarm = "Local:research_swarm";
     public const string PublishMobileNotification = "Local:publish_mobile_notification";
     public const string SyncWorkJournal = "Local:sync_work_journal";
     public const string SearchWorkJournal = "Local:search_work_journal";

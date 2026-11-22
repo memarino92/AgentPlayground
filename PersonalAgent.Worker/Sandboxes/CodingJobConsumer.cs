@@ -22,10 +22,12 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
         if (!Settings.View.Settings.Enabled || !Railway.Settings.Enabled) return;
         var Capability = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
         if (!await Store.ClaimAsync(Job.Id, Capability, Railway.Token, Railway.Settings.EnvironmentId, Token)) return;
+        Job = (await Store.GetAsync(Job.Id, Token))!;
+        if (Job.Status != "Running") return;
         using var Deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
-        Deadline.CancelAfter(TimeSpan.FromMinutes(Job.Settings.MaxMinutes));
+        var Remaining = (Job.AttemptDeadline ?? Job.Deadline) - DateTimeOffset.UtcNow;
+        Deadline.CancelAfter(Remaining > TimeSpan.Zero ? Remaining : TimeSpan.Zero);
         var Monitor = MonitorAsync(Job.Id, Deadline);
-        Job = Job with { Status = "Running" };
         var phase = "sandbox provisioning";
         try
         {
@@ -44,12 +46,19 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
             await Store.AttachSandboxAsync(Job.Id, Job.SandboxId!, CancellationToken.None);
             var Current = (await Store.GetAsync(Job.Id, CancellationToken.None))!;
             if (Current.Status != "Running") return;
+            Job = Current;
             phase = "sandbox execution";
+            var Clarifications = Job.ResumePhase is null ? []
+                : (await Store.ReadClarificationsAsync(Job.Id, Deadline.Token)).Where(Question => Question.Answer is not null).ToArray();
             var Result = await Client.CallAsync(new
             {
                 operation = "coding-execute", token = Railway.Token, environmentId = Railway.Settings.EnvironmentId,
                 id = Job.SandboxId, imageId = Job.Settings.ImageId, repository = Job.Settings.Repository,
                 baseSha = Job.BaseSha, instruction = Job.Instruction, minutes = Job.Settings.MaxMinutes,
+                executionSeconds = Math.Clamp((int)((Job.AttemptDeadline ?? Job.Deadline) - DateTimeOffset.UtcNow).TotalSeconds - 75,
+                    1, Job.Settings.MaxMinutes * 60),
+                supervise = Job.Supervise, resumePhase = Job.ResumePhase, resumeArtifact = JsonSerializer.SerializeToElement(ResumeArtifact(Job), Json),
+                ownerClarifications = JsonSerializer.SerializeToElement(Clarifications, Json),
                 canAsk = Job.SessionId is not null, followUpEvidence = Job.FollowUpEvidence, allowNoChanges = Job.AllowNoChanges,
                 testProject = Job.Settings.TestProject, testFilter = Job.Settings.TestFilter,
                 model = CodingJobs.TrySubscriptionModel(Job.Settings.ModelId, out _, out var Slug) ? Slug : CodingJobs.Model,
@@ -58,6 +67,24 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
             }, Deadline.Token);
             phase = "reading validation results";
             var Artifact = Result.GetProperty("artifact").Deserialize<CodingArtifact>(Json) ?? throw new InvalidOperationException("Missing artifact.");
+            var ResumePhase = Result.TryGetProperty("resumePhase", out var NextPhase) ? NextPhase.GetString() : null;
+            if (ResumePhase is "code" or "validate" && CanSaveCheckpoint(Job, Artifact, ResumePhase))
+            {
+                var Latest = (await Store.GetAsync(Job.Id, CancellationToken.None))!;
+                var HasProgress = Result.TryGetProperty("hasProgress", out var Progress) && Progress.ValueKind == JsonValueKind.True;
+                if (!HasProgress && Job.SessionId is not null)
+                    HasProgress = (await Store.ReadClarificationsAsync(Job.Id, CancellationToken.None)).Count > 0;
+                var CanContinue = HasProgress && Latest.Attempt < Latest.AttemptLimit
+                    && (ResumePhase == "validate" || Latest.ModelRequests < Latest.Settings.MaxModelRequests)
+                    && Latest.Deadline > DateTimeOffset.UtcNow.AddMinutes(2);
+                await Store.SaveAsync(Job with
+                {
+                    Artifact = Artifact, ResumePhase = CanContinue ? ResumePhase : null,
+                    Status = CanContinue ? CodingJobs.Resuming : "Failed",
+                    Error = CanContinue ? null : "The sandbox reached its time limit. The last checkpoint is available in this job."
+                }, "Running", CancellationToken.None);
+                return;
+            }
             var VerifiedEmpty = Artifact.BaseSha == Job.BaseSha && Artifact.Files is { Length: 0 }
                 && Artifact.Checks is { Length: 3 } && Artifact.Checks.All(Check => Check.ExitCode == 0);
             var Success = Result.GetProperty("success").GetBoolean()
@@ -65,7 +92,8 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
             var Status = !Success ? "Failed" : VerifiedEmpty ? CodingJobs.CompletedNoChanges : "ReadyToPublish";
             Job = Job with
             {
-                Artifact = Artifact,
+                Artifact = Artifact.Files is { Length: 0 } && !Success ? Job.Artifact ?? Artifact : Artifact,
+                ResumePhase = null,
                 Status = Status,
                 Error = Success ? null : VerifiedEmpty && !Job.AllowNoChanges ? "No file changes were found. This job expected a diff."
                     : "Coding or validation failed. Inspect retained checks."
@@ -111,10 +139,25 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
             var Lease = await Store.LeaseAsync(Id, Timeout.Token);
             await Client.CallAsync(new { operation = "destroy", token = Lease.Credential, environmentId = Lease.Environment, id = Job.SandboxId }, Timeout.Token);
             // Re-read so cleanup never overwrites concurrent publication or cancellation.
-            await Store.ClearLeaseAsync(Id, Timeout.Token);
+            await Store.ClearLeaseAsync(Id, Job.SandboxId, Timeout.Token);
         }
         catch (Exception E) { Logger.LogWarning(new EventId(4404), "Coding cleanup pending for {JobId}: {ExceptionType}", Id, E.GetType().Name); }
     }
+
+    private static CodingArtifact? ResumeArtifact(CodingJob Job) =>
+        Job.ResumePhase is null || Job.Artifact is not { } Artifact ? null : Artifact with
+        {
+            Checks = Job.ResumePhase == "validate"
+                ? Artifact.Checks.Where(Check => Check is { Command: "code", ExitCode: 0 }).Select(Check => Check with { Output = "" }).ToArray()
+                : []
+        };
+
+    private static bool CanSaveCheckpoint(CodingJob Job, CodingArtifact Artifact, string ResumePhase) =>
+        Artifact.BaseSha == Job.BaseSha && CodingArtifactFiles.AreAllowed(Artifact.Files)
+        && Artifact.Summary is { Length: <= 4000 } && Artifact.Checks is { Length: <= 4 }
+        && Artifact.Checks.All(Check => Check is not null && Check.Output is { Length: <= 20000 })
+        && (ResumePhase == "code" || Artifact.Checks.Count(Check => Check is { Command: "code", ExitCode: 0 }) == 1)
+        && JsonSerializer.SerializeToUtf8Bytes(Artifact).Length <= CodingJobs.MaxArtifactBytes;
 }
 
 internal sealed class CodingSandboxReconciler(CodingJobStore Store, IRailwaySandboxClient Client, ILogger<CodingSandboxReconciler> Logger) : BackgroundService
@@ -127,7 +170,7 @@ internal sealed class CodingSandboxReconciler(CodingJobStore Store, IRailwaySand
             try
             {
                 foreach (var Job in await Store.PendingAsync(Token))
-                    if (Job.CleanupState == "Pending" && (Job.Status != "Running" || Job.Deadline <= DateTimeOffset.UtcNow))
+                    if (Job.CleanupState == "Pending" && (Job.Status != "Running" || (Job.AttemptDeadline ?? Job.Deadline) <= DateTimeOffset.UtcNow))
                         await CodingJobConsumer.CleanupAsync(Job.Id, Store, Client, Logger, Token);
             }
             catch (OperationCanceledException) when (Token.IsCancellationRequested) { break; }

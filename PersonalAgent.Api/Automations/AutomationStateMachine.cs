@@ -79,6 +79,11 @@ internal sealed class AutomationSagaActions(AutomationDbContext Db, AutomationAu
         var Recipe = Recipes.Parse(Version.Source);
         var Step = Recipe.Steps[Run.StepIndex];
         var Record = await Db.Steps.SingleAsync(S => S.RunId == Run.CorrelationId && S.Index == Run.StepIndex, Token);
+        if (Recipe.Supervised && !await Authorization.CanSuperviseAsync(Access, Token))
+        { await FailAsync(Run, "Supervised workflow permission was revoked.", true, Token); return; }
+        if (Recipe.Supervised && AutomationPrograms.IsProgram(Step.Action)
+            && !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.RunSandboxPermissionKey, Token))
+        { await FailAsync(Run, "The one-time Railway sandbox permission was revoked.", true, Token); return; }
         if (!Interactive && AutomationPrograms.IsProgram(Step.Action) && (Access.Role != AgentRoles.Owner
             || !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.PermissionKey, Token)))
         { await FailAsync(Run, "Sandbox program permission was revoked.", true, Token); return; }

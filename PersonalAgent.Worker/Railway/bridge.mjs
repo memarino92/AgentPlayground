@@ -195,9 +195,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     let input = '';
     for await (const chunk of process.stdin) {
       input += chunk;
-      if (input.length > 300000) throw new Error('Input limit');
+      if (input.length > 1_200_000) throw new Error('Input limit');
     }
-    const result = await dispatch(JSON.parse(input));
+    const request = JSON.parse(input);
+    if (input.length > 300_000 && request?.operation !== 'coding-execute') throw new Error('Input limit');
+    const result = await dispatch(request);
     process.stdout.write(JSON.stringify(result));
   } catch {
     // SDK errors may include request content. Never forward them to process logs or diagnostics.
