@@ -28,5 +28,6 @@ COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=railway /usr/local/bin/node /usr/local/bin/node
 COPY --from=build /app/publish .
 COPY --from=railway /railway/node_modules ./Railway/node_modules
+RUN node --input-type=module -e "await import('./Railway/bridge.mjs')"
 
 ENTRYPOINT ["dotnet", "PersonalAgent.Worker.dll"]
