@@ -18,8 +18,6 @@ Remaining acceptance criteria: verify real Plus/Pro authorization and model enti
 
 The resumable and supervised work slice adds bounded coding checkpoints, public-research teams, and one-shot mixed requests on the automation saga. Live acceptance needs a new Railway checkpoint and a run that forces one sandbox timeout, restores a known edit in a fresh sandbox, validates the result and records the draft PR in the parent workflow. See [decision 0054](../decisions/0054-resumable-supervised-work.md).
 
-Tracked coding PR rebases require live acceptance on a disposable PR with a known conflict. Confirm that the new checkpoint replays each original commit, the test gate passes, the same PR receives the linear history, and a concurrent branch update makes publication fail. See [decision 0056](../decisions/0056-tracked-coding-pr-rebases.md).
-
 Requested outcome: explicit and eventually recurring platform changes produce tested PRs while the maintainer controls merge. See [decision 0038](../decisions/0038-platform-improvement-jobs.md) and [setup/limits](../runbooks/platform-coding.md).
 
 Implemented locally: owner chat tools and dashboard, encrypted database-first settings, durable/idempotent job dispatch, one active coding job, OpenCode/OpenRouter scoped model gateway with a $4.80 maximum reservation per job, separate Railway coding image, Worker-owned controller, retained diffs/checks, cleanup reconciliation and GitHub App draft publication with lost-response recovery. No merge/deploy operation is exposed. Docker proof uses real OpenCode with synthetic model replies and verifies a tool edit plus offline diff export without paid inference.
@@ -33,6 +31,8 @@ Setup progress (2026-09-28): App/settings, coding checkpoint and one-approval ru
 3. **Review follow-up and measured learning:** OpenCode 2, conversation delivery, owner questions and explicit same-PR CI/review follow-ups have local implementation. Live rollout still needs a fresh coding checkpoint and a rehearsal covering a completion message, mobile notification and answer, and an update to the original PR. Retaining maintainer feedback for evaluation, measuring accepted changes and regressions, and runtime skill editing remain planned.
 
 The initial worker supports bounded UTF-8 text changes and a configurable Linux test gate, without Docker-in-Docker or private test services. The default AgentSkillsTests gate is only a smoke test. Enablement remains blocked until setup and live acceptance are completed.
+
+Tracked coding PR rebases require live acceptance on a disposable PR with a known conflict. Confirm that the new checkpoint replays each original commit, the test gate passes, the same PR receives the linear history, and a concurrent branch update makes publication fail. See [decision 0056](../decisions/0056-tracked-coding-pr-rebases.md).
 
 ## Agent-authored automations — recipe slice delivered 2026-09-25
 
