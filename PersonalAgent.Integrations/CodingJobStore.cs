@@ -72,6 +72,8 @@ public sealed partial class CodingJobStore(IntegrationDatabase Database)
                 capability_hash text NOT NULL DEFAULT '', requests int NOT NULL DEFAULT 0,
                 lease_credential text NOT NULL DEFAULT '', lease_environment text NOT NULL DEFAULT '',
                 UNIQUE(actor, request_key));
+            CREATE TABLE IF NOT EXISTS app.coding_request_cancellations(
+                actor text NOT NULL, request_key text NOT NULL, subject text NOT NULL, PRIMARY KEY(actor,request_key));
             ALTER TABLE app.coding_jobs ADD COLUMN IF NOT EXISTS result_posted boolean NOT NULL DEFAULT false;
             ALTER TABLE app.coding_jobs ADD COLUMN IF NOT EXISTS rebase_candidate text;
             CREATE TABLE IF NOT EXISTS app.coding_questions(
@@ -151,16 +153,50 @@ public sealed partial class CodingJobStore(IntegrationDatabase Database)
     public async Task<CodingJob> CreateAsync(CodingJob Job, string RequestKey, CancellationToken Token)
     {
         await using var C = await Database.OpenAsync(Token);
+        await using var T = await C.BeginTransactionAsync(Token);
+        await LockRequestAsync(C, T, Job.ActorId, RequestKey, Token);
         await using var Q = new NpgsqlCommand("""
-            INSERT INTO app.coding_jobs(id,actor,request_key,state,deadline,payload) VALUES(@id,@actor,@key,'Queued',@deadline,@payload)
+            INSERT INTO app.coding_jobs(id,actor,request_key,state,deadline,payload)
+            VALUES(@id,@actor,@key,CASE WHEN EXISTS(
+                SELECT 1 FROM app.coding_request_cancellations WHERE actor=@actor AND request_key=@key)
+                THEN 'Cancelled' ELSE 'Queued' END,@deadline,@payload)
             ON CONFLICT(actor,request_key) DO NOTHING;
             SELECT payload,state,requests FROM app.coding_jobs WHERE actor=@actor AND request_key=@key
-            """, C);
+            """, C, T);
         Q.Parameters.AddWithValue("id", Job.Id); Q.Parameters.AddWithValue("actor", Job.ActorId);
         Q.Parameters.AddWithValue("key", RequestKey); Q.Parameters.AddWithValue("deadline", Job.Deadline);
         Q.Parameters.AddWithValue("payload", JsonSerializer.Serialize(Job, Json));
-        await using var R = await Q.ExecuteReaderAsync(Token); await R.ReadAsync(Token);
-        return Read(R);
+        CodingJob Saved;
+        await using (var R = await Q.ExecuteReaderAsync(Token)) { await R.ReadAsync(Token); Saved = Read(R); }
+        await T.CommitAsync(Token);
+        return Saved;
+    }
+
+    // A failed workflow may cancel before preparation finishes and before a job exists.
+    // Retain the request-key tombstone and serialize it with creation, not just a one-shot lookup.
+    public async Task CancelRequestAsync(string Actor, string Subject, string RequestKey, CancellationToken Token)
+    {
+        await using var C = await Database.OpenAsync(Token);
+        await using var T = await C.BeginTransactionAsync(Token);
+        await LockRequestAsync(C, T, Actor, RequestKey, Token);
+        await using var Q = new NpgsqlCommand("""
+            INSERT INTO app.coding_request_cancellations(actor,request_key,subject) VALUES(@actor,@key,@subject)
+                ON CONFLICT(actor,request_key) DO NOTHING;
+            UPDATE app.coding_jobs SET state='Cancelled',
+                payload=(payload::jsonb || jsonb_build_object('error','Parent workflow ended.','resumePhase',null))::text
+            WHERE actor=@actor AND request_key=@key AND payload::jsonb->>'subject'=@subject
+                AND state NOT IN ('Publishing','PrOpened','CompletedNoChanges','Failed','Cancelled')
+            """, C, T);
+        Q.Parameters.AddWithValue("actor", Actor); Q.Parameters.AddWithValue("key", RequestKey); Q.Parameters.AddWithValue("subject", Subject);
+        await Q.ExecuteNonQueryAsync(Token);
+        await T.CommitAsync(Token);
+    }
+
+    private static async Task LockRequestAsync(NpgsqlConnection C, NpgsqlTransaction T, string Actor, string Key, CancellationToken Token)
+    {
+        await using var Q = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@request,947120042))", C, T);
+        Q.Parameters.AddWithValue("request", JsonSerializer.Serialize(new[] { Actor, Key }));
+        await Q.ExecuteNonQueryAsync(Token);
     }
 
     public async Task<CodingJob?> GetAsync(Guid Id, CancellationToken Token)

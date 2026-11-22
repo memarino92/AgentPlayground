@@ -24,6 +24,34 @@ Remaining acceptance criteria: verify real Plus/Pro authorization and model enti
 
 The resumable and supervised work slice adds bounded coding checkpoints, public-research teams, and one-shot mixed requests on the automation saga. Live acceptance needs a new Railway checkpoint and a run that forces one sandbox timeout, restores a known edit in a fresh sandbox, validates the result and records the draft PR in the parent workflow. See [decision 0054](../decisions/0054-resumable-supervised-work.md).
 
+### Option B: durable mixed-workflow child tasks
+
+Implemented and locally verified (2026-11-22); see [decision 0055](../decisions/0055-durable-mixed-workflow-children.md). No production configuration or PR gates changed. One writer and the existing coding publication/validation gates remain authoritative.
+
+Acceptance criteria:
+- [x] Opt-in independent public-research/coding children overlap within one owner-authorized parent; stable child/run ownership, attempt/status, leases and terminal results persist in PostgreSQL.
+- [x] API host restart/replay with both children active redispatches only eligible interrupted research; existing queued/running coding identity and shared budget are retained.
+- [x] Stale-attempt and distinct duplicate completions cannot overwrite outputs, unblock prerequisites early or duplicate the parent report.
+- [x] Committed research completion replays after restart without another provider call; recovery cannot overwrite a concurrently renewed claim. Failed-parent cancellation survives acknowledgment before coding creation.
+- [x] Coding that needs research waits for committed public output and receives bounded evidence; cancelled coding is integrated as terminal evidence, not restarted.
+- [x] Legacy saved recipes/messages retain serial execution and existing restart/outbox behavior; live owner/action/model checks and bounded attempts remain in force.
+- [ ] Live Railway checkpoint/Worker interruption acceptance from 0054 (not part of local option-B evidence).
+
+Fresh local evidence (PostgreSQL 18.6, .NET SDK 11.0.100; deterministic providers; isolated loopback bootstrap described in the runbook). All commands used normal restore:
+
+```bash
+AGENTPLAYGROUND_TEST_POSTGRES='Host=127.0.0.1;Port=55432;Database=agentplayground_tests;Username=postgres' dotnet test PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj --filter 'FullyQualifiedName~AutomationTests.ParallelChildrenRestartReplayPreservesDependenciesAndIdentity|FullyQualifiedName~AutomationTests.CommittedResearchCompletionReplaysWithoutCallingProviderAfterRestart' --logger 'trx;LogFileName=mixed-workflow-restart.trx'
+# Passed 5, failed 0, skipped 0; real MassTransit PostgreSQL transport; test duration 1m 5s.
+AGENTPLAYGROUND_TEST_POSTGRES='Host=127.0.0.1;Port=55432;Database=agentplayground_tests;Username=postgres' dotnet test PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj --filter 'FullyQualifiedName~AutomationTests|FullyQualifiedName~SupervisedWorkflowTests|FullyQualifiedName~ResearchSwarmTests' --logger 'trx;LogFileName=mixed-workflow-automation.trx'
+# Passed 66, failed 0, skipped 0; test duration 1m 22s.
+dotnet test PersonalAgent.Api.Tests/PersonalAgent.Api.Tests.csproj --filter 'FullyQualifiedName~CodingJobTests' --logger 'trx;LogFileName=mixed-workflow-coding.trx'
+# Passed 23, failed 0, skipped 0.
+dotnet test PersonalAgent.Web.Tests/PersonalAgent.Web.Tests.csproj --filter 'FullyQualifiedName~Automation' --logger 'trx;LogFileName=mixed-workflow-web.trx'
+# Passed 4, failed 0, skipped 0.
+dotnet build PersonalAgent.Mobile/PersonalAgent.Mobile.csproj
+# Succeeded; 0 warnings, 0 errors; 00:04:29.09.
+```
+
 Requested outcome: explicit and eventually recurring platform changes produce tested PRs while the maintainer controls merge. See [decision 0038](../decisions/0038-platform-improvement-jobs.md) and [setup/limits](../runbooks/platform-coding.md).
 
 Implemented locally: owner chat tools and dashboard, encrypted database-first settings, durable/idempotent job dispatch, one active coding job, OpenCode/OpenRouter scoped model gateway with a $4.80 maximum reservation per job, separate Railway coding image, Worker-owned controller, retained diffs/checks, cleanup reconciliation and GitHub App draft publication with lost-response recovery. No merge/deploy operation is exposed. Docker proof uses real OpenCode with synthetic model replies and verifies a tool edit plus offline diff export without paid inference.

@@ -70,19 +70,6 @@ namespace PersonalAgent.Api.Automations.Migrations
                     b.ToTable("InboxState", "automation");
                 });
 
-            modelBuilder.Entity("PersonalAgent.Api.Automations.CoachCallWorkflow", b =>
-                {
-                    b.Property<Guid>("CorrelationId").HasColumnType("uuid");
-                    b.Property<string>("CurrentState").IsRequired().HasMaxLength(64).HasColumnType("character varying(64)");
-                    b.Property<string>("ProfileId").IsRequired().HasColumnType("text");
-                    b.Property<Guid>("ProviderCorrelationId").HasColumnType("uuid");
-                    b.Property<Guid>("SessionId").HasColumnType("uuid");
-                    b.Property<DateTimeOffset>("UpdatedAt").HasColumnType("timestamp with time zone");
-                    b.HasKey("CorrelationId");
-                    b.HasIndex("ProfileId", "UpdatedAt");
-                    b.ToTable("CoachCallWorkflows", "automation");
-                });
-
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>
                 {
                     b.Property<long>("SequenceNumber")
@@ -341,11 +328,23 @@ namespace PersonalAgent.Api.Automations.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ChildId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("Deadline")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Error")
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Output")
                         .HasColumnType("text");
@@ -388,6 +387,37 @@ namespace PersonalAgent.Api.Automations.Migrations
                     b.HasKey("AutomationId", "Version");
 
                     b.ToTable("Versions", "automation");
+                });
+
+            modelBuilder.Entity("PersonalAgent.Api.Automations.CoachCallWorkflow", b =>
+                {
+                    b.Property<Guid>("CorrelationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrentState")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ProviderCorrelationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CorrelationId");
+
+                    b.HasIndex("ProfileId", "UpdatedAt");
+
+                    b.ToTable("CoachCallWorkflows", "automation");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>

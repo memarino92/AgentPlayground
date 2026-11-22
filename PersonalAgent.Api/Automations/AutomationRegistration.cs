@@ -107,6 +107,8 @@ internal sealed class AutomationMigrationService(IServiceScopeFactory Scopes) : 
 
 internal sealed class AutomationScheduler(IServiceScopeFactory Scopes, TimeProvider Clock, ILogger<AutomationScheduler> Logger) : BackgroundService
 {
+    private Guid ReconcileAfter;
+    private Guid WatchdogAfter;
     protected override async Task ExecuteAsync(CancellationToken StoppingToken)
     {
         while (!StoppingToken.IsCancellationRequested)
@@ -129,19 +131,31 @@ internal sealed class AutomationScheduler(IServiceScopeFactory Scopes, TimeProvi
             var Db = Scope.ServiceProvider.GetRequiredService<AutomationDbContext>();
             var Now = Clock.GetUtcNow();
             Due = await Db.Automations.AsNoTracking().Where(D => D.Status == "Active" && D.NextRunAt <= Now)
+                .Where(D => !Db.Runs.Any(R => R.AutomationId == D.Id && (R.CurrentState == "Initial" || R.CurrentState == "Running")))
                 .OrderBy(D => D.NextRunAt).Select(D => D.Id).Take(50).ToListAsync(Token);
             // A durable timeout prevents a permanently faulted consumer from leaving a run invisible in Running.
             var Cutoff = Now.AddMinutes(-5);
             var ImageCutoff = Now.AddMinutes(-18);
-            var Stale = await Db.Runs.Where(R => R.CurrentState == "Running" && R.StartedAt < Cutoff
+            var Stale = await Db.Runs.Where(R => R.CurrentState == "Running" && R.StartedAt < Cutoff && R.CorrelationId.CompareTo(WatchdogAfter) > 0
+                && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.ChildId != null)
                 && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.CompletedAt > Cutoff)
                 && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.Index == R.StepIndex && S.Action == "coding_job")
                 && (!Db.Steps.Any(S => S.RunId == R.CorrelationId && S.Index == R.StepIndex && S.Action == "dockerfile")
-                    || (R.StartedAt < ImageCutoff && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.CompletedAt > ImageCutoff)))).Take(50).ToListAsync(Token);
+                    || (R.StartedAt < ImageCutoff && !Db.Steps.Any(S => S.RunId == R.CorrelationId && S.CompletedAt > ImageCutoff)))).OrderBy(R => R.CorrelationId).Take(50).ToListAsync(Token);
+            WatchdogAfter = Stale.Count == 50 ? Stale[^1].CorrelationId : Guid.Empty;
             var Sender = Scope.ServiceProvider.GetRequiredService<ISendEndpointProvider>();
             foreach (var Run in Stale)
+            {
+                var Source = await Db.Versions.Where(V => V.AutomationId == Run.AutomationId && V.Version == Run.Version).Select(V => V.Source).SingleAsync(Token);
+                if (Scope.ServiceProvider.GetRequiredService<AutomationRecipes>().Parse(Source).ParallelChildren) continue;
                 await (await Sender.GetSendEndpoint(AutomationRegistration.SagaAddress)).Send(
                     new AutomationStepFailed(Run.CorrelationId, Run.StepIndex, "Step progress deadline expired. The automation was paused."), Token);
+            }
+            var Active = await Db.Runs.AsNoTracking().Where(R => R.CurrentState == "Running" && R.CorrelationId.CompareTo(ReconcileAfter) > 0).OrderBy(R => R.CorrelationId)
+                .Select(R => R.CorrelationId).Take(50).ToListAsync(Token);
+            ReconcileAfter = Active.Count == 50 ? Active[^1] : Guid.Empty;
+            foreach (var RunId in Active)
+                await (await Sender.GetSendEndpoint(AutomationRegistration.SagaAddress)).Send(new ReconcileAutomation(RunId), Token);
             await ReconcileCodingAsync(Db, Scope.ServiceProvider, Sender, Now, Token);
             await Db.SaveChangesAsync(Token);
         }
@@ -159,13 +173,14 @@ internal sealed class AutomationScheduler(IServiceScopeFactory Scopes, TimeProvi
             join Step in Db.Steps on new { RunId = Run.CorrelationId, Index = Run.StepIndex } equals new { Step.RunId, Step.Index }
             join Definition in Db.Automations on Run.AutomationId equals Definition.Id
             where Run.CurrentState == "Running" && Step.Action == "coding_job"
+                && !Db.Steps.Any(S => S.RunId == Run.CorrelationId && S.ChildId != null)
             orderby Run.StartedAt
             select new
             {
                 Run.CorrelationId, Run.StepIndex, Definition.ActorId, Definition.SubjectProfileId,
                 StepStarted = Db.Steps.Where(S => S.RunId == Run.CorrelationId && S.Index < Run.StepIndex).Max(S => S.CompletedAt)
                     ?? Run.StartedAt
-            }).Take(50).ToListAsync(Token);
+            }).ToListAsync(Token);
         if (Pending.Count == 0) return;
         var Coding = Services.GetRequiredService<CodingJobStore>();
         foreach (var Step in Pending)
