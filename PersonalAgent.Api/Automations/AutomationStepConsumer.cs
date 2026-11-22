@@ -16,8 +16,20 @@ using PersonalAgent.Integrations;
 namespace PersonalAgent.Api.Automations;
 
 internal sealed class AutomationStepConsumer(AutomationDbContext Db, AutomationAuthorization Authorization, AutomationRecipes Recipes,
-    IAgentToolRegistry Registry, ToolAccessService Permissions, IServiceProvider Services, ILogger<AutomationStepConsumer> Logger) : IConsumer<ExecuteAutomationStep>
+    IAgentToolRegistry Registry, ToolAccessService Permissions, IServiceProvider Services, ILogger<AutomationStepConsumer> Logger) : IConsumer<ExecuteAutomationStep>, IConsumer<CancelAutomationChild>
 {
+    public async Task Consume(ConsumeContext<CancelAutomationChild> Context)
+    {
+        var Token = Context.CancellationToken;
+        var Run = await Db.Runs.AsNoTracking().SingleOrDefaultAsync(R => R.CorrelationId == Context.Message.RunId, Token);
+        if (Run?.FinishedAt is null || Run.Error is null) return;
+        if (!await Db.Steps.AnyAsync(S => S.RunId == Run.CorrelationId && S.Index == Context.Message.StepIndex && S.Action == "coding_job" && S.ChildId != null, Token)) return;
+        var Definition = await Db.Automations.AsNoTracking().SingleAsync(D => D.Id == Run.AutomationId, Token);
+        var Coding = Services.GetRequiredService<CodingJobStore>();
+        await Coding.CancelRequestAsync(Definition.ActorId, Definition.SubjectProfileId,
+            CodingRequestKey(Run.CorrelationId, Context.Message.StepIndex), Token);
+    }
+
     public async Task Consume(ConsumeContext<ExecuteAutomationStep> Context)
     {
         var Message = Context.Message;
@@ -32,11 +44,36 @@ internal sealed class AutomationStepConsumer(AutomationDbContext Db, AutomationA
             Deadline.CancelAfter(TimeSpan.FromSeconds(60));
             var Token = Deadline.Token;
             var Run = await Db.Runs.AsNoTracking().SingleOrDefaultAsync(R => R.CorrelationId == Message.RunId, Token);
-            if (Run is null || Run.CurrentState != "Running" || Run.StepIndex != Message.StepIndex) return;
+            if (Run is null || Run.CurrentState != "Running") return;
             var Definition = await Db.Automations.AsNoTracking().SingleAsync(D => D.Id == Run.AutomationId, Token);
             var Version = await Db.Versions.AsNoTracking().SingleAsync(V => V.AutomationId == Run.AutomationId && V.Version == Run.Version, Token);
             var Recipe = Recipes.Parse(Version.Source);
+            if (Message.StepIndex < 0 || Message.StepIndex >= Recipe.Steps.Count) return;
+            if (!Recipe.ParallelChildren && Run.StepIndex != Message.StepIndex) return;
             var Step = Recipe.Steps[Message.StepIndex];
+            if (Recipe.ParallelChildren)
+            {
+                var Rows = await Db.Steps.AsNoTracking().Where(S => S.RunId == Run.CorrelationId).ToListAsync(Token);
+                var Record = Rows.Single(S => S.Index == Message.StepIndex);
+                if (Record.Status != "Queued" || Record.Attempt != Message.Attempt || !AutomationChildScheduling.Ready(Recipe, Message.StepIndex, Rows)) return;
+                if (AutomationChildScheduling.IsChild(Step))
+                {
+                    // Commit the claim before external I/O. The consumer outbox transaction must
+                    // not hide an in-flight research attempt from restart reconciliation.
+                    await using var Scope = Services.CreateAsyncScope();
+                    var Claims = Scope.ServiceProvider.GetRequiredService<AutomationDbContext>();
+                    var Now = DateTimeOffset.UtcNow;
+                    if (Record.Deadline is null || Record.Deadline <= Now) return;
+                    var Lease = Now.AddSeconds(75) < Record.Deadline ? Now.AddSeconds(75) : Record.Deadline.Value;
+                    var Claimed = await Claims.Steps.Where(S => S.RunId == Run.CorrelationId && S.Index == Message.StepIndex
+                        && S.Status == "Queued" && S.Attempt == Message.Attempt && S.Deadline > Now
+                        && Claims.Runs.Any(R => R.CorrelationId == S.RunId && R.CurrentState == "Running"))
+                        .ExecuteUpdateAsync(U => U.SetProperty(S => S.Status, "Running").SetProperty(S => S.LeaseUntil, Lease), Token);
+                    if (Claimed != 1) return;
+                    var Remaining = Record.Deadline.Value - Now;
+                    if (Remaining < TimeSpan.FromSeconds(60)) Deadline.CancelAfter(Remaining);
+                }
+            }
             Action = Step.Action;
             Span?.SetTag("automation.action", Action);
             var Interactive = Step.Action == "python" && await Services.GetRequiredService<ScratchpadStore>().ScopeAsync(Run.CorrelationId, Token) is not null;
@@ -47,7 +84,7 @@ internal sealed class AutomationStepConsumer(AutomationDbContext Db, AutomationA
                 && !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.RunSandboxPermissionKey, Token))
                 throw new UnauthorizedAccessException("The one-time Railway sandbox permission was revoked.");
             await Recipes.ValidateToolsAsync(Recipe with { Steps = [Step] }, Services, Access, Permissions, Token, Interactive);
-            var Earlier = await Db.Steps.AsNoTracking().Where(S => S.RunId == Run.CorrelationId && S.Index < Run.StepIndex).ToListAsync(Token);
+            var Earlier = await Db.Steps.AsNoTracking().Where(S => S.RunId == Run.CorrelationId && S.Index < Message.StepIndex).ToListAsync(Token);
             var Skip = Step.When is { } Condition && Earlier.Single(S => S.StepId == Condition.Step).Output != Condition.Expected;
             var Arguments = AutomationRecipes.Resolve(Step, Run, Earlier);
             var Output = "";
@@ -58,9 +95,9 @@ internal sealed class AutomationStepConsumer(AutomationDbContext Db, AutomationA
                     var Input = Arguments.GetProperty("input").GetString()!;
                     if (Input.Length > AutomationPrograms.MaxInput) throw new ArgumentException("Program input exceeds 64 KiB.");
                     if (AutomationRecipes.Packages(Arguments).Length > 0)
-                        await Services.GetRequiredService<AutomationOperationGateway>().ApprovePackagesAsync(Run.CorrelationId, Run.StepIndex, Step, Token);
+                        await Services.GetRequiredService<AutomationOperationGateway>().ApprovePackagesAsync(Run.CorrelationId, Message.StepIndex, Step, Token);
                     await (await Context.GetSendEndpoint(new Uri("queue:" + (Interactive ? AutomationPrograms.ScratchQueue : AutomationPrograms.Queue)))).Send(
-                        new ExecuteAutomationProgram(Run.CorrelationId, Run.StepIndex, Arguments.GetProperty("source").GetString()!, Input, DateTimeOffset.UtcNow.AddMinutes(3),
+                        new ExecuteAutomationProgram(Run.CorrelationId, Message.StepIndex, Arguments.GetProperty("source").GetString()!, Input, DateTimeOffset.UtcNow.AddMinutes(3),
                             AutomationRecipes.Packages(Arguments), Arguments.TryGetProperty("packageLock", out var Lock) ? Lock.GetString() : null, Action,
                             Arguments.TryGetProperty("imageId", out var Image) ? Image.GetString() : null, AutomationRecipes.InputFiles(Arguments)), Token);
                     Status = "Dispatched";
@@ -70,11 +107,13 @@ internal sealed class AutomationStepConsumer(AutomationDbContext Db, AutomationA
                 {
                     var Coding = Services.GetRequiredService<CodingJobService>();
                     var Job = await Coding.StartAsync(Access with { SessionId = Definition.SourceSessionId },
-                        new StartCodingJob(Arguments.GetProperty("instruction").GetString()!, CodingRequestKey(Run.CorrelationId, Run.StepIndex))
+                        new StartCodingJob(Arguments.GetProperty("instruction").GetString()!, CodingRequestKey(Run.CorrelationId, Message.StepIndex))
                         {
                             Supervise = true,
                             WorkflowEvidence = CodingEvidence(Arguments, Earlier)
                         }, Token);
+                    if (Recipe.ParallelChildren && !await Db.Runs.AsNoTracking().AnyAsync(R => R.CorrelationId == Run.CorrelationId && R.CurrentState == "Running", Token))
+                    { await Services.GetRequiredService<CodingJobStore>().CancelAsync(Job.Id, Token); return; }
                     if (!CodingJobs.Terminal(Job.Status))
                     {
                         Status = "Dispatched";
@@ -110,7 +149,7 @@ internal sealed class AutomationStepConsumer(AutomationDbContext Db, AutomationA
                         || Body.Length > (Action == "notify" ? 4000 : 60000)) throw new ArgumentException("Invalid title or content size.");
                 }
             }
-            await Endpoint.Send(new AutomationStepCompleted(Run.CorrelationId, Run.StepIndex, Output, Skip), Context.CancellationToken);
+            await Endpoint.Send(new AutomationStepCompleted(Run.CorrelationId, Message.StepIndex, Output, Skip, Attempt: Message.Attempt), Context.CancellationToken);
             Status = Skip ? "Skipped" : "Completed";
             Logger.LogInformation("Automation step {RunId}/{StepIndex} action {Action} produced {Status}", Message.RunId, Message.StepIndex, Action, Status);
         }
@@ -123,7 +162,7 @@ internal sealed class AutomationStepConsumer(AutomationDbContext Db, AutomationA
             Span?.SetStatus(ActivityStatusCode.Error);
             Span?.SetTag("error.type", Exception.GetType().FullName);
             Logger.LogError(new EventId(4302, "AutomationStepFailed"), Exception, "Automation step {RunId}/{StepIndex} failed with {ExceptionType}", Message.RunId, Message.StepIndex, Exception.GetType().Name);
-            await Endpoint.Send(new AutomationStepFailed(Message.RunId, Message.StepIndex, Error, Blocked), Context.CancellationToken);
+            await Endpoint.Send(new AutomationStepFailed(Message.RunId, Message.StepIndex, Error, Blocked, Attempt: Message.Attempt), Context.CancellationToken);
         }
         finally { AutomationTelemetry.StepFinished(Action, Status, Stopwatch.GetElapsedTime(Start).TotalSeconds); }
     }

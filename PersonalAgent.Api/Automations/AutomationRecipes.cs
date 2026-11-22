@@ -42,6 +42,7 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
         supervisedActions = new
         {
             use = "Run these actions in an explicitly requested one-time supervised workflow.",
+            concurrency = "Opt in with parallelChildren: true to overlap independent public_research and coding_job children. Optional step dependsOn: [earlierId] adds prerequisites. Coding evidenceSteps and when imply dependencies. All other actions are ordered barriers. Omit parallelChildren to retain serial execution.",
             actions = new object[]
             {
                 new { action = "public_research", arguments = new { questions = new[] { "First independent question", "Second independent question" } } },
@@ -60,6 +61,7 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
         try { Recipe = JsonSerializer.Deserialize<AutomationRecipe>(Source, Json) ?? throw new JsonException(); }
         catch (JsonException) { throw new ArgumentException("Recipe must match the catalog JSON schema."); }
         Recipe = Recipe with { Supervised = Supervised || Recipe.Supervised };
+        if (Recipe.ParallelChildren && !Recipe.Supervised) throw new ArgumentException("Parallel children require a one-time supervised workflow.");
         if (!Recipe.Supervised && Recipe.SupervisedModelId is not null) throw new ArgumentException("Model selection applies only to supervised workflows.");
         if (Recipe.Steps is null || Recipe.Steps.Count is < 1 or > 20) throw new ArgumentException("A recipe needs 1–20 steps.");
         var Prior = new Dictionary<string, AutomationStep>();
@@ -68,6 +70,9 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
             if (Step is null || Step.Id is null || !IdPattern.IsMatch(Step.Id) || Prior.ContainsKey(Step.Id))
                 throw new ArgumentException("Step IDs must be unique lowercase identifiers starting with a letter.");
             if (Step.Arguments.ValueKind != JsonValueKind.Object) throw new ArgumentException("Step arguments must be an object.");
+            if (Step.DependsOn is { } Dependencies && (!Recipe.ParallelChildren || Dependencies.Count > 20
+                || Dependencies.Distinct().Count() != Dependencies.Count || Dependencies.Any(Id => Id is null || !Prior.ContainsKey(Id))))
+                throw new ArgumentException("dependsOn requires parallelChildren and distinct earlier step IDs.");
             string[] Keys = Step.Action switch
             {
                 "text" => ["text"], "save_report" => ["title", "content"], "notify" => ["title", "body"], "tool" => ["tool", "inputs"], "csharp" or "shell" or "dockerfile" or "python" => ["source", "input"],

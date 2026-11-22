@@ -51,6 +51,10 @@ internal sealed class AutomationStepExecution
     public string? Error { get; set; }
     public string? ProgramEvidence { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+    public Guid? ChildId { get; set; }
+    public int Attempt { get; set; }
+    public DateTimeOffset? LeaseUntil { get; set; }
+    public DateTimeOffset? Deadline { get; set; }
 }
 
 // A real domain write: report creation commits with the saga transition and outgoing message intent.

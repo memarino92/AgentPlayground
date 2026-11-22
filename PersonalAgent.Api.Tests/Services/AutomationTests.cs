@@ -91,10 +91,9 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
             await WaitAsync(Restarted, RunId, "Completed");
             var Bus = Restarted.Services.GetRequiredService<IBus>();
             var Endpoint = await Bus.GetSendEndpoint(AutomationRegistration.SagaAddress);
-            await Endpoint.Send(new StartAutomation(RunId));
-            await Endpoint.Send(new AutomationStepCompleted(RunId, 0, "forged duplicate"));
-            await Endpoint.Send(new AutomationStepCompleted(RunId, 1, "forged duplicate"));
-            await Task.Delay(300);
+            await SendAndObserveAsync(Restarted, AutomationRegistration.SagaAddress, new StartAutomation(RunId));
+            await SendAndObserveAsync(Restarted, AutomationRegistration.SagaAddress, new AutomationStepCompleted(RunId, 0, "forged duplicate"));
+            await SendAndObserveAsync(Restarted, AutomationRegistration.SagaAddress, new AutomationStepCompleted(RunId, 1, "forged duplicate"));
             await using var Scope = Restarted.Services.CreateAsyncScope();
             var Detail = await Scope.ServiceProvider.GetRequiredService<AutomationService>().RunDetailAsync(Owner, Id, RunId, default);
             Detail.Steps.Should().HaveCount(2).And.OnlyContain(S => S.Status == "Completed");
@@ -503,7 +502,7 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
     }
 
     private async Task<IHost> CreateHostAsync(Mock<IScheduledActorPolicy>? Policy = null, FailReportCommit? Failure = null, bool Reset = true, Dictionary<string, bool>? Grants = null,
-        bool JevConfigured = false, ToolChoiceResult? Decision = null, Action<IServiceCollection>? Configure = null)
+        bool JevConfigured = false, ToolChoiceResult? Decision = null, Action<IServiceCollection>? Configure = null, string? SqlSchema = null, IInterceptor? Interceptor = null)
     {
         var Host = new HostBuilder().ConfigureLogging(L => L.AddConsole().SetMinimumLevel(LogLevel.Warning))
             .ConfigureServices(S =>
@@ -534,11 +533,24 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
                 {
                     O.UseNpgsql(Database.ConnectionString, N => N.MigrationsHistoryTable("__EFMigrationsHistory", "automation"));
                     if (Failure is not null) O.AddInterceptors(Failure);
+                    if (Interceptor is not null) O.AddInterceptors(Interceptor);
                 });
+                if (SqlSchema is not null)
+                {
+                    S.Configure<SqlTransportOptions>(O => { O.ConnectionString = Database.ConnectionString; O.Schema = SqlSchema; });
+                    S.Configure<MassTransitHostOptions>(O =>
+                    { O.WaitUntilStarted = true; O.StopTimeout = TimeSpan.FromSeconds(5); O.ConsumerStopTimeout = TimeSpan.FromMilliseconds(200); });
+                    S.AddPostgresMigrationHostedService(O => { O.CreateDatabase = false; O.CreateSchema = true; O.CreateInfrastructure = true; });
+                }
                 S.AddMassTransit(B => { B.AddAutomationMessaging(); B.AddConsumer<NotificationProbe>();
                     B.AddConsumer<ScratchProbe>().Endpoint(E => E.Name = AutomationPrograms.ScratchQueue);
                     B.AddConsumer<ProgramProbe>().Endpoint(E => E.Name = AutomationPrograms.Queue);
-                    B.UsingInMemory((C, B) => B.ConfigureEndpoints(C)); });
+                    if (SqlSchema is null) B.UsingInMemory((C, B) => B.ConfigureEndpoints(C));
+                    else B.UsingPostgres((C, B) =>
+                    {
+                        B.UsePostgres(C, H => { H.ConnectionString = Database.ConnectionString; H.Schema = SqlSchema; });
+                        B.ConfigureEndpoints(C);
+                    }); });
                 Configure?.Invoke(S);
             }).Build();
         await using var Scope = Host.Services.CreateAsyncScope();

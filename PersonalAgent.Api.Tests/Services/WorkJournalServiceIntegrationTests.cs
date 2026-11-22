@@ -48,17 +48,33 @@ public sealed class WorkJournalServiceIntegrationTests : IClassFixture<PostgresV
 
 public sealed class PostgresVectorFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("pgvector/pgvector:0.8.2-pg18-trixie")
-        .WithDatabase("agentplayground_tests")
-        .WithUsername("postgres")
-        .WithPassword("postgres")
-        .Build();
+    private PostgreSqlContainer? _container;
+    private string? _connectionString;
 
-    public string ConnectionString => _container.GetConnectionString();
+    public string ConnectionString => _connectionString ?? throw new InvalidOperationException("Test PostgreSQL has not initialized.");
 
-    public async Task InitializeAsync() => await _container.StartAsync();
+    public async Task InitializeAsync()
+    {
+        // Test bootstrap only, for Docker-less sandboxes. Never point this destructive fixture
+        // at application data: restrict the override to a named loopback test database.
+        if (Environment.GetEnvironmentVariable("AGENTPLAYGROUND_TEST_POSTGRES") is { Length: > 0 } Local)
+        {
+            var Options = new NpgsqlConnectionStringBuilder(Local);
+            if (Options.Host is not ("127.0.0.1" or "localhost") || Options.Database != "agentplayground_tests")
+                throw new InvalidOperationException("Test PostgreSQL override requires a loopback agentplayground_tests database.");
+            _connectionString = Local;
+            return;
+        }
+        _container = new PostgreSqlBuilder("pgvector/pgvector:0.8.2-pg18-trixie")
+            .WithDatabase("agentplayground_tests").WithUsername("postgres").WithPassword("postgres").Build();
+        await _container.StartAsync();
+        _connectionString = _container.GetConnectionString();
+    }
 
-    public async Task DisposeAsync() => await _container.DisposeAsync();
+    public async Task DisposeAsync()
+    {
+        if (_container is not null) await _container.DisposeAsync();
+    }
 
     public async Task ResetAsync()
     {
