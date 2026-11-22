@@ -74,6 +74,15 @@ public sealed class IntegrationSettingsEndpointsTests
                 new SaveProviderCredentialRequest(null, "private-key"));
             ((int)response.StatusCode).Should().Be(Expected);
         }
+        foreach (var (method, suffix) in new[] { (HttpMethod.Get, ""), (HttpMethod.Put, ""), (HttpMethod.Post, "/test") })
+        {
+            using var client = app.GetTestClient();
+            Sign(client, Actor, Role, InternalKey, ForgeSignature);
+            using var request = new HttpRequestMessage(method, "/api/admin/settings/whatbox" + suffix);
+            if (method == HttpMethod.Put) request.Content = JsonContent.Create(new { });
+            using var response = await client.SendAsync(request);
+            ((int)response.StatusCode).Should().Be(Expected);
+        }
     }
 
     [Fact]
@@ -108,6 +117,9 @@ public sealed class IntegrationSettingsEndpointsTests
         builder.Services.AddSingleton(new DatabaseSettingsStore(new IntegrationDatabase("", "")));
         builder.Services.AddSingleton<DatabaseCredentialRuntime>();
         builder.Services.AddSingleton(new AutomationRuntimeStore(new IntegrationDatabase("", "")));
+        builder.Services.AddSingleton(new Mock<IWhatboxSettingsStore>(MockBehavior.Strict).Object);
+        builder.Services.AddSingleton(new Mock<IWhatboxSshTransport>(MockBehavior.Strict).Object);
+        builder.Services.AddSingleton<WhatboxService>();
         var app = builder.Build();
         var group = app.MapGroup("/api").AddEndpointFilter(new InternalApiKeyFilter(Options.Create(new ApiKeyOptions { InternalApiKey = "internal" })));
         group.MapIntegrationSettings(Options.Create(new SecurityOptions { ActorSigningKey = "signing-key" }), builder.Configuration);

@@ -9,6 +9,37 @@ namespace PersonalAgent.Api.Tests.Services;
 public sealed class IntegrationSettingsStoreTests(PostgresVectorFixture Fixture) : IClassFixture<PostgresVectorFixture>
 {
     [Fact]
+    public async Task WhatboxCreatesEncryptedSettingsAndRejectsStaleWriters()
+    {
+        var database = new IntegrationDatabase(Fixture.ConnectionString, Convert.ToBase64String(new byte[32]));
+        await using var connection = await database.OpenAsync(default);
+        await using var setup = new NpgsqlCommand("""
+            CREATE SCHEMA IF NOT EXISTS app;
+            CREATE TABLE IF NOT EXISTS app.configuration_settings (
+                scope text NOT NULL, key text NOT NULL, value text NOT NULL, is_secret boolean NOT NULL,
+                is_active boolean NOT NULL, updated_at timestamptz NOT NULL, PRIMARY KEY (scope, key));
+            """, connection);
+        await setup.ExecuteNonQueryAsync();
+        var store = new WhatboxSettingsStore(database);
+        var initial = await store.ReadAsync(default);
+        Assert.Null(initial.Version);
+        var settings = new WhatboxConfiguration("test.whatbox.ca", "slot", "key-fingerprint", false, "synthetic-private-key",
+            "/srv/slot/files", "~/custom/rtorrent.sock");
+        var version = await store.SaveAsync(null, settings, default);
+        await Assert.ThrowsAsync<IntegrationConflictException>(() => store.SaveAsync(null, settings, default));
+        var enabled = settings with { Enabled = true };
+        var next = await store.SaveAsync(version, enabled, default);
+        await Assert.ThrowsAsync<IntegrationConflictException>(() => store.SaveAsync(version, settings, default));
+        Assert.Equal((next, enabled), await store.ReadAsync(default));
+
+        await using var query = new NpgsqlCommand("SELECT value FROM app.configuration_settings WHERE scope = 'Whatbox' AND is_secret", connection);
+        var stored = Assert.IsType<string>(await query.ExecuteScalarAsync());
+        Assert.StartsWith("v1:", stored);
+        Assert.DoesNotContain(settings.PrivateKey!, stored);
+        Assert.DoesNotContain(await new DatabaseSettingsStore(database).ReadAsync(default), Setting => Setting.Scope == "Whatbox");
+    }
+
+    [Fact]
     public async Task Otel_RevisionsAreIsolatedEncryptedMaskedAndLiveAcrossServices()
     {
         var database = new IntegrationDatabase(Fixture.ConnectionString, Convert.ToBase64String(new byte[32]));

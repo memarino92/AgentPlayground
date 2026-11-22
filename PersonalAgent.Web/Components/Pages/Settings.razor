@@ -8,7 +8,7 @@
 <div class="settings-hub">
     <h1>Settings</h1>
     <nav aria-label="Settings sections">
-        @foreach (var section in PersonalAgent.Presentation.SettingsSection.All)
+        @foreach (var section in PersonalAgent.Presentation.SettingsSection.All.Append(WhatboxSection))
         {
             <a class="@(CurrentSection == section.Key ? "active" : null)" href="@($"/admin/settings?section={section.Key}")">@section.Title</a>
         }
@@ -21,12 +21,15 @@
         case "automation": <AutomationRuntimeSettingsPage /> break;
         case "coding": <CodingSettingsPage /> break;
         case "backup": <BackupSettingsPage /> break;
+        case "whatbox": <WhatboxSettingsPage /> break;
         case "integrations": <IntegrationsAdmin /> break;
         default: <DatabaseSettings /> break;
     }
 </div>
 
 @code {
+    private static readonly PersonalAgent.Presentation.SettingsSection WhatboxSection = new("whatbox", "Whatbox");
+
     [SupplyParameterFromQuery(Name = "section")] public string? Section { get; set; }
     private string CurrentSection => Section ?? (Navigation.Uri.Contains("/admin/integrations") ? "integrations" : "database");
 }

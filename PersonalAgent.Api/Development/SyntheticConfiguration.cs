@@ -27,6 +27,7 @@ internal static class SyntheticConfiguration
                 scope text NOT NULL, key text NOT NULL, value text NOT NULL,
                 is_secret boolean NOT NULL, is_active boolean NOT NULL DEFAULT true,
                 PRIMARY KEY (scope, key));
+            ALTER TABLE app.configuration_settings ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
             """, Connection, Transaction);
         await Guard.ExecuteNonQueryAsync();
         var Settings = new Dictionary<string, string>
