@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Security.Cryptography;
 using System.Text.Json;
 using FluentAssertions;
 using MassTransit;
@@ -9,14 +10,18 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using PersonalAgent.Api.Automations;
+using PersonalAgent.Api.Coding;
 using PersonalAgent.Api.Models;
 using PersonalAgent.Api.Services;
 using PersonalAgent.Contracts.Automations;
+using PersonalAgent.Contracts.Coding;
 using PersonalAgent.Contracts.Messaging.Commands;
 using PersonalAgent.Contracts.Messaging.Events;
 using PersonalAgent.Integrations;
+using PersonalAgent.Integrations.ChatGpt;
 using Xunit;
 
 namespace PersonalAgent.Api.Tests.Services;
@@ -94,6 +99,83 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
             var Detail = await Scope.ServiceProvider.GetRequiredService<AutomationService>().RunDetailAsync(Owner, Id, RunId, default);
             Detail.Steps.Should().HaveCount(2).And.OnlyContain(S => S.Status == "Completed");
             Detail.Reports.Should().ContainSingle().Which.Content.Should().Be("Synthetic report");
+        }
+        finally { await Restarted.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task SupervisedWorkflowResumesAfterHostRestartAndReportsTheSameCodingChild()
+    {
+        const string Plan = """
+            {"steps":[
+                {"id":"evidence","action":"text","arguments":{"text":"Public implementation note"}},
+                {"id":"change","action":"coding_job","arguments":{"instruction":"Implement the example.","evidenceSteps":["evidence"]}},
+                {"id":"report","action":"save_report","arguments":{"title":"Workflow outcome","content":"{{steps.evidence}}\n{{steps.change}}"}}
+            ]}
+            """;
+        const string Draft = "https://github.com/example/project/pull/42";
+        var Grants = new Dictionary<string, bool> { [AutomationAuthorization.SuperviseKey] = true, [CodingJobs.Permission] = true };
+        var Publisher = new Mock<ICodingPublisher>(MockBehavior.Strict);
+        Publisher.Setup(Service => Service.PrepareAsync(It.IsAny<CodingSettings>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new string('a', 40));
+        void ConfigureCoding(IServiceCollection Services)
+        {
+            Services.AddSingleton<CodingJobStore>();
+            Services.AddHttpClient<ChatGptOAuth>();
+            Services.AddSingleton<ChatGptConnectionStore>();
+            Services.AddSingleton(Mock.Of<IChatModelCatalog>());
+            Services.AddSingleton<ChatGptModelCatalog>();
+            Services.AddSingleton(Publisher.Object);
+            Services.AddScoped<CodingJobService>();
+        }
+
+        var Actor = Owner with { SessionId = Guid.NewGuid().ToString("D") };
+        var RequestKey = Guid.NewGuid();
+        using var Host = await CreateHostAsync(Grants: Grants, Configure: ConfigureCoding);
+        var Store = Host.Services.GetRequiredService<CodingJobStore>();
+        await Store.InitializeAsync(default);
+        using var Key = RSA.Create(2048);
+        var Settings = new CodingSettings { Enabled = true, Checkpoint = "test-image", ImageId = "sha256:" + new string('b', 64),
+            GitHubAppId = 1, InstallationId = 1 };
+        var Revision = (await Store.SettingsAsync(default)).View.Revision;
+        await Store.SaveSettingsAsync(new(Revision, Settings, "replace", "synthetic-key", "replace", Key.ExportRSAPrivateKeyPem()), default);
+        Guid Run;
+        await using (var Scope = Host.Services.CreateAsyncScope())
+        {
+            var Service = Scope.ServiceProvider.GetRequiredService<AutomationService>();
+            Run = (await Service.StartOneShotAsync(Actor, RequestKey, "Mixed request", Plan, default, Supervised: true)).RunId;
+            (await Service.StartOneShotAsync(Actor, RequestKey, "Mixed request", Plan, default, Supervised: true)).RunId.Should().Be(Run);
+        }
+        var ChildKey = AutomationStepConsumer.CodingRequestKey(Run, 1);
+        CodingJob? Child = null;
+        await Host.StartAsync();
+        try
+        {
+            await UntilAsync(async () => (Child = await Store.FindRequestAsync(Owner.ActorId, ChildKey, default)) is not null);
+            Child!.Supervise.Should().BeTrue();
+            Child.FollowUpEvidence.Should().Contain("Public implementation note");
+            Child.Status.Should().Be("Queued");
+            await using var Scope = Host.Services.CreateAsyncScope();
+            var Detail = await Scope.ServiceProvider.GetRequiredService<AutomationService>().RunDetailAsync(Owner, RequestKey, Run, default);
+            Detail.Reports.Should().BeEmpty();
+        }
+        finally { await Host.StopAsync(); }
+
+        using var Restarted = await CreateHostAsync(Reset: false, Grants: Grants, Configure: ConfigureCoding);
+        await Restarted.StartAsync();
+        try
+        {
+            var Scheduler = new AutomationScheduler(Restarted.Services.GetRequiredService<IServiceScopeFactory>(), TimeProvider.System,
+                NullLogger<AutomationScheduler>.Instance);
+            await Scheduler.SweepAsync(default);
+            (await Store.SaveAsync(Child! with { Status = "PrOpened", PullRequestUrl = Draft }, "Queued", default)).Should().BeTrue();
+            await Scheduler.SweepAsync(default);
+            await WaitAsync(Restarted, Run, "Completed");
+            await using var Scope = Restarted.Services.CreateAsyncScope();
+            var Detail = await Scope.ServiceProvider.GetRequiredService<AutomationService>().RunDetailAsync(Owner, RequestKey, Run, default);
+            Detail.Reports.Should().ContainSingle().Which.Content.Should().Contain("Public implementation note").And.Contain(Draft);
+            Detail.Steps[1].Output.Should().Contain(Child!.Id.ToString());
+            Publisher.Verify(Service => Service.PrepareAsync(It.IsAny<CodingSettings>(), It.IsAny<CancellationToken>()), Times.Once);
         }
         finally { await Restarted.StopAsync(); }
     }
@@ -421,7 +503,7 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
     }
 
     private async Task<IHost> CreateHostAsync(Mock<IScheduledActorPolicy>? Policy = null, FailReportCommit? Failure = null, bool Reset = true, Dictionary<string, bool>? Grants = null,
-        bool JevConfigured = false, ToolChoiceResult? Decision = null)
+        bool JevConfigured = false, ToolChoiceResult? Decision = null, Action<IServiceCollection>? Configure = null)
     {
         var Host = new HostBuilder().ConfigureLogging(L => L.AddConsole().SetMinimumLevel(LogLevel.Warning))
             .ConfigureServices(S =>
@@ -457,6 +539,7 @@ public sealed partial class AutomationTests(PostgresVectorFixture Database) : IC
                     B.AddConsumer<ScratchProbe>().Endpoint(E => E.Name = AutomationPrograms.ScratchQueue);
                     B.AddConsumer<ProgramProbe>().Endpoint(E => E.Name = AutomationPrograms.Queue);
                     B.UsingInMemory((C, B) => B.ConfigureEndpoints(C)); });
+                Configure?.Invoke(S);
             }).Build();
         await using var Scope = Host.Services.CreateAsyncScope();
         var Db = Scope.ServiceProvider.GetRequiredService<AutomationDbContext>();
