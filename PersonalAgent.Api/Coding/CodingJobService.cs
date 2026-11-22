@@ -36,7 +36,7 @@ internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJo
             && !(await Models.GetModelsAsync(Access.ActorId, Token)).Any(Model => Model.Id == Settings.ModelId))
             throw new InvalidOperationException("The selected ChatGPT coding model is unavailable to this owner. Connect your account and select a model in Platform coding settings.");
         var Revision = await PrepareRevisionAsync(Access, Request, Settings, Token);
-        var BaseSha = Revision?.Target.Head ?? await Publisher.PrepareAsync(Settings, Token);
+        var BaseSha = Revision?.Target.RebaseBase ?? Revision?.Target.Head ?? await Publisher.PrepareAsync(Settings, Token);
         var Id = Guid.NewGuid(); var Now = DateTimeOffset.UtcNow;
         var Job = await Store.CreateAsync(new()
         {
@@ -48,6 +48,7 @@ internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJo
             PullRequestUrl = Revision?.Parent.PullRequestUrl,
             RootJobId = Revision is { } FollowUpTarget ? FollowUpTarget.Parent.RootJobId ?? FollowUpTarget.Parent.Id : null,
             FollowUp = Request.FollowUp, FollowUpEvidence = Revision?.Target.Evidence ?? Request.WorkflowEvidence, PullRequestNumber = Revision?.Target.Number,
+            ExpectedBranchHead = Request.FollowUp == "rebase" ? Revision?.Target.Head : null,
             CreatedAt = Now, Deadline = Now.AddMinutes((Settings.MaxMinutes + 5) * CodingJobs.MaxAttempts)
         }, Key, Token);
         return CheckRequest(Job);

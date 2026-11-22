@@ -16,6 +16,7 @@ COPY --from=tools /usr/local/bin/node /usr/local/bin/node
 COPY --from=tools /usr/local/lib/node_modules/@opencode/cli/bin/opencode.exe /usr/local/bin/opencode
 RUN opencode --version
 LABEL io.agentplayground.coding-checkpoint="1"
-COPY PersonalAgent.Worker/Railway/workload.mjs PersonalAgent.Worker/Railway/coding-questions.mjs PersonalAgent.Worker/Railway/coding-checkpoint.mjs PersonalAgent.Worker/Railway/coding-supervision.mjs /opt/coding/
+LABEL io.agentplayground.coding-rebase="1"
+COPY PersonalAgent.Worker/Railway/workload.mjs PersonalAgent.Worker/Railway/coding-questions.mjs PersonalAgent.Worker/Railway/coding-checkpoint.mjs PersonalAgent.Worker/Railway/coding-supervision.mjs PersonalAgent.Worker/Railway/coding-rebase.mjs /opt/coding/
 WORKDIR /work
 ENTRYPOINT ["node", "/opt/coding/workload.mjs"]

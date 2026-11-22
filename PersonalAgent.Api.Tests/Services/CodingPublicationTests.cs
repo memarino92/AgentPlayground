@@ -68,6 +68,11 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
         var Target = await Publisher.PrepareRevisionAsync(Settings, Parent, "review", default);
         Target.Evidence.Should().Contain("Please preserve existing settings.").And.Contain("src/Feature.cs");
         (await Publisher.PrepareRevisionAsync(Settings, Parent, "ci", default)).Evidence.Should().Contain("Expected HTTP 200");
+        Handler.Head = new string('a', 40);
+        var Rebase = await Publisher.PrepareRevisionAsync(Settings, Parent, "rebase", default);
+        Rebase.Head.Should().Be(Handler.Head);
+        Rebase.RebaseBase.Should().Be(new string('b', 40));
+        Handler.Head = Target.Head;
         var Revision = Parent with { Id = Guid.NewGuid(), RootJobId = Id, PullRequestNumber = Target.Number, BaseSha = Target.Head,
             CreatedAt = DateTimeOffset.UtcNow, Artifact = new(Target.Head, [new("src/Feature.cs", "changed")], [new("dotnet test", 0, "Passed")], "Fixes the test.") };
         await FluentActions.Awaiting(() => Publisher.PublishAsync(Revision, default)).Should().ThrowAsync<HttpRequestException>();

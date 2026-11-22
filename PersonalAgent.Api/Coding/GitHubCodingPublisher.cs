@@ -18,7 +18,7 @@ internal interface ICodingPublisher
     Task<string> PublishAsync(CodingJob Job, CancellationToken Token);
 }
 
-internal sealed record CodingRevisionTarget(int Number, string Head, string Evidence);
+internal sealed record CodingRevisionTarget(int Number, string Head, string Evidence, string? RebaseBase = null);
 internal sealed class CodingRevisionConflict(string Message) : InvalidOperationException(Message);
 
 // Git data APIs construct a tree without checking out or executing candidate code in the publisher.
@@ -40,6 +40,7 @@ internal sealed partial class GitHubCodingPublisher(HttpClient Http, CodingJobSt
         var Credential = await CredentialAsync(Job.Settings, Token);
         await VerifyProtectionAsync(Job.Settings, Credential, Token);
         var Root = $"repos/{Job.Settings.Repository}";
+        if (Job.FollowUp == "rebase") return await PublishRebaseAsync(Job, Credential, Token);
         if (Job.RootJobId is null)
         {
             var Existing = await SendAsync(HttpMethod.Get,
@@ -92,14 +93,28 @@ internal sealed partial class GitHubCodingPublisher(HttpClient Http, CodingJobSt
         var A = Job.Artifact;
         if (A is null || A.BaseSha != Job.BaseSha || !Regex.IsMatch(Job.BaseSha, "\\A[a-f0-9]{40}\\z")
             || Job.Branch != $"feat/platform-improvement-{Job.RootJobId ?? Job.Id:N}"
-            || (Job.RootJobId is not null && Job.PullRequestNumber is not > 0) || A.Files is not { Length: > 0 and <= 50 }
+            || (Job.RootJobId is not null && Job.PullRequestNumber is not > 0) || A.Files is not { Length: <= 50 }
+            || (A.Files.Length == 0 && Job.FollowUp != "rebase")
             || A.Checks is not { Length: > 0 and <= 4 } || A.Checks.Any(C => C is null || C.ExitCode != 0)
             || string.IsNullOrWhiteSpace(A.Summary) || A.Summary.Length > 4000
             || Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(A)) > CodingJobs.MaxArtifactBytes)
             throw new ArgumentException("A bounded change with matching base and passing validation is required.");
         if (!CodingArtifactFiles.AreAllowed(A.Files))
             throw new ArgumentException("Artifact contains a forbidden, duplicate or unsupported path/mode.");
+        if (Job.FollowUp == "rebase")
+        {
+            if (Job.RootJobId is null || Job.ExpectedBranchHead is not { } Expected || !CommitSha(Expected)
+                || A.RebaseCommits is not { Length: > 0 and <= 25 } Commits
+                || A.Checks is not [{ Command: "prepare" }, { Command: "code" }, _]
+                || A.Checks[2].Command != $"dotnet test {Job.Settings.TestProject} --filter {Job.Settings.TestFilter}"
+                || Commits.Any(C => C is null || !CommitSha(C.OriginalSha) || C.Files is not { Length: <= 50 } || !CodingArtifactFiles.AreAllowed(C.Files)))
+                throw new ArgumentException("A validated rebase must map each original commit to a bounded change.");
+        }
+        else if (Job.ExpectedBranchHead is not null || A.RebaseCommits is not null)
+            throw new ArgumentException("Only an explicit rebase may replace a pull request head.");
     }
+
+    private static bool CommitSha(string? Sha) => Sha is not null && Regex.IsMatch(Sha, @"\A[a-f0-9]{40}\z");
 
     private static string Marker(CodingJob Job) => $"<!-- coding-job:{Job.Id:D} -->";
     private async Task VerifyProtectionAsync(CodingSettings S, string Credential, CancellationToken Token)

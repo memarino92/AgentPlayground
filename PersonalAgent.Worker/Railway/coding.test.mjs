@@ -5,11 +5,12 @@ import { loadCodingPreparationFiles } from './coding-preparation-files.mjs';
 
 test('coding preparation loads the repository Dockerfile and immutable workload before provisioning', async () => {
   const files = new Map(await loadCodingPreparationFiles());
-  assert.equal(files.size, 5);
+  assert.equal(files.size, 6);
   assert.ok(files.get('Dockerfile.coding-sandbox').includes('@opencode/cli@2.3.2'));
   assert.ok(files.has('PersonalAgent.Worker/Railway/coding-questions.mjs'));
   assert.ok(files.has('PersonalAgent.Worker/Railway/coding-checkpoint.mjs'));
   assert.ok(files.has('PersonalAgent.Worker/Railway/coding-supervision.mjs'));
+  assert.ok(files.has('PersonalAgent.Worker/Railway/coding-rebase.mjs'));
   assert.ok(files.get('PersonalAgent.Worker/Railway/workload.mjs').includes("phase === 'export'"));
 });
 
@@ -67,6 +68,28 @@ test('failed coding retains phase diagnostics even when no diff can be exported'
   assert.equal(result.success, false);
   assert.equal(result.artifact.files.length, 0);
   assert.equal(result.artifact.checks.find(c => c.command === 'code').output, 'Model unavailable');
+});
+
+test('tracked rebases require the new image and a commit series even after full validation', async () => {
+  const expectedBranchHead = 'e'.repeat(40);
+  const execute = (supported, includeSeries) => codingDispatch({ ...request, expectedBranchHead, executionSeconds: 1000 }, {
+    connect: async () => ({
+      networkIsolation: 'ISOLATED', files: { write: async () => {} }, exec: async command => {
+        if (command.startsWith('docker info')) return { exitCode: 0, stdout: JSON.stringify({ MemoryLimit: true, SwapLimit: true,
+          CpuCfsQuota: true, PidsLimit: true, SecurityOptions: ['name=seccomp,profile=builtin'] }) };
+        if (command.includes('io.agentplayground.coding-rebase')) return { exitCode: 0, stdout: supported ? '1' : '' };
+        if (command.includes('io.agentplayground.coding-checkpoint')) return { exitCode: 0, stdout: '1' };
+        if (command.endsWith(' export')) return { exitCode: 0, stdout: JSON.stringify({
+          baseSha: request.baseSha, files: [], summary: 'Original change is already present in the base.', checkpointVersion: 1,
+          rebaseCommits: includeSeries ? [{ originalSha: expectedBranchHead, files: [] }] : undefined
+        }) };
+        return { exitCode: 0, stdout: '' };
+      }
+    })
+  });
+  assert.match((await execute(false, true)).artifact.summary, /checkpoint with tracked rebase support/);
+  assert.equal((await execute(true, false)).success, false);
+  assert.equal((await execute(true, true)).success, true);
 });
 
 test('an empty exported diff succeeds only with authorization and full validation', async () => {

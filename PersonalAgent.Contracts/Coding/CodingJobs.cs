@@ -49,7 +49,11 @@ public sealed record AnswerCodingQuestion(string Answer);
 public sealed record CodingClarification(string Question, string? Answer);
 public sealed record CodingFile(string Path, string? Content, string Mode = "100644");
 public sealed record CodingValidation(string Command, int ExitCode, string Output);
-public sealed record CodingArtifact(string BaseSha, CodingFile[] Files, CodingValidation[] Checks, string Summary);
+public sealed record CodingArtifact(string BaseSha, CodingFile[] Files, CodingValidation[] Checks, string Summary)
+{
+    public CodingRebaseCommit[]? RebaseCommits { get; init; }
+}
+public sealed record CodingRebaseCommit(string OriginalSha, CodingFile[] Files);
 public sealed record CodingJobView(Guid Id, string Instruction, string Repository, string BaseSha, string Branch,
     string Status, DateTimeOffset CreatedAt, DateTimeOffset Deadline, string? SandboxId, string CleanupState,
     int ModelRequests, string? PullRequestUrl, string? Error, CodingArtifact? Artifact)
