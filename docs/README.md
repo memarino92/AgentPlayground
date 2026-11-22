@@ -13,7 +13,6 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Personal assistant vision](plans/personal-assistant-vision.md): continuous chat, household usefulness, mobile direction, evaluated learning and cloud experiments.
 - [Platform improvement jobs](decisions/0038-platform-improvement-jobs.md) and [coding job conversations](decisions/0052-coding-job-conversations.md): chat-to-PR coding, questions and same-PR follow-ups. [Setup and limits](runbooks/platform-coding.md).
 - [Resumable coding and supervised work](decisions/0054-resumable-supervised-work.md) covers sandbox handoffs, parallel research and mixed workflows.
-- [Tracked pull request rebases](decisions/0056-tracked-coding-pr-rebases.md) covers conflict resolution and guarded publication.
 - [Subscription coding models](decisions/0044-subscription-coding-models.md): select your connected ChatGPT account's reviewed models and configure larger request allowances for new coding jobs.
 - [Recoverable chat turns](decisions/0051-recoverable-chat-turns.md) describes refresh, explicit stop and recovery after interrupted tool execution.
 - [Continuous conversation](runbooks/continuous-conversation.md): one default chat, scoped automatic context, fresh starts and persistent interactive cards.
@@ -49,6 +48,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 | --- | --- | --- |
 | [0046: Native Android client](decisions/0046-native-android-conversation.md) | Accepted | Native screens, shared presentation logic and account-bound access |
 | [0038: Platform improvement jobs](decisions/0038-platform-improvement-jobs.md) | Accepted; live acceptance pending | OpenCode/OpenRouter coding jobs propose draft PRs; maintainer controls merging |
+| [0056: Tracked coding PR rebases](decisions/0056-tracked-coding-pr-rebases.md) | Accepted; live acceptance pending | Resolve conflicts on an existing coding PR and publish with an explicit Git lease |
 | [0001: Database configuration](decisions/0001-database-configuration.md) | Accepted, retrospective | Record the encrypted configuration refactor |
 | [0002: Actor and tool authorization](decisions/0002-actor-and-tool-authorization.md) | Accepted, retrospective | Record RBAC and its remaining boundaries |
 | [0003: Local parity and recovery](decisions/0003-local-parity-and-recovery.md) | Accepted; first slice implemented | Use local rehearsal before adding another hosted environment |
