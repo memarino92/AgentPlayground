@@ -20,6 +20,7 @@ internal interface ICodingPublisher
 
 internal sealed record CodingRevisionTarget(int Number, string Head, string Evidence, string? RebaseBase = null);
 internal sealed class CodingRevisionConflict(string Message) : InvalidOperationException(Message);
+internal sealed class CodingArtifactTooLarge() : ArgumentException("The coding artifact exceeds the source size limit.");
 
 // Git data APIs construct a tree without checking out or executing candidate code in the publisher.
 internal sealed partial class GitHubCodingPublisher(HttpClient Http, CodingJobStore Store) : ICodingPublisher
@@ -95,10 +96,11 @@ internal sealed partial class GitHubCodingPublisher(HttpClient Http, CodingJobSt
             || Job.Branch != $"feat/platform-improvement-{Job.RootJobId ?? Job.Id:N}"
             || (Job.RootJobId is not null && Job.PullRequestNumber is not > 0) || A.Files is not { Length: <= 50 }
             || (A.Files.Length == 0 && Job.FollowUp != "rebase")
-            || A.Checks is not { Length: > 0 and <= 4 } || A.Checks.Any(C => C is null || C.ExitCode != 0)
-            || string.IsNullOrWhiteSpace(A.Summary) || A.Summary.Length > 4000
-            || Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(A)) > CodingJobs.MaxArtifactBytes)
+            || A.Checks is not { Length: > 0 and <= 4 } || A.Checks.Any(C => C is null || C.ExitCode != 0 || C.Output is not { Length: <= 20000 })
+            || string.IsNullOrWhiteSpace(A.Summary) || A.Summary.Length > 4000)
             throw new ArgumentException("A bounded change with matching base and passing validation is required.");
+        if (!CodingArtifactSize.Fits(A))
+            throw new CodingArtifactTooLarge();
         if (!CodingArtifactFiles.AreAllowed(A.Files))
             throw new ArgumentException("Artifact contains a forbidden, duplicate or unsupported path/mode.");
         if (Job.FollowUp == "rebase")
