@@ -47,7 +47,7 @@
                                 <MudSwitch T="bool" Value="@GetPermission("Owner", context.Key)" ValueChanged="@(value => SetPermission("Owner", context.Key, value))" Disabled="@(!context.IsAvailable)" />
                             </MudTd>
                             <MudTd DataLabel="Coach">
-                                <MudSwitch T="bool" Value="@GetPermission("Coach", context.Key)" ValueChanged="@(value => SetPermission("Coach", context.Key, value))" Disabled="@(!context.IsAvailable)" />
+                                <MudSwitch T="bool" Value="@GetPermission("Coach", context.Key)" ValueChanged="@(value => SetPermission("Coach", context.Key, value))" Disabled="@(!context.IsAvailable || context.Integration == "Whatbox")" />
                             </MudTd>
                         </RowTemplate>
                     </MudTable>

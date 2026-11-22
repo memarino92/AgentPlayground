@@ -23,7 +23,7 @@ public sealed class DatabaseSettingsStore(IntegrationDatabase Database)
         await using var connection = await Database.OpenAsync(CancellationToken);
         await using var command = new NpgsqlCommand("""
             SELECT scope, key, xmin::text, CASE WHEN is_secret THEN NULL ELSE value END, is_secret, is_active
-            FROM app.configuration_settings ORDER BY scope, key
+            FROM app.configuration_settings WHERE scope <> 'Whatbox' ORDER BY scope, key
             """, connection);
         await using var reader = await command.ExecuteReaderAsync(CancellationToken);
         List<DatabaseSetting> result = [];
@@ -37,7 +37,7 @@ public sealed class DatabaseSettingsStore(IntegrationDatabase Database)
     {
         if (Request.Changes is null || Request.Changes.Count is 0 or > 500
             || Request.Changes.Any(Edit => Edit is null || string.IsNullOrWhiteSpace(Edit.Scope)
-                || string.IsNullOrWhiteSpace(Edit.Key) || string.IsNullOrWhiteSpace(Edit.Version)
+                || Edit.Scope == "Whatbox" || string.IsNullOrWhiteSpace(Edit.Key) || string.IsNullOrWhiteSpace(Edit.Version)
                 || Edit.Value?.Length > 262144)
             || Request.Changes.Select(Edit => (Edit.Scope, Edit.Key)).Distinct().Count() != Request.Changes.Count)
             throw new IntegrationValidationException(new() { ["Changes"] = ["Submit 1–500 distinct existing settings; values must be at most 262144 characters."] });

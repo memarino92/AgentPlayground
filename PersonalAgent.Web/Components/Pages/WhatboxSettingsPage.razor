@@ -1,0 +1,133 @@
+@using System.Net
+@using PersonalAgent.Contracts.Configuration
+@inject PersonalAgent.Web.Services.PersonalAgentClient ApiClient
+@implements IAsyncDisposable
+
+<section class="settings-editor">
+    <h2>Whatbox</h2>
+    <p>Connect the API to your Whatbox slot over SSH for disk usage and rTorrent seeding status.</p>
+    @if (Error is not null) { <p class="settings-editor__error" role="alert">@Error</p> }
+    @if (Notice is not null) { <p class="settings-editor__notice" role="status">@Notice</p> }
+    @if (Settings is null)
+    {
+        @if (Busy) { <p>Loading Whatbox settings…</p> }
+        else { <button type="button" @onclick="RefreshAsync">Retry</button> }
+    }
+    else
+    {
+        <EditForm Model="Settings" OnSubmit="SaveAsync" FormName="whatbox-settings">
+            <fieldset disabled="@Busy">
+                <div class="settings-editor__group">
+                    <div class="settings-editor__field">
+                        <label for="whatbox-host">Whatbox SSH hostname</label>
+                        <input id="whatbox-host" maxlength="253" spellcheck="false" required @bind="Host" />
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="whatbox-user">SSH username</label>
+                        <input id="whatbox-user" maxlength="128" autocomplete="username" required @bind="Username" />
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="whatbox-fingerprint">Verified SHA-256 host fingerprint</label>
+                        <input id="whatbox-fingerprint" maxlength="60" placeholder="SHA256:…" spellcheck="false" required @bind="Fingerprint" />
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="whatbox-files">Remote files directory</label>
+                        <input id="whatbox-files" maxlength="1024" spellcheck="false" required @bind="FilesDirectory" />
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="whatbox-socket">Remote rTorrent socket path</label>
+                        <input id="whatbox-socket" maxlength="1024" spellcheck="false" required @bind="RTorrentSocketPath" />
+                        <span class="settings-editor__hint">Use absolute paths or start with ~/ for paths in the SSH user's home directory.</span>
+                    </div>
+                    <div class="settings-editor__field">
+                        <label for="whatbox-key">Dedicated deployment private key</label>
+                        <textarea id="whatbox-key" rows="5" maxlength="16384" autocomplete="off" spellcheck="false"
+                                  disabled="@ClearKey" @bind="PrivateKey"></textarea>
+                        <span class="settings-editor__hint">@(Settings.HasPrivateKey ? "A key is saved. Leave blank to keep it." : "Paste the private key for this deployment.")</span>
+                    </div>
+                    @if (Settings.HasPrivateKey)
+                    {
+                        <label><input type="checkbox" @bind="ClearKey" /> Remove saved key</label>
+                    }
+                    <label class="settings-editor__toggle"><input type="checkbox" @bind="Enabled" disabled="@ClearKey" /> Enable Whatbox tools</label>
+                    <p>Grant the two Whatbox permissions to Owner under Integrations and coach access.</p>
+                </div>
+                <div class="settings-editor__footer">
+                    <button type="submit">Save settings</button>
+                    <button type="button" disabled="@(!Settings.HasPrivateKey)" @onclick="TestAsync">Test connection</button>
+                    <button type="button" @onclick="RefreshAsync">Refresh</button>
+                </div>
+                <p class="settings-editor__hint">Test connection uses the saved settings, including when the tools are disabled.</p>
+            </fieldset>
+        </EditForm>
+    }
+</section>
+
+@code {
+    private readonly CancellationTokenSource Lifetime = new();
+    private WhatboxSettingsResponse? Settings;
+    private string Host = "", Username = "", Fingerprint = "", PrivateKey = "";
+    private string FilesDirectory = "", RTorrentSocketPath = "";
+    private string? Error, Notice;
+    private bool Enabled, ClearKey, Busy;
+
+    protected override Task OnInitializedAsync() => RefreshAsync();
+
+    private Task RefreshAsync() => RunAsync(async () => Load(await ApiClient.GetWhatboxSettingsAsync(Lifetime.Token)));
+
+    private Task SaveAsync() => RunAsync(async () =>
+    {
+        var key = ClearKey ? "" : string.IsNullOrWhiteSpace(PrivateKey) ? null : PrivateKey;
+        Load(await ApiClient.SaveWhatboxSettingsAsync(
+            new(Settings!.Version, Host, Username, Fingerprint, Enabled && !ClearKey, key, FilesDirectory, RTorrentSocketPath), Lifetime.Token));
+        Notice = "Saved. Changes apply to the next Whatbox operation.";
+    });
+
+    private Task TestAsync() => RunAsync(async () =>
+    {
+        var result = await ApiClient.TestWhatboxConnectionAsync(Lifetime.Token);
+        if (result.Connected) Notice = result.Message;
+        else Error = result.Message;
+    });
+
+    private void Load(WhatboxSettingsResponse Value)
+    {
+        Settings = Value;
+        Host = Value.Host;
+        Username = Value.Username;
+        Fingerprint = Value.HostKeySha256;
+        FilesDirectory = Value.FilesDirectory;
+        RTorrentSocketPath = Value.RTorrentSocketPath;
+        Enabled = Value.Enabled;
+        PrivateKey = "";
+        ClearKey = false;
+    }
+
+    private async Task RunAsync(Func<Task> Action)
+    {
+        if (Busy) return;
+        Busy = true;
+        Error = Notice = null;
+        try { await Action(); }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested) { }
+        catch (HttpRequestException Exception)
+        {
+            Error = Exception.StatusCode switch
+            {
+                HttpStatusCode.Forbidden => "Deployment administrator access is required.",
+                HttpStatusCode.Conflict => "Settings changed in another session. Refresh and try again.",
+                HttpStatusCode.BadRequest => "Check the hostname, username, fingerprint, remote paths and SSH key. Enabling requires a saved key.",
+                HttpStatusCode.NotFound => "The API deployment does not support Whatbox settings yet.",
+                _ => "Whatbox settings are unavailable. Retry shortly."
+            };
+        }
+        catch (InvalidOperationException) { Error = "The API returned an invalid Whatbox settings response."; }
+        finally { Busy = false; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Lifetime.CancelAsync();
+        Lifetime.Dispose();
+    }
+}

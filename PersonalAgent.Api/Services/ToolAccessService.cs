@@ -2,7 +2,7 @@ using PersonalAgent.Api.Models;
 
 namespace PersonalAgent.Api.Services;
 
-internal sealed class ToolAccessService(IToolAccessStore store, IAgentToolRegistry registry)
+internal sealed class ToolAccessService(IToolAccessStore store, IAgentToolRegistry registry, WhatboxService? Whatbox = null)
 {
     public IReadOnlyList<AgentToolDescriptor> GetTools() =>
         registry.GetRegistrations().Select(Registration => Registration.Descriptor).ToArray();
@@ -13,14 +13,18 @@ internal sealed class ToolAccessService(IToolAccessStore store, IAgentToolRegist
         var descriptor = GetTools().FirstOrDefault(tool => tool.Key == toolKey);
         if (descriptor is null || !descriptor.IsAvailable) return false;
         var overrides = await store.GetRolePermissionsAsync(role, cancellationToken);
-        return overrides.TryGetValue(toolKey, out var enabled)
+        var granted = overrides.TryGetValue(toolKey, out var enabled)
             ? enabled
             : role == AgentRoles.Owner ? descriptor.OwnerDefault : descriptor.CoachDefault;
+        if (!granted || !IsWhatbox(toolKey)) return granted;
+        return role == AgentRoles.Owner && Whatbox is not null && await Whatbox.IsEnabledAsync(cancellationToken);
     }
 
     public async Task<ToolAccessCatalog> GetCatalogAsync(CancellationToken cancellationToken = default)
     {
         var tools = GetTools();
+        var whatboxAvailable = Whatbox is not null && await Whatbox.IsEnabledAsync(cancellationToken);
+        tools = tools.Select(Tool => IsWhatbox(Tool.Key) ? Tool with { IsAvailable = whatboxAvailable } : Tool).ToArray();
         var permissions = new List<ToolRolePermission>();
         foreach (var role in AgentRoles.Defined)
         {
@@ -28,7 +32,7 @@ internal sealed class ToolAccessService(IToolAccessStore store, IAgentToolRegist
             permissions.AddRange(tools.Select(tool => new ToolRolePermission(
                 role,
                 tool.Key,
-                overrides.TryGetValue(tool.Key, out var enabled)
+                IsWhatbox(tool.Key) && role != AgentRoles.Owner ? false : overrides.TryGetValue(tool.Key, out var enabled)
                     ? enabled
                     : role == AgentRoles.Owner ? tool.OwnerDefault : tool.CoachDefault)));
         }
@@ -42,4 +46,6 @@ internal sealed class ToolAccessService(IToolAccessStore store, IAgentToolRegist
             throw new InvalidOperationException("The tool access update contains an unknown role or tool.");
         await store.SavePermissionsAsync(request.Permissions, request.UpdatedBy, cancellationToken);
     }
+
+    private static bool IsWhatbox(string Key) => Key is AgentToolKeys.ReadWhatboxDiskUsage or AgentToolKeys.ReadWhatboxSeedingStatus;
 }

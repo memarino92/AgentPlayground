@@ -21,6 +21,8 @@ internal static class AgentToolKeys
 {
     public const string ReadRailwayLogs = "Local:read_railway_logs";
     public const string ResearchSwarm = "Local:research_swarm";
+    public const string ReadWhatboxDiskUsage = "Local:read_whatbox_disk_usage";
+    public const string ReadWhatboxSeedingStatus = "Local:read_whatbox_seeding_status";
     public const string PublishMobileNotification = "Local:publish_mobile_notification";
     public const string SyncWorkJournal = "Local:sync_work_journal";
     public const string SearchWorkJournal = "Local:search_work_journal";

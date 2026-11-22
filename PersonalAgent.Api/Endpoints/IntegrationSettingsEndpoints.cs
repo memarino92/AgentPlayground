@@ -42,6 +42,15 @@ internal static class IntegrationSettingsEndpoints
         settings.MapPut("/backup", (SaveBackupSettingsRequest Request, [Microsoft.AspNetCore.Mvc.FromServices] BackupSettingsStore Store, CancellationToken CancellationToken) =>
             ExecuteAsync(async () => { await Store.SaveAsync(Request, CancellationToken); return TypedResults.NoContent(); }));
 
+        var whatbox = settings.MapGroup("/whatbox");
+        whatbox.MapGet("", ([Microsoft.AspNetCore.Mvc.FromServices] WhatboxService Service, CancellationToken Token) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Service.GetAsync(Token))));
+        whatbox.MapPut("", (PersonalAgent.Contracts.Configuration.SaveWhatboxSettingsRequest Request,
+            [Microsoft.AspNetCore.Mvc.FromServices] WhatboxService Service, CancellationToken Token) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Service.SaveAsync(Request, Token))));
+        whatbox.MapPost("/test", ([Microsoft.AspNetCore.Mvc.FromServices] WhatboxService Service, CancellationToken Token) =>
+            ExecuteAsync(async () => TypedResults.Ok(await Service.TestAsync(Token))));
+
         var otel = Api.MapGroup("/admin/integrations/otel")
             .AddEndpointFilter(new SignedActorFilter(Security, ownerOnly: true))
             .AddEndpointFilter(new IntegrationAdministratorFilter(Configuration));
