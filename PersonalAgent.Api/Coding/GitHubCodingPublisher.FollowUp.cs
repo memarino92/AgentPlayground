@@ -21,10 +21,22 @@ internal sealed partial class GitHubCodingPublisher
         var Pr = await ReadRevisionPrAsync(Settings, Parent.Branch, Parent.RootJobId ?? Parent.Id, Number, Credential, Token);
         var Head = Pr.GetProperty("head").GetProperty("sha").GetString()!;
         if (!Regex.IsMatch(Head, @"\A[a-f0-9]{40}\z")) throw new CodingRevisionConflict("The pull request head is invalid.");
-        var Evidence = FollowUp == "review"
-            ? await ReviewEvidenceAsync(Root, Number, Credential, Token)
+        if (FollowUp == "rebase")
+        {
+            var Base = await ReadBaseShaAsync(Settings, Credential, Token);
+            if (Base == Head) throw new CodingRevisionConflict("The tracked branch already matches its base.");
+            return new(Number, Head, "", Base);
+        }
+        var Evidence = FollowUp == "review" ? await ReviewEvidenceAsync(Root, Number, Credential, Token)
             : await CheckEvidenceAsync(Root, Head, Token);
         return new(Number, Head, Evidence.Length > 12_000 ? Evidence[..12_000] : Evidence);
+    }
+
+    private async Task<string> ReadBaseShaAsync(CodingSettings Settings, string Credential, CancellationToken Token)
+    {
+        var Ref = await SendAsync(HttpMethod.Get, $"repos/{Settings.Repository}/git/ref/heads/{Settings.BaseBranch}", Credential, null, Token);
+        var Sha = Ref.GetProperty("object").GetProperty("sha").GetString();
+        return CommitSha(Sha) ? Sha! : throw new CodingRevisionConflict("GitHub returned an invalid base commit.");
     }
 
     private async Task<string> ReviewEvidenceAsync(string Root, int Number, string Credential, CancellationToken Token)

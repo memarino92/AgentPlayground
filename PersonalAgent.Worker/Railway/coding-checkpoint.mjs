@@ -16,8 +16,21 @@ export function validateCodingArtifact(artifact, baseSha) {
   if (!artifact || artifact.baseSha !== baseSha || !Array.isArray(artifact.files) || artifact.files.length > 50
     || typeof artifact.summary !== 'string' || artifact.summary.length > 4000
     || Buffer.byteLength(JSON.stringify(artifact)) > maxArtifactBytes) throw new Error('Invalid coding checkpoint artifact.');
+  validateFiles(artifact.files);
+  if (artifact.rebaseCommits != null) {
+    if (!Array.isArray(artifact.rebaseCommits) || !artifact.rebaseCommits.length || artifact.rebaseCommits.length > 25)
+      throw new Error('Invalid rebased commit series.');
+    for (const commit of artifact.rebaseCommits) {
+      if (!commit || !/^[a-f0-9]{40}$/.test(commit.originalSha) || !Array.isArray(commit.files) || commit.files.length > 50)
+        throw new Error('Invalid rebased commit.');
+      validateFiles(commit.files);
+    }
+  }
+}
+
+function validateFiles(files) {
   const seen = new Set();
-  for (const file of artifact.files) {
+  for (const file of files) {
     if (!file || !codingPath(file.path) || seen.has(file.path.toLowerCase())
       || !['100644', '100755'].includes(file.mode)
       || (file.content !== null && (typeof file.content !== 'string' || /[\0\ufffd]/.test(file.content))))

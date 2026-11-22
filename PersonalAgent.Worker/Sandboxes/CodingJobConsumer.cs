@@ -55,6 +55,7 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
                 operation = "coding-execute", token = Railway.Token, environmentId = Railway.Settings.EnvironmentId,
                 id = Job.SandboxId, imageId = Job.Settings.ImageId, repository = Job.Settings.Repository,
                 baseSha = Job.BaseSha, instruction = Job.Instruction, minutes = Job.Settings.MaxMinutes,
+                expectedBranchHead = Job.ExpectedBranchHead,
                 executionSeconds = Math.Clamp((int)((Job.AttemptDeadline ?? Job.Deadline) - DateTimeOffset.UtcNow).TotalSeconds - 75,
                     1, Job.Settings.MaxMinutes * 60),
                 supervise = Job.Supervise, resumePhase = Job.ResumePhase, resumeArtifact = JsonSerializer.SerializeToElement(ResumeArtifact(Job), Json),
@@ -88,14 +89,15 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
             var VerifiedEmpty = Artifact.BaseSha == Job.BaseSha && Artifact.Files is { Length: 0 }
                 && Artifact.Checks is { Length: 3 } && Artifact.Checks.All(Check => Check.ExitCode == 0);
             var Success = Result.GetProperty("success").GetBoolean()
-                && (Artifact.Files.Length > 0 || (Job.AllowNoChanges && VerifiedEmpty));
-            var Status = !Success ? "Failed" : VerifiedEmpty ? CodingJobs.CompletedNoChanges : "ReadyToPublish";
+                && (Artifact.Files.Length > 0 || (Job.AllowNoChanges && VerifiedEmpty)
+                    || (Job.ExpectedBranchHead is not null && Artifact.RebaseCommits is { Length: > 0 }));
+            var Status = !Success ? "Failed" : VerifiedEmpty && Job.ExpectedBranchHead is null ? CodingJobs.CompletedNoChanges : "ReadyToPublish";
             Job = Job with
             {
                 Artifact = Artifact.Files is { Length: 0 } && !Success ? Job.Artifact ?? Artifact : Artifact,
                 ResumePhase = null,
                 Status = Status,
-                Error = Success ? null : VerifiedEmpty && !Job.AllowNoChanges ? "No file changes were found. This job expected a diff."
+                Error = Success ? null : VerifiedEmpty && !Job.AllowNoChanges && Job.ExpectedBranchHead is null ? "No file changes were found. This job expected a diff."
                     : "Coding or validation failed. Inspect retained checks."
             };
             phase = "saving validation results";
@@ -154,6 +156,8 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
 
     private static bool CanSaveCheckpoint(CodingJob Job, CodingArtifact Artifact, string ResumePhase) =>
         Artifact.BaseSha == Job.BaseSha && CodingArtifactFiles.AreAllowed(Artifact.Files)
+        && (Job.ExpectedBranchHead is null ? Artifact.RebaseCommits is null
+            : Artifact.RebaseCommits is { Length: > 0 and <= 25 } Commits && Commits.All(C => CodingArtifactFiles.AreAllowed(C.Files)))
         && Artifact.Summary is { Length: <= 4000 } && Artifact.Checks is { Length: <= 4 }
         && Artifact.Checks.All(Check => Check is not null && Check.Output is { Length: <= 20000 })
         && (ResumePhase == "code" || Artifact.Checks.Count(Check => Check is { Command: "code", ExitCode: 0 }) == 1)

@@ -32,15 +32,22 @@ export async function codingDispatch(request, api, now = () => performance.now()
     return { success: false, artifact: { baseSha: request.baseSha, files: [], summary,
       checks: [{ command: 'prepare', exitCode: 1, output: summary }] } };
   }
+  if (request.expectedBranchHead) {
+    const inspected = await sandbox.exec(`docker image inspect --format '{{index .Config.Labels "io.agentplayground.coding-rebase"}}' ${request.imageId}`, { timeoutSec: 10 });
+    if (inspected.exitCode !== 0 || inspected.stdout.trim() !== '1')
+      return { success: false, artifact: { baseSha: request.baseSha, files: [], summary: 'Prepare and select a coding checkpoint with tracked rebase support.',
+        checks: [{ command: 'prepare', exitCode: 1, output: 'This checkpoint does not support tracked rebases.' }] } };
+  }
   const cutoff = started + (request.executionSeconds ?? request.minutes * 60 - 75) * 1000;
   const priorCode = request.resumePhase === 'validate' ? request.resumeArtifact.checks.find(check => check.command === 'code') : null;
   const resumeArtifact = request.resumeArtifact && { baseSha: request.resumeArtifact.baseSha,
-    files: request.resumeArtifact.files, summary: request.resumeArtifact.summary };
+    files: request.resumeArtifact.files, summary: request.resumeArtifact.summary, rebaseCommits: request.resumeArtifact.rebaseCommits };
   // Inputs are JSON file data, never shell fragments. Only validated image/duration enter commands.
   await sandbox.files.write('/coding/request.json', JSON.stringify({ repository: request.repository, baseSha: request.baseSha,
     instruction: request.instruction, gateway: request.gateway, capability: request.capability,
     minutes: request.minutes, canAsk: request.canAsk, followUpEvidence: request.followUpEvidence,
     resumeArtifact, resumePhase: request.resumePhase, ownerClarifications: request.ownerClarifications, supervise: request.supervise,
+    expectedBranchHead: request.expectedBranchHead,
     testProject: request.testProject, testFilter: request.testFilter, model: request.model, responses: request.responses }));
   const readable = await sandbox.exec('chmod 0444 /coding/request.json', { timeoutSec: 15 });
   if (readable.exitCode !== 0) throw new Error('Request mount unavailable');
@@ -91,10 +98,12 @@ export async function codingDispatch(request, api, now = () => performance.now()
     const { checkpointVersion: exportedVersion, hasProgress: progress, progressSummary, ...snapshot } = JSON.parse(exported.stdout);
     artifact = snapshot;
     if (artifact.baseSha !== request.baseSha || !Array.isArray(artifact.files)) throw new Error('Invalid artifact');
+    if (Boolean(artifact.rebaseCommits) !== Boolean(request.expectedBranchHead)) throw new Error('Artifact does not match the rebase request.');
     if (checkpointCapable) {
       if (exportedVersion !== checkpointVersion) throw new Error('Invalid checkpoint version');
       validateCodingArtifact(artifact, request.baseSha);
-      hasProgress = progress === true || artifact.files.length > 0 || (resumePhase === 'validate' && request.allowNoChanges === true);
+      hasProgress = progress === true || artifact.files.length > 0 || Boolean(artifact.rebaseCommits)
+        || (resumePhase === 'validate' && request.allowNoChanges === true);
       if (resumePhase === 'code' && typeof progressSummary === 'string' && progressSummary.trim() && progressSummary.length <= 4000)
         artifact.summary = progressSummary;
     }
@@ -105,7 +114,7 @@ export async function codingDispatch(request, api, now = () => performance.now()
   }
   artifact.checks = checks;
   const success = checks.length === 3 && checks.every(c => c.exitCode === 0)
-    && (artifact.files.length > 0 || request.allowNoChanges === true);
+    && (artifact.files.length > 0 || request.allowNoChanges === true || Boolean(artifact.rebaseCommits));
   return { success, artifact, ...(resumePhase && { resumePhase, hasProgress }) };
 }
 
@@ -131,6 +140,7 @@ export function validateRequest(r) {
     || typeof r.instruction !== 'string' || r.instruction.length > 8000
     || (r.canAsk !== undefined && typeof r.canAsk !== 'boolean')
     || (r.allowNoChanges !== undefined && typeof r.allowNoChanges !== 'boolean')
+    || (r.expectedBranchHead != null && (!/^[a-f0-9]{40}$/.test(r.expectedBranchHead) || r.allowNoChanges === true))
     || (r.executionSeconds !== undefined && (!Number.isInteger(r.executionSeconds) || r.executionSeconds < 1
       || r.executionSeconds > r.minutes * 60))
     || (r.supervise !== undefined && typeof r.supervise !== 'boolean')
@@ -145,6 +155,8 @@ export function validateRequest(r) {
   if (r.resumePhase == null && r.resumeArtifact == null) return;
   if (!['code', 'validate'].includes(r.resumePhase)) throw new Error('Invalid coding resume phase.');
   validateCodingArtifact(r.resumeArtifact, r.baseSha);
+  if (Boolean(r.resumeArtifact.rebaseCommits) !== Boolean(r.expectedBranchHead))
+    throw new Error('Checkpoint does not match the rebase request.');
   if (r.resumePhase === 'validate') {
     const checks = r.resumeArtifact.checks;
     const code = Array.isArray(checks) && checks.filter(check => check?.command === 'code');

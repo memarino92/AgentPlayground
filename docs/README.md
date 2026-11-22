@@ -11,6 +11,7 @@ This repository is becoming an **agentic digital garden**: a personal applicatio
 - [Personal assistant vision](plans/personal-assistant-vision.md): continuous chat, household usefulness, mobile direction, evaluated learning and cloud experiments.
 - [Platform improvement jobs](decisions/0038-platform-improvement-jobs.md) and [coding job conversations](decisions/0052-coding-job-conversations.md): chat-to-PR coding, questions and same-PR follow-ups. [Setup and limits](runbooks/platform-coding.md).
 - [Resumable coding and supervised work](decisions/0054-resumable-supervised-work.md) covers sandbox handoffs, parallel research and mixed workflows.
+- [Tracked pull request rebases](decisions/0056-tracked-coding-pr-rebases.md) covers conflict resolution and guarded publication.
 - [Subscription coding models](decisions/0044-subscription-coding-models.md): select your connected ChatGPT account's reviewed models and configure larger request allowances for new coding jobs.
 - [Recoverable chat turns](decisions/0051-recoverable-chat-turns.md) describes refresh, explicit stop and recovery after interrupted tool execution.
 - [Continuous conversation](runbooks/continuous-conversation.md): one default chat, scoped automatic context, fresh starts and persistent interactive cards.

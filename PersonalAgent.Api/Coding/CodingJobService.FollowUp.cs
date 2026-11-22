@@ -17,7 +17,9 @@ internal sealed partial class CodingJobService
             if (Request.FollowUp is not null) throw new ArgumentException("A follow-up requires the job ID of the existing pull request.");
             return null;
         }
-        if (Request.FollowUp is not ("ci" or "review")) throw new ArgumentException("Choose ci or review for a pull request follow-up.");
+        if (Request.FollowUp is not ("ci" or "review" or "rebase")) throw new ArgumentException("Choose ci, review or rebase for a pull request follow-up.");
+        if (Request is { FollowUp: "rebase", AllowNoChanges: true })
+            throw new ArgumentException("A rebase follow-up must publish its validated branch update.");
         var Parent = await Store.GetAsync(Previous, Token);
         if (Parent is null || Parent.ActorId != Access.ActorId || Parent.Subject != Access.SubjectProfileId)
             throw new KeyNotFoundException("Coding job not found.");

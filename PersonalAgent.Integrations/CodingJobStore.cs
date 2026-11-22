@@ -37,6 +37,7 @@ public sealed record CodingJob
     public Guid? RootJobId { get; init; }
     public Guid? PreviousJobId { get; init; }
     public string? FollowUp { get; init; }
+    public string? ExpectedBranchHead { get; init; }
     public int? PullRequestNumber { get; init; }
     public string? FollowUpEvidence { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
@@ -72,6 +73,7 @@ public sealed partial class CodingJobStore(IntegrationDatabase Database)
                 lease_credential text NOT NULL DEFAULT '', lease_environment text NOT NULL DEFAULT '',
                 UNIQUE(actor, request_key));
             ALTER TABLE app.coding_jobs ADD COLUMN IF NOT EXISTS result_posted boolean NOT NULL DEFAULT false;
+            ALTER TABLE app.coding_jobs ADD COLUMN IF NOT EXISTS rebase_candidate text;
             CREATE TABLE IF NOT EXISTS app.coding_questions(
                 id uuid PRIMARY KEY, job_id uuid NOT NULL REFERENCES app.coding_jobs(id) ON DELETE CASCADE,
                 question text NOT NULL, answer text, posted boolean NOT NULL DEFAULT false);
