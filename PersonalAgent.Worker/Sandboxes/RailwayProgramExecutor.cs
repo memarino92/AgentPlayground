@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PersonalAgent.Contracts.Automations;
+using PersonalAgent.Contracts.Coding;
 using PersonalAgent.Integrations;
 
 namespace PersonalAgent.Worker.Sandboxes;
@@ -42,7 +43,7 @@ public sealed class RailwaySandboxClient : IRailwaySandboxClient
         var Output = ReadAsync(Process.StandardOutput); var Error = ReadAsync(Process.StandardError);
         try
         {
-            await Process.StandardInput.WriteAsync(JsonSerializer.Serialize(Request).AsMemory(), Token);
+            await Process.StandardInput.WriteAsync(CodingArtifactSize.SerializeBridgeRequest(Request).AsMemory(), Token);
             Process.StandardInput.Close();
             await Process.WaitForExitAsync(Token);
             await Task.WhenAll(Output, Error);

@@ -172,6 +172,8 @@ internal sealed class CodingJobCoordinator(CodingJobStore Store, IServiceScopeFa
                 }
                 catch (UnauthorizedAccessException)
                 { await Store.SaveAsync(Job with { Status = "Failed", Error = "Coding permission revoked or runtime disabled. Check the stable branch for any publication already in flight." }, ExpectedStatus, Token); }
+                catch (CodingArtifactTooLarge E)
+                { await Store.SaveAsync(Job with { Status = "Failed", Error = E.Message }, ExpectedStatus, Token); }
                 catch (ArgumentException)
                 { await Store.SaveAsync(Job with { Status = "Failed", Error = "Invalid coding artifact. Inspect diagnostics." }, ExpectedStatus, Token); }
                 catch (CodingRevisionConflict E)

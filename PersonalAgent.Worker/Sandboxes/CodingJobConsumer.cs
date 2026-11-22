@@ -161,7 +161,7 @@ internal sealed class CodingJobConsumer(CodingJobStore Store, AutomationRuntimeS
         && Artifact.Summary is { Length: <= 4000 } && Artifact.Checks is { Length: <= 4 }
         && Artifact.Checks.All(Check => Check is not null && Check.Output is { Length: <= 20000 })
         && (ResumePhase == "code" || Artifact.Checks.Count(Check => Check is { Command: "code", ExitCode: 0 }) == 1)
-        && JsonSerializer.SerializeToUtf8Bytes(Artifact).Length <= CodingJobs.MaxArtifactBytes;
+        && CodingArtifactSize.Fits(Artifact);
 }
 
 internal sealed class CodingSandboxReconciler(CodingJobStore Store, IRailwaySandboxClient Client, ILogger<CodingSandboxReconciler> Logger) : BackgroundService

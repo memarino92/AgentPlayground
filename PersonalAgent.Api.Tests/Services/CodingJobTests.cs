@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using FluentAssertions;
@@ -70,6 +71,37 @@ public sealed class CodingJobTests
         FluentActions.Invoking(() => GitHubCodingPublisher.ValidateArtifact(Good with { Artifact = Good.Artifact! with { BaseSha = new('b', 40) } })).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => GitHubCodingPublisher.ValidateArtifact(Good with { Artifact = Good.Artifact! with { Checks = [new("test", 1, "failed")] } })).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => GitHubCodingPublisher.ValidateArtifact(Job(new("src/link", "target", "120000")))).Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void PublisherUsesTheCompactSourceBudgetAndKeepsDiagnosticLimits()
+    {
+        var File = new CodingFile("src/Markup.cs", new string('"', 155_000));
+        var Initial = Job(File);
+        var Result = Initial with
+        {
+            RootJobId = Initial.Id,
+            PullRequestNumber = 113,
+            FollowUp = "rebase",
+            ExpectedBranchHead = new string('b', 40),
+            Artifact = Initial.Artifact! with
+            {
+                RebaseCommits = [new(new string('b', 40), [File])],
+                Checks = [new("prepare", 0, ""), new("code", 0, ""),
+                    new($"dotnet test {Initial.Settings.TestProject} --filter {Initial.Settings.TestFilter}", 0, new string('x', 19000))]
+            }
+        };
+        JsonSerializer.SerializeToUtf8Bytes(Result.Artifact).Length.Should().BeGreaterThan(CodingJobs.MaxArtifactBytes);
+        var Resume = JsonSerializer.SerializeToElement(Result.Artifact with { Checks = [] });
+        CodingArtifactSize.SerializeBridgeRequest(new { resumeArtifact = Resume }).Length.Should().BeLessThan(CodingJobs.MaxArtifactBytes);
+        GitHubCodingPublisher.ValidateArtifact(Result);
+        var Diagnostic = Result.Artifact.Checks[2] with { Output = new string('x', 20001) };
+        FluentActions.Invoking(() => GitHubCodingPublisher.ValidateArtifact(Result with
+            { Artifact = Result.Artifact with { Checks = [Result.Artifact.Checks[0], Result.Artifact.Checks[1], Diagnostic] } }))
+            .Should().Throw<ArgumentException>();
+        var Oversize = Result.Artifact with { Files = [File with { Content = new string('x', CodingJobs.MaxArtifactBytes) }] };
+        FluentActions.Invoking(() => GitHubCodingPublisher.ValidateArtifact(Result with { Artifact = Oversize }))
+            .Should().Throw<ArgumentException>().WithMessage("*source size limit*");
     }
 
     [Fact]
