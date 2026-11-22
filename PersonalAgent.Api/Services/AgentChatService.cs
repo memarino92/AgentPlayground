@@ -201,6 +201,7 @@ internal partial class AgentChatService
             var tools = await _toolBinder.BindAsync(access with
             {
                 SessionId = sessionId,
+                ChatModelId = sessionState.ModelId,
                 ScratchOutput = OnDelta,
                 ToolActivity = OnDelta is null ? null : ReportAsync
             }, cancellationToken);
@@ -368,6 +369,11 @@ internal partial class AgentChatService
             instructions.AppendLine("Use available Tavily web tools for current events, external facts, and documentation lookups. When you use web tools, include source URLs in your response.");
         else
             instructions.AppendLine("Web search is currently unavailable; answer without web tools and acknowledge limits for current events when needed.");
+
+        if (tools.Any(Tool => Tool.Function.Name == "research_swarm"))
+            instructions.AppendLine("For quick public research with independent questions, use research_swarm and synthesize its source-backed findings. Share only public search terms with the research workers.");
+        if (tools.Any(Tool => Tool.Function.Name == "run_supervised_workflow"))
+            instructions.AppendLine("When the user asks for one outcome that combines coding with research or other supported work, plan the dependencies and submit one supervised workflow. Include a report that combines its step results. Track the parent run through inspect_automation.");
 
         if (PresentCards) instructions.AppendLine("""
             When an interactive component helps, append up to three fenced garden-card JSON blocks after your normal answer.

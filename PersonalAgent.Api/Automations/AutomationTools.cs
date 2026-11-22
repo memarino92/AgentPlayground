@@ -85,6 +85,16 @@ internal sealed class AutomationTools(IServiceScopeFactory Scopes, PersonalAgent
                 dashboard = $"/automations?automationId={Automation.Id}&runId={RunId}&profileId={Uri.EscapeDataString(Automation.SubjectProfileId)}",
                 message = "Queued. Inspect the run for output, diagnostics and sandbox cleanup." };
         });
+    public Task<string> RunSupervisedWorkflowAsync(AgentAccessContext Access, string Name, string RecipeJson, string RequestKey, CancellationToken Token) =>
+        InvokeAsync(async Service =>
+        {
+            if (!Guid.TryParse(RequestKey, out var Id)) throw new ArgumentException("requestKey must be a stable UUID.");
+            var (Automation, RunId) = await Service.StartOneShotAsync(Access, Id, Name, RecipeJson, Token, Supervised: true);
+            return new { automationId = Automation.Id, runId = RunId, status = "Queued",
+                dashboard = $"/automations?automationId={Automation.Id}&runId={RunId}&profileId={Uri.EscapeDataString(Automation.SubjectProfileId)}",
+                message = "Queued. Inspect the workflow for research findings, coding-job status and reports." };
+        });
+
     public Task<string> SaveAsync(AgentAccessContext Access, string Name, string Source, Guid? AutomationId, int? ExpectedVersion,
         string? ExecuteAt, string? RepeatEvery, CancellationToken Token) => InvokeAsync(async S =>
         {

@@ -6,6 +6,7 @@ using Microsoft.Extensions.AI;
 using PersonalAgent.Api.Models;
 using PersonalAgent.Api.Services;
 using PersonalAgent.Contracts.Automations;
+using PersonalAgent.Contracts.Coding;
 
 namespace PersonalAgent.Api.Automations;
 
@@ -38,32 +39,52 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
             new { action = "tool", arguments = new { tool = "registered key", inputs = new { } }, tools = Registry.GetRegistrations()
                 .Where(T => AllowedTools.Contains(T.Descriptor.Key)).Select(T => new { key = T.Descriptor.Key, schema = T.CreateFunction(Services, Access).JsonSchema }).ToArray() }
         },
+        supervisedActions = new
+        {
+            use = "Run these actions in an explicitly requested one-time supervised workflow.",
+            actions = new object[]
+            {
+                new { action = "public_research", arguments = new { questions = new[] { "First independent question", "Second independent question" } } },
+                new { action = "coding_job", arguments = new { instruction = "Literal repository change", evidenceSteps = new[] { "earlier_research_id" } },
+                    requirements = "At most one coding job. Evidence is optional and can reference earlier public research or literal text steps." },
+                new { action = "synthesize", arguments = new { question = "Summarize what each branch achieved and what remains.", sourceSteps = new[] { "earlier_step_id" } } }
+            }
+        },
         limits = new { steps = 20, sourceCharacters = 32768, outputCharacters = 65536 }
     };
 
-    public AutomationRecipe Parse(string Source)
+    public AutomationRecipe Parse(string Source, bool Supervised = false)
     {
         if (string.IsNullOrWhiteSpace(Source) || Source.Length > 32768) throw new ArgumentException("Recipe source must contain 1–32768 characters.");
         AutomationRecipe Recipe;
         try { Recipe = JsonSerializer.Deserialize<AutomationRecipe>(Source, Json) ?? throw new JsonException(); }
         catch (JsonException) { throw new ArgumentException("Recipe must match the catalog JSON schema."); }
+        Recipe = Recipe with { Supervised = Supervised || Recipe.Supervised };
+        if (!Recipe.Supervised && Recipe.SupervisedModelId is not null) throw new ArgumentException("Model selection applies only to supervised workflows.");
         if (Recipe.Steps is null || Recipe.Steps.Count is < 1 or > 20) throw new ArgumentException("A recipe needs 1–20 steps.");
-        var Prior = new HashSet<string>();
+        var Prior = new Dictionary<string, AutomationStep>();
         foreach (var Step in Recipe.Steps)
         {
-            if (Step is null || Step.Id is null || !IdPattern.IsMatch(Step.Id) || Prior.Contains(Step.Id))
+            if (Step is null || Step.Id is null || !IdPattern.IsMatch(Step.Id) || Prior.ContainsKey(Step.Id))
                 throw new ArgumentException("Step IDs must be unique lowercase identifiers starting with a letter.");
             if (Step.Arguments.ValueKind != JsonValueKind.Object) throw new ArgumentException("Step arguments must be an object.");
             string[] Keys = Step.Action switch
             {
                 "text" => ["text"], "save_report" => ["title", "content"], "notify" => ["title", "body"], "tool" => ["tool", "inputs"], "csharp" or "shell" or "dockerfile" or "python" => ["source", "input"],
+                "coding_job" when Recipe.Supervised => ["instruction"],
+                "public_research" when Recipe.Supervised => ["questions"],
+                "synthesize" when Recipe.Supervised => ["question", "sourceSteps"],
                 _ => throw new ArgumentException("Unknown action. Discover supported automation actions first.")
             };
             if (Step.Arguments.EnumerateObject().Select(P => P.Name).Distinct().Count() != Step.Arguments.EnumerateObject().Count()
-                || Step.Arguments.EnumerateObject().Any(P => !Keys.Contains(P.Name) && !(AutomationPrograms.IsProgram(Step.Action) && P.Name is "inputFiles" or "packages" or "packageLock" or "tools") && !(Step.Action == "python" && P.Name == "imageId")) || Keys.Any(K => !Step.Arguments.TryGetProperty(K, out _)))
+                || Step.Arguments.EnumerateObject().Any(P => !Keys.Contains(P.Name) && !OptionalArgument(Step.Action, P.Name))
+                || Keys.Any(K => !Step.Arguments.TryGetProperty(K, out _)))
                 throw new ArgumentException($"Invalid arguments for {Step.Action}.");
-            foreach (var Key in Keys.Where(K => K != "inputs"))
+            foreach (var Key in Keys.Where(K => K is not ("inputs" or "questions" or "sourceSteps")))
                 if (Step.Arguments.GetProperty(Key).ValueKind != JsonValueKind.String) throw new ArgumentException($"{Key} must be a string.");
+            if (Step.Action == "coding_job") ValidateCodingStep(Step.Arguments, Prior);
+            if (Step.Action == "public_research") ResearchQuestions(Step.Arguments);
+            if (Step.Action == "synthesize") ValidateSynthesis(Step.Arguments, Prior);
             if (Step.Action == "python" && Step.Arguments.TryGetProperty("imageId", out var Image)
                 && (Image.ValueKind != JsonValueKind.String || !Regex.IsMatch(Image.GetString()!, @"\Asha256:[0-9a-f]{64}\z")))
                 throw new ArgumentException("Python imageId must be an immutable image digest.");
@@ -81,17 +102,69 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
                 ValidateProgram(Step.Arguments);
                 SandboxInputFile.Validate(InputFiles(Step.Arguments));
             }
-            if (Step.When is { } Condition && (!Prior.Contains(Condition.Step) || Condition.Expected is null))
+            if (Step.When is { } Condition && (Condition.Step is null || !Prior.ContainsKey(Condition.Step) || Condition.Expected is null))
                 throw new ArgumentException("Conditions must compare an earlier step output.");
-            foreach (Match Match in Placeholder.Matches(AutomationPrograms.IsProgram(Step.Action) ? Step.Arguments.GetProperty("input").GetString()! : Step.Arguments.GetRawText()))
+            foreach (Match Match in Placeholder.Matches(TemplateSource(Step)))
             {
                 var Key = Match.Groups[1].Value;
-                if (Key is not ("run.id" or "run.scheduledAt") && !(Key.StartsWith("steps.", StringComparison.Ordinal) && Prior.Contains(Key[6..])))
+                if (Key is not ("run.id" or "run.scheduledAt") && !(Key.StartsWith("steps.", StringComparison.Ordinal) && Prior.ContainsKey(Key[6..])))
                     throw new ArgumentException("Templates may only reference an earlier step or run metadata.");
             }
-            Prior.Add(Step.Id);
+            Prior.Add(Step.Id, Step);
         }
         return Recipe;
+    }
+
+    private static bool OptionalArgument(string Action, string Name) => Action switch
+    {
+        "coding_job" => Name == "evidenceSteps",
+        "python" when Name == "imageId" => true,
+        _ => AutomationPrograms.IsProgram(Action) && Name is "inputFiles" or "packages" or "packageLock" or "tools"
+    };
+
+    private static bool UsesLiteralArguments(string Action) => Action is "coding_job" or "public_research" or "synthesize";
+
+    private static string TemplateSource(AutomationStep Step) => UsesLiteralArguments(Step.Action) ? ""
+        : AutomationPrograms.IsProgram(Step.Action) ? Step.Arguments.GetProperty("input").GetString()! : Step.Arguments.GetRawText();
+
+    private static void ValidateCodingStep(JsonElement Arguments, IReadOnlyDictionary<string, AutomationStep> Prior)
+    {
+        if (Prior.Values.Any(Step => Step.Action == "coding_job")) throw new ArgumentException("A supervised workflow may start one coding job.");
+        var Instruction = Arguments.GetProperty("instruction").GetString();
+        if (string.IsNullOrWhiteSpace(Instruction) || Instruction.Length > 8000)
+            throw new ArgumentException("A literal coding instruction of 1–8000 characters is required.");
+        if (!Arguments.TryGetProperty("evidenceSteps", out var Evidence)) return;
+        if (Evidence.ValueKind != JsonValueKind.Array || Evidence.GetArrayLength() > 8)
+            throw new ArgumentException("Coding evidenceSteps accepts at most eight earlier public research or text step IDs.");
+        var Used = new HashSet<string>();
+        foreach (var Item in Evidence.EnumerateArray())
+            if (Item.ValueKind != JsonValueKind.String || Item.GetString() is not { } Id || !Used.Add(Id)
+                || !Prior.TryGetValue(Id, out var Step) || Step.Action is not ("public_research" or "text")
+                || (Step.Action == "text" && Placeholder.IsMatch(Step.Arguments.GetProperty("text").GetString()!)))
+                throw new ArgumentException("Coding evidenceSteps must reference distinct earlier public research or literal text steps.");
+    }
+
+    internal static string[] ResearchQuestions(JsonElement Arguments)
+    {
+        var Questions = Arguments.GetProperty("questions");
+        if (Questions.ValueKind != JsonValueKind.Array || Questions.EnumerateArray().Any(Q => Q.ValueKind != JsonValueKind.String))
+            throw new ArgumentException("Public research questions must be an array of strings.");
+        var Values = Questions.EnumerateArray().Select(Q => Q.GetString()!).ToArray();
+        if (ResearchSwarm.ValidateQuestions(Values) is { } Error) throw new ArgumentException(Error);
+        return Values;
+    }
+
+    private static void ValidateSynthesis(JsonElement Arguments, IReadOnlyDictionary<string, AutomationStep> Prior)
+    {
+        var Question = Arguments.GetProperty("question").GetString();
+        var Sources = Arguments.GetProperty("sourceSteps");
+        if (string.IsNullOrWhiteSpace(Question) || Question.Length > 1200 || Sources.ValueKind != JsonValueKind.Array
+            || Sources.GetArrayLength() is < 1 or > 8)
+            throw new ArgumentException("Synthesis needs a literal question of 1–1200 characters and 1–8 earlier step IDs.");
+        var Used = new HashSet<string>();
+        foreach (var Item in Sources.EnumerateArray())
+            if (Item.ValueKind != JsonValueKind.String || Item.GetString() is not { } Id || !Used.Add(Id) || !Prior.ContainsKey(Id))
+                throw new ArgumentException("Synthesis sourceSteps must reference distinct earlier steps.");
     }
 
     public static SandboxInputFile[] InputFiles(JsonElement Arguments)
@@ -103,6 +176,7 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
 
     public static JsonElement Resolve(AutomationStep Step, AutomationRun Run, IReadOnlyList<AutomationStepExecution> Earlier)
     {
+        if (UsesLiteralArguments(Step.Action)) return Step.Arguments;
         string Expand(string Value) => Placeholder.Replace(Value, Match => Match.Groups[1].Value switch
         {
             "run.id" => Run.CorrelationId.ToString(), "run.scheduledAt" => Run.ScheduledAt.ToString("O"),
@@ -129,6 +203,17 @@ internal sealed class AutomationRecipes(IAgentToolRegistry Registry)
             throw new ArgumentException("A scratchpad cell requires a single Python calculation.");
         foreach (var Step in Recipe.Steps)
         {
+            if (Step.Action == "coding_job" && (!Recipe.Supervised || Access.Role != AgentRoles.Owner
+                || !await Permissions.IsAllowedAsync(Access.Role, CodingJobs.Permission, Token)))
+                throw new UnauthorizedAccessException("Current owner access and coding-job permission are required.");
+            if (Step.Action == "public_research")
+            {
+                var Search = ResearchSwarm.FindSearch(Services.GetRequiredService<ITavilyMcpToolProvider>());
+                if (!Recipe.Supervised || Access.Role != AgentRoles.Owner || Search is null
+                    || !await Permissions.IsAllowedAsync(Access.Role, AgentToolKeys.ResearchSwarm, Token)
+                    || !await Permissions.IsAllowedAsync(Access.Role, AgentToolKeys.Tavily(Search.Name), Token))
+                    throw new UnauthorizedAccessException("Public research requires current owner access, research permission and Tavily search.");
+            }
             if (AutomationPrograms.IsProgram(Step.Action) && (Access.Role != AgentRoles.Owner
                 || !await Permissions.IsAllowedAsync(Access.Role, Scratch ? AutomationPrograms.ScratchPermission : AutomationPrograms.PermissionKey, Token)))
                 throw new UnauthorizedAccessException("Sandbox programs require owner access and the administrator-enabled sandbox program permission.");

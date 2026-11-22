@@ -2,8 +2,14 @@ using System.Text.Json;
 
 namespace PersonalAgent.Contracts.Automations;
 
-/// <summary>A versioned, bounded recipe. Execution never calls a chat model.</summary>
-public sealed record AutomationRecipe(IReadOnlyList<AutomationStep> Steps);
+/// <summary>A versioned recipe with registered, bounded actions.</summary>
+public sealed record AutomationRecipe(IReadOnlyList<AutomationStep> Steps)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Supervised { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? SupervisedModelId { get; init; }
+}
 public sealed record AutomationStep(string Id, string Action, JsonElement Arguments, AutomationCondition? When = null);
 public sealed record AutomationCondition(string Step, [property: System.Text.Json.Serialization.JsonPropertyName("equals")] string Expected);
 public sealed record SaveAutomationRequest(string Name, string Source, DateTimeOffset? ExecuteAt = null, string? RepeatEvery = null, int? ExpectedVersion = null);

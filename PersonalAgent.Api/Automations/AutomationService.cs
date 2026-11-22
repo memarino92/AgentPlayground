@@ -16,6 +16,7 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
         Access = await Authorization.RequireAsync(Access, Token);
         if (string.IsNullOrWhiteSpace(Request.Name) || Request.Name.Length > 160) throw new ArgumentException("Name must contain 1–160 characters.");
         var Recipe = Recipes.Parse(Request.Source);
+        if (Recipe.Supervised) throw new ArgumentException("Start a supervised workflow from a live chat as a one-time run.");
         await Recipes.ValidateToolsAsync(Recipe, Services, Access, Permissions, Token);
         TimeSpan? Interval;
         try { Interval = SchedulingTimeParser.ParseRecurrence(Request.RepeatEvery); }
@@ -40,6 +41,7 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
             // Only the originating actor may replace the executable source of a coach-owned automation.
             if (Definition.ActorId != Access.ActorId) throw new UnauthorizedAccessException("Only the author may revise this automation.");
             if (Request.ExpectedVersion != Definition.Version) throw new InvalidOperationException("Version changed. Inspect the current revision before updating.");
+            await RequireReusableAsync(Definition, Token);
             Definition.Version++;
         }
         else
@@ -60,17 +62,34 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
     }
 
     public async Task<(AutomationSummary Automation, Guid RunId)> StartOneShotAsync(AgentAccessContext Access, Guid RequestKey,
-        string Name, string Source, CancellationToken Token, string? ScratchScope = null)
+        string Name, string Source, CancellationToken Token, string? ScratchScope = null, bool Supervised = false)
     {
         var Scratch = ScratchScope is not null;
+        var ChatModelId = Access.ChatModelId;
+        if (Supervised && (Scratch || Access.ScheduledRun is not null || Access.ScheduledTaskId is not null || !Guid.TryParse(Access.SessionId, out _)))
+            throw new UnauthorizedAccessException("Start a supervised workflow from a live owner chat.");
         Access = await Authorization.RequireAsync(Access, Token, Write: !Scratch);
-        if (Access.Role != AgentRoles.Owner || !await Permissions.IsAllowedAsync(Access.Role,
-            Scratch ? AutomationPrograms.ScratchPermission : AutomationPrograms.RunSandboxPermissionKey, Token))
+        if (Supervised && !await Authorization.CanSuperviseAsync(Access, Token))
+            throw new UnauthorizedAccessException("Supervised workflow permission is required.");
+        if (!Supervised && (Access.Role != AgentRoles.Owner || !await Permissions.IsAllowedAsync(Access.Role,
+            Scratch ? AutomationPrograms.ScratchPermission : AutomationPrograms.RunSandboxPermissionKey, Token)))
             throw new UnauthorizedAccessException("Current owner access and permission to run this sandbox are required.");
         if (RequestKey == Guid.Empty) throw new ArgumentException("A nonempty UUID requestKey is required.");
         if (string.IsNullOrWhiteSpace(Name) || Name.Length > 160) throw new ArgumentException("Name must contain 1–160 characters.");
-        var Recipe = Recipes.Parse(Source);
-        if (Recipe.Steps.Count != 1 || !AutomationPrograms.IsProgram(Recipe.Steps[0].Action)) throw new ArgumentException("One-shot sandbox jobs require one program step.");
+        var Recipe = Recipes.Parse(Source, Supervised);
+        if (!Supervised && (Recipe.Supervised || Recipe.Steps.Count != 1 || !AutomationPrograms.IsProgram(Recipe.Steps[0].Action)))
+            throw new ArgumentException("One-shot sandbox jobs require one program step.");
+        if (Supervised)
+        {
+            if (Recipe.Steps.Any(Step => AutomationPrograms.IsProgram(Step.Action))
+                && !await Permissions.IsAllowedAsync(Access.Role, AutomationPrograms.RunSandboxPermissionKey, Token))
+                throw new UnauthorizedAccessException("Running sandbox programs requires the one-time Railway sandbox permission.");
+            var HasModelStep = Recipe.Steps.Any(Step => Step.Action is "public_research" or "synthesize");
+            var PinnedModel = HasModelStep ? await AutomationAuthorization.RequireWorkflowModelAsync(Services, Access, ChatModelId, Token) : null;
+            Recipe = Recipe with { SupervisedModelId = PinnedModel };
+            Source = System.Text.Json.JsonSerializer.Serialize(Recipe, AutomationRecipes.Json);
+            if (Source.Length > 32768) throw new ArgumentException("The persisted workflow recipe exceeds 32768 characters.");
+        }
         await Recipes.ValidateToolsAsync(Recipe, Services, Access, Permissions, Token, Scratch);
         var Hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Source)));
         await using var Transaction = await Db.Database.BeginTransactionAsync(Token);
@@ -79,8 +98,9 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
         if (Existing is not null)
         {
             var Version = await Db.Versions.SingleAsync(V => V.AutomationId == RequestKey && V.Version == 1, Token);
-            if (Existing.ActorId != Access.ActorId || Existing.SubjectProfileId != Access.SubjectProfileId || Version.Hash != Hash)
-                throw new InvalidOperationException("requestKey already identifies a different sandbox job.");
+            if (Existing.ActorId != Access.ActorId || Existing.SubjectProfileId != Access.SubjectProfileId || Version.Hash != Hash
+                || (Supervised && Existing.SourceSessionId != Access.SessionId))
+                throw new InvalidOperationException("requestKey already identifies a different run.");
             var ExistingRun = await Db.Runs.Where(R => R.AutomationId == RequestKey).OrderBy(R => R.ScheduledAt).FirstAsync(Token);
             var SavedScope = await Services.GetRequiredService<PersonalAgent.Integrations.ScratchpadStore>().ScopeAsync(ExistingRun.CorrelationId, Token);
             if (SavedScope != ScratchScope) throw new InvalidOperationException("requestKey belongs to another execution context.");
@@ -100,7 +120,8 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
             var Files = System.Text.Json.JsonSerializer.Serialize(AutomationRecipes.InputFiles(Recipe.Steps[0].Arguments));
             await Db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO app.scratch_cells(run_id, scope, source, input_files) VALUES ({Run.CorrelationId}, {ScratchScope}, {Cell}, {Files}::jsonb)", Token);
         }
-        Db.Steps.Add(new() { RunId = Run.CorrelationId, Index = 0, StepId = Recipe.Steps[0].Id, Action = Recipe.Steps[0].Action });
+        for (var I = 0; I < Recipe.Steps.Count; I++)
+            Db.Steps.Add(new() { RunId = Run.CorrelationId, Index = I, StepId = Recipe.Steps[I].Id, Action = Recipe.Steps[I].Action });
         await (await Services.GetRequiredService<ISendEndpointProvider>().GetSendEndpoint(AutomationRegistration.SagaAddress))
             .Send(new StartAutomation(Run.CorrelationId), Token);
         await Db.SaveChangesAsync(Token);
@@ -170,6 +191,7 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
         await using var Transaction = await Db.Database.BeginTransactionAsync(Token);
         var Definition = await LockedAsync(Id, Token) ?? throw new KeyNotFoundException();
         if (!AutomationAuthorization.Owns(Access, Definition)) throw new KeyNotFoundException();
+        await RequireReusableAsync(Definition, Token);
         Definition.Status = Paused ? "Paused" : "Active";
         if (!Paused && Definition.NextRunAt is null) Definition.NextRunAt = Clock.GetUtcNow();
         await Db.SaveChangesAsync(Token);
@@ -191,6 +213,7 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
         }
         var Version = await Db.Versions.SingleAsync(V => V.AutomationId == Id && V.Version == Definition.Version, Token);
         var Recipe = Recipes.Parse(Version.Source);
+        if (Recipe.Supervised) throw new InvalidOperationException("Start a fresh supervised workflow from a live owner chat.");
         var Run = new AutomationRun { CorrelationId = Guid.NewGuid(), AutomationId = Id, Version = Definition.Version,
             ScheduledAt = ManualAccess is null ? Definition.NextRunAt!.Value : Now };
         Db.Runs.Add(Run);
@@ -211,6 +234,13 @@ internal sealed class AutomationService(AutomationDbContext Db, AutomationAuthor
     }
     private IQueryable<AutomationDefinition> Visible(AgentAccessContext Access) => Db.Automations.Where(D =>
         D.SubjectProfileId == Access.SubjectProfileId && (Access.Role == AgentRoles.Owner || D.ActorId == Access.ActorId));
+    private async Task RequireReusableAsync(AutomationDefinition Definition, CancellationToken Token)
+    {
+        var Source = await Db.Versions.Where(V => V.AutomationId == Definition.Id && V.Version == Definition.Version)
+            .Select(V => V.Source).SingleAsync(Token);
+        if (Recipes.Parse(Source).Supervised)
+            throw new InvalidOperationException("Start a fresh supervised workflow from a live owner chat.");
+    }
     private Task<AutomationDefinition?> LockedAsync(Guid Id, CancellationToken Token) => Db.Automations
         .FromSqlInterpolated($"SELECT * FROM automation.\"Definitions\" WHERE \"Id\" = {Id} FOR UPDATE").SingleOrDefaultAsync(Token);
     internal static DateTimeOffset NextOccurrence(DateTimeOffset Due, TimeSpan Interval, DateTimeOffset Now) =>

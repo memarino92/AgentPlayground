@@ -26,6 +26,8 @@ internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJo
         await RequireAsync(Access.ActorId, Access.Email, Access.SubjectProfileId, Token);
         if (string.IsNullOrWhiteSpace(Request.Instruction) || Request.Instruction.Length > 8000 || !Guid.TryParse(Request.RequestKey, out var RequestId))
             throw new ArgumentException("An instruction of 1–8000 characters and a stable UUID requestKey are required.");
+        if (Request.WorkflowEvidence is { Length: > 12000 } || Request is { PreviousJobId: not null, WorkflowEvidence: not null })
+            throw new ArgumentException("Workflow evidence must be bounded and apply to a new coding job.");
         var Key = RequestId.ToString("D");
         if (await Store.FindRequestAsync(Access.ActorId, Key, Token) is { } Existing) return CheckRequest(Existing);
         var Settings = (await Store.SettingsAsync(Token)).View.Settings;
@@ -40,19 +42,22 @@ internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJo
         {
             Id = Id, ActorId = Access.ActorId, Email = Access.Email, Subject = Access.SubjectProfileId,
             Instruction = Request.Instruction.Trim(), AllowNoChanges = Request.AllowNoChanges, Settings = Settings, BaseSha = BaseSha,
+            Supervise = Request.Supervise, AttemptLimit = CodingJobs.MaxAttempts,
             Branch = Revision?.Parent.Branch ?? $"feat/platform-improvement-{Id:N}",
             SessionId = Revision?.Parent.SessionId ?? ConversationId(Access), PreviousJobId = Request.PreviousJobId,
             PullRequestUrl = Revision?.Parent.PullRequestUrl,
             RootJobId = Revision is { } FollowUpTarget ? FollowUpTarget.Parent.RootJobId ?? FollowUpTarget.Parent.Id : null,
-            FollowUp = Request.FollowUp, FollowUpEvidence = Revision?.Target.Evidence, PullRequestNumber = Revision?.Target.Number,
-            CreatedAt = Now, Deadline = Now.AddMinutes(Settings.MaxMinutes + 5)
+            FollowUp = Request.FollowUp, FollowUpEvidence = Revision?.Target.Evidence ?? Request.WorkflowEvidence, PullRequestNumber = Revision?.Target.Number,
+            CreatedAt = Now, Deadline = Now.AddMinutes((Settings.MaxMinutes + 5) * CodingJobs.MaxAttempts)
         }, Key, Token);
         return CheckRequest(Job);
 
         CodingJobView CheckRequest(CodingJob Saved)
         {
             if (Saved.Instruction != Request.Instruction.Trim() || Saved.PreviousJobId != Request.PreviousJobId
-                || Saved.FollowUp != Request.FollowUp || Saved.AllowNoChanges != Request.AllowNoChanges || Saved.Subject != Access.SubjectProfileId)
+                || Saved.FollowUp != Request.FollowUp || Saved.AllowNoChanges != Request.AllowNoChanges
+                || Request.PreviousJobId is null && Saved.FollowUpEvidence != Request.WorkflowEvidence
+                || Saved.Supervise != Request.Supervise || Saved.Subject != Access.SubjectProfileId)
                 throw new InvalidOperationException("requestKey already identifies a different request.");
             return Saved.View;
         }
@@ -71,8 +76,8 @@ internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJo
         if (Job is null || Job.ActorId != Access.ActorId || Job.Subject != Access.SubjectProfileId) throw new KeyNotFoundException();
         if (Cancel && !CodingJobs.Terminal(Job.Status))
         {
-            if (Job.Status == "Publishing") throw new InvalidOperationException("Publication is being reconciled; inspect the resulting PR before closing it.");
-            await Store.SaveAsync(Job with { Status = "Cancelled", Error = "Cancelled by owner." }, Job.Status, Token);
+            if (!await Store.CancelAsync(Job.Id, Token) && (await Store.GetAsync(Job.Id, Token))?.Status == "Publishing")
+                throw new InvalidOperationException("Publication is being reconciled; inspect the resulting PR before closing it.");
         }
         return (await Store.GetAsync(Id, Token))!.View;
     }
@@ -81,11 +86,11 @@ internal sealed partial class CodingJobService(CodingJobStore Store, ScheduledJo
 internal sealed class CodingJobTools(IServiceScopeFactory Scopes)
 {
     public Task<string> StartAsync(AgentAccessContext Access, string Instruction, string RequestKey, CancellationToken Token,
-        Guid? PreviousJobId = null, string? FollowUp = null, bool AllowNoChanges = false) => InvokeAsync(async Service =>
+        Guid? PreviousJobId = null, string? FollowUp = null, bool AllowNoChanges = false, bool Supervise = false) => InvokeAsync(async Service =>
     {
         var Job = await Service.StartAsync(Access, new(Instruction, RequestKey)
         {
-            PreviousJobId = PreviousJobId, FollowUp = FollowUp, AllowNoChanges = AllowNoChanges
+            PreviousJobId = PreviousJobId, FollowUp = FollowUp, AllowNoChanges = AllowNoChanges, Supervise = Supervise
         }, Token);
         return new { job = Job, dashboard = $"/coding-jobs?profileId={Uri.EscapeDataString(Access.SubjectProfileId)}",
             message = "Inspect this job for its status, validation and pull request." };
@@ -146,12 +151,14 @@ internal sealed class CodingJobCoordinator(CodingJobStore Store, IServiceScopeFa
                 {
                     await Service.RequireAsync(Job.ActorId, Job.Email, Job.Subject, Token);
                     if (!(await Store.SettingsAsync(Token)).View.Settings.Enabled) throw new UnauthorizedAccessException();
-                    if (Job.Deadline <= DateTimeOffset.UtcNow && Job.Status != "Publishing")
+                    var Now = DateTimeOffset.UtcNow;
+                    if (Job.Status != "Publishing" && (Job.Deadline <= Now || Job.Status == "Running" && Job.AttemptDeadline <= Now))
                     {
                         await Store.SaveAsync(Job with { Status = "Failed", Error = "Coding deadline exceeded; inspect retained artifacts and cleanup." }, Job.Status, Token);
                         continue;
                     }
-                    if (Job.Status == "Queued")
+                    if (Job.Status == "Queued" && (Job.ResumePhase is null
+                        || !(await Store.ReadClarificationsAsync(Job.Id, Token)).Any(Question => Question.Answer is null)))
                         await (await Bus.GetSendEndpoint(new Uri("queue:" + CodingJobs.Queue))).Send(new ExecuteCodingJob(Job.Id), Token);
                     if (Job.Status is "ReadyToPublish" or "Publishing")
                     {

@@ -16,6 +16,8 @@ Remaining acceptance criteria: verify real Plus/Pro authorization and model enti
 
 ## Platform improvement jobs — first slice 2026-09-27
 
+The resumable and supervised work slice adds bounded coding checkpoints, public-research teams, and one-shot mixed requests on the automation saga. Live acceptance needs a new Railway checkpoint and a run that forces one sandbox timeout, restores a known edit in a fresh sandbox, validates the result and records the draft PR in the parent workflow. See [decision 0054](../decisions/0054-resumable-supervised-work.md).
+
 Requested outcome: explicit and eventually recurring platform changes produce tested PRs while the maintainer controls merge. See [decision 0038](../decisions/0038-platform-improvement-jobs.md) and [setup/limits](../runbooks/platform-coding.md).
 
 Implemented locally: owner chat tools and dashboard, encrypted database-first settings, durable/idempotent job dispatch, one active coding job, OpenCode/OpenRouter scoped model gateway with a $4.80 maximum reservation per job, separate Railway coding image, Worker-owned controller, retained diffs/checks, cleanup reconciliation and GitHub App draft publication with lost-response recovery. No merge/deploy operation is exposed. Docker proof uses real OpenCode with synthetic model replies and verifies a tool edit plus offline diff export without paid inference.

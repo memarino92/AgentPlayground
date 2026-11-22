@@ -62,7 +62,7 @@ internal sealed class CodingModelGateway(CodingJobStore Store, CodingJobService 
         var Subscription = CodingJobs.TrySubscriptionModel(Job.Settings.ModelId, out var Connection, out var Slug);
         if (Responses != Subscription) throw new ArgumentException("Use the selected coding provider's protocol.");
         using var Deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
-        var Remaining = Job.Deadline - DateTimeOffset.UtcNow;
+        var Remaining = (Job.AttemptDeadline ?? Job.Deadline) - DateTimeOffset.UtcNow;
         if (Remaining <= TimeSpan.Zero) throw new UnauthorizedAccessException();
         var RequestLimit = TimeSpan.FromMinutes(Subscription ? 10 : 3);
         Deadline.CancelAfter(Remaining < RequestLimit ? Remaining : RequestLimit);

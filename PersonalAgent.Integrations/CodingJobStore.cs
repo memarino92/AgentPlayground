@@ -25,6 +25,11 @@ public sealed record CodingJob
     public string Subject { get; init; } = "";
     public string Instruction { get; init; } = "";
     public bool AllowNoChanges { get; init; }
+    public bool Supervise { get; init; }
+    public int Attempt { get; init; }
+    public int AttemptLimit { get; init; } = 1;
+    public DateTimeOffset? AttemptDeadline { get; init; }
+    public string? ResumePhase { get; init; }
     public CodingSettings Settings { get; init; } = new();
     public string BaseSha { get; init; } = "";
     public string Branch { get; init; } = "";
@@ -44,7 +49,8 @@ public sealed record CodingJob
     public CodingArtifact? Artifact { get; init; }
     public int ModelRequests { get; init; }
     [JsonIgnore] public CodingJobView View => new(Id, Instruction, Settings.Repository, BaseSha, Branch, Status, CreatedAt,
-        Deadline, SandboxId, CleanupState, ModelRequests, PullRequestUrl, Error, Artifact) { PreviousJobId = PreviousJobId };
+        Deadline, SandboxId, CleanupState, ModelRequests, PullRequestUrl, Error, Artifact)
+        { PreviousJobId = PreviousJobId, Attempt = Attempt, AttemptLimit = AttemptLimit, Supervise = Supervise };
 }
 
 // A committed job is also durable dispatch intent. Repeated sends are safe: only Queued can be claimed.
@@ -180,8 +186,16 @@ public sealed partial class CodingJobStore(IntegrationDatabase Database)
         await using var Lock = new NpgsqlCommand("SELECT pg_advisory_xact_lock(947120041)", C, T);
         await Lock.ExecuteNonQueryAsync(Token);
         await using var Q = new NpgsqlCommand("""
-            UPDATE app.coding_jobs SET state='Running',capability_hash=@hash,lease_credential=@credential,lease_environment=@environment
+            UPDATE app.coding_jobs AS job
+            SET state='Running',capability_hash=@hash,lease_credential=@credential,lease_environment=@environment,
+                payload=(payload::jsonb || jsonb_build_object(
+                    'attempt',coalesce((payload::jsonb->>'attempt')::int,0)+1,
+                    'attemptDeadline',least(deadline,now() + make_interval(mins=>coalesce((payload::jsonb->'settings'->>'maxMinutes')::int,20))),
+                    'sandboxId',null,'cleanupState','None'))::text
             WHERE id=@id AND state='Queued' AND deadline>now()
+            AND coalesce((payload::jsonb->>'attempt')::int,0) < coalesce((payload::jsonb->>'attemptLimit')::int,1)
+            AND (payload::jsonb->>'resumePhase' IS NULL OR NOT EXISTS(
+                SELECT 1 FROM app.coding_questions WHERE job_id=job.id AND answer IS NULL))
             AND NOT EXISTS(SELECT 1 FROM app.coding_jobs WHERE state='Running')
             """, C, T);
         Q.Parameters.AddWithValue("id", Id); Q.Parameters.AddWithValue("hash", Hash(Capability));
@@ -197,17 +211,34 @@ public sealed partial class CodingJobStore(IntegrationDatabase Database)
         await using var Q = new NpgsqlCommand("""
             UPDATE app.coding_jobs SET state=@state,
                 payload=(@payload::jsonb || jsonb_build_object('sandboxId',payload::jsonb->'sandboxId','cleanupState',payload::jsonb->'cleanupState'))::text
-            WHERE id=@id AND state=@expected
+            WHERE id=@id AND state=@expected AND (@expected<>'Running'
+                OR coalesce((payload::jsonb->>'attempt')::int,0)=@attempt)
             """, C);
         Q.Parameters.AddWithValue("id", Job.Id); Q.Parameters.AddWithValue("state", Job.Status);
         Q.Parameters.AddWithValue("expected", ExpectedState); Q.Parameters.AddWithValue("payload", JsonSerializer.Serialize(Job, Json));
+        Q.Parameters.AddWithValue("attempt", Job.Attempt);
+        return await Q.ExecuteNonQueryAsync(Token) == 1;
+    }
+
+    public async Task<bool> CancelAsync(Guid Id, CancellationToken Token)
+    {
+        await using var C = await Database.OpenAsync(Token);
+        await using var Q = new NpgsqlCommand("""
+            UPDATE app.coding_jobs SET state='Cancelled',
+                payload=(payload::jsonb || jsonb_build_object('error','Cancelled by owner.','resumePhase',null))::text
+            WHERE id=@id AND state NOT IN ('Publishing','PrOpened','CompletedNoChanges','Failed','Cancelled')
+            """, C);
+        Q.Parameters.AddWithValue("id", Id);
         return await Q.ExecuteNonQueryAsync(Token) == 1;
     }
 
     public async Task<bool> AuthorizeModelRequestAsync(Guid Id, string Capability, CancellationToken Token)
     {
         await using var C = await Database.OpenAsync(Token);
-        await using var Q = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM app.coding_jobs WHERE id=@id AND capability_hash=@hash AND state='Running' AND deadline>now())", C);
+        await using var Q = new NpgsqlCommand("""
+            SELECT EXISTS(SELECT 1 FROM app.coding_jobs WHERE id=@id AND capability_hash=@hash AND state='Running'
+                AND deadline>now() AND coalesce((payload::jsonb->>'attemptDeadline')::timestamptz,deadline)>now())
+            """, C);
         Q.Parameters.AddWithValue("id", Id); Q.Parameters.AddWithValue("hash", Hash(Capability));
         return (bool)(await Q.ExecuteScalarAsync(Token))!;
     }
@@ -217,7 +248,8 @@ public sealed partial class CodingJobStore(IntegrationDatabase Database)
         await using var C = await Database.OpenAsync(Token);
         await using var Q = new NpgsqlCommand("""
             UPDATE app.coding_jobs SET requests=requests+1 WHERE id=@id AND capability_hash=@hash
-            AND state='Running' AND deadline>now() AND requests<@max
+            AND state='Running' AND deadline>now() AND coalesce((payload::jsonb->>'attemptDeadline')::timestamptz,deadline)>now()
+            AND requests<@max
             """, C);
         Q.Parameters.AddWithValue("id", Id); Q.Parameters.AddWithValue("hash", Hash(Capability)); Q.Parameters.AddWithValue("max", Maximum);
         return await Q.ExecuteNonQueryAsync(Token) == 1;
@@ -231,11 +263,17 @@ public sealed partial class CodingJobStore(IntegrationDatabase Database)
         return (Unprotect(R.GetString(0)), R.GetString(1));
     }
 
-    public async Task ClearLeaseAsync(Guid Id, CancellationToken Token)
+    public async Task ClearLeaseAsync(Guid Id, string SandboxId, CancellationToken Token)
     {
         await using var C = await Database.OpenAsync(Token);
-        await using var Q = new NpgsqlCommand("UPDATE app.coding_jobs SET lease_credential='',capability_hash='',payload=jsonb_set(payload::jsonb,'{cleanupState}','\"Destroyed\"')::text WHERE id=@id", C);
-        Q.Parameters.AddWithValue("id", Id); await Q.ExecuteNonQueryAsync(Token);
+        await using var Q = new NpgsqlCommand("""
+            UPDATE app.coding_jobs SET lease_credential='',lease_environment='',capability_hash='',
+                state=CASE WHEN state='Resuming' AND deadline>now() THEN 'Queued' ELSE state END,
+                payload=jsonb_set(payload::jsonb,'{cleanupState}','"Destroyed"')::text
+            WHERE id=@id AND payload::jsonb->>'sandboxId'=@sandbox AND payload::jsonb->>'cleanupState'='Pending'
+            """, C);
+        Q.Parameters.AddWithValue("id", Id); Q.Parameters.AddWithValue("sandbox", SandboxId);
+        await Q.ExecuteNonQueryAsync(Token);
     }
 
     public async Task AttachSandboxAsync(Guid Id, string SandboxId, CancellationToken Token)

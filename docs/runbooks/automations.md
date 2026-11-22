@@ -6,6 +6,19 @@ Supported actions: `text` (literal/template), `tool` (clock, scoped coaching sea
 
 Recipe limits: 20 sequential steps, 32,768 source characters, 65,536 output characters per registered step, 60 seconds per registered step. No host shell, arbitrary HTTP requests, recursive automations or general expression evaluation. The optional owner-only `csharp` action runs through the Worker with separate limits and a default-disabled permission; see [C# programs](automation-programs.md).
 
+## Supervised workflows
+
+For a request such as “research the library's current API, implement the change, and save a report,” chat plans the dependencies and calls `run_supervised_workflow` with a stable request UUID. The parent run appears in **Automations**. Its research, child job result and report stay available when the originating chat closes. Use `inspect_automation` or open the run dashboard for the latest outcome.
+
+Enable **Run supervised workflow** for the owner, along with the existing permissions required by each step. Public research requires **Research in parallel** and the Tavily search grant. Draft publication requires the platform change grant and a configured [coding runner](platform-coding.md).
+
+- `public_research` runs two to four independent public questions concurrently. It returns bounded findings and source links, including partial results when a branch fails. For quick standalone research, chat can call `research_swarm` directly.
+- `coding_job` takes a literal instruction and optional `evidenceSteps` referring to earlier public research or literal text. The runner records and watches one coding child job for the request, including across sandbox attempts. It treats the preceding output as evidence. The request's instruction defines the scope of the change.
+- `synthesize` takes a question and a list of earlier `sourceSteps`. It combines those outcomes in a bounded model response, with their available public sources and draft PR links. A final `save_report` step can persist the synthesis.
+- Existing authorized recipe steps can save a report, run bounded analysis, or notify when explicitly requested. Reference earlier results with `{{steps.ID}}`.
+
+Mixed workflows run once per explicit request. Research and synthesis use the chat model selected when the owner submits the plan. The coding step records whether a draft was opened or the job failed. A completed parent run can report a failed child alongside the research.
+
 ## Scheduling and revisions
 
 Omit `executeAt` to run as soon as the five-second reconciler picks it up; otherwise provide an offset-bearing ISO timestamp. Optional `repeatEvery` accepts fixed ISO durations from PT1M to P366D. P1D means 24 elapsed hours, not local-calendar daily execution across DST. Runs do not overlap within one definition. Missed intervals are skipped; one overdue occurrence runs before the next future interval.
