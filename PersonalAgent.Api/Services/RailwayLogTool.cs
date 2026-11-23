@@ -73,7 +73,7 @@ internal sealed partial class RailwayLogTool(IRailwayLogSettings Settings, IHttp
                 ["environmentId"] = Configuration.EnvironmentId,
                 ["serviceId"] = Target.Id
             };
-            if (DeploymentId is null) Input["status"] = new { successfulOnly = true };
+            if (DeploymentId is null) Input["status"] = new { @in = new[] { "SUCCESS" } };
             using var Deployments = await QueryAsync(Client, Configuration.Token, DeploymentsQuery,
                 new { input = Input, first = DeploymentId is null ? 1 : 20 }, Deadline.Token);
             var Ids = Deployments.RootElement.GetProperty("data").GetProperty("deployments").GetProperty("edges")
