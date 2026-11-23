@@ -48,7 +48,7 @@ public sealed class RailwayLogToolTests
         var Variables = Fixture.Requests[1].GetProperty("variables");
         Variables.GetProperty("first").GetInt32().Should().Be(1);
         var Input = Variables.GetProperty("input");
-        Input.GetProperty("status").GetProperty("successfulOnly").GetBoolean().Should().BeTrue();
+        Input.GetProperty("status").GetProperty("in").EnumerateArray().Select(Value => Value.GetString()).Should().Equal("SUCCESS");
         Input.GetProperty("projectId").GetString().Should().Be(Project);
         Input.GetProperty("environmentId").GetString().Should().Be(EnvironmentId);
         Input.GetProperty("serviceId").GetString().Should().Be(ServiceId);
@@ -337,7 +337,7 @@ public sealed class RailwayLogToolTests
                 : Query.Contains("DeploymentListInput")
                     ? new { deployments = new { edges = Deployments
                         .Where(Item => !Body.RootElement.GetProperty("variables").GetProperty("input").TryGetProperty("status", out var Status)
-                            || !Status.GetProperty("successfulOnly").GetBoolean() || Item.Status == "SUCCESS")
+                            || Status.GetProperty("in").EnumerateArray().Any(Value => Value.GetString() == Item.Status))
                         .Take(NoDeployments ? 0 : Body.RootElement.GetProperty("variables").GetProperty("first").GetInt32())
                         .Select(Item => new { node = new { id = Item.Id } }).ToArray() } }
                     : new { deploymentLogs = Messages.Select((Message, Index) => new
