@@ -143,7 +143,7 @@ public sealed class RailwayProgramTests : IAsyncLifetime
     {
         public List<string> Operations { get; } = [];
         public bool FailExecution, FailDestroy;
-        public async Task<JsonElement> CallAsync(object Request, CancellationToken Token)
+        public async Task<JsonElement> CallAsync(object Request, CancellationToken Token, SandboxRunContext? Context = null)
         {
             var Json = JsonSerializer.SerializeToElement(Request);
             Guid.TryParse(Json.GetProperty("environmentId").GetString(), out _).Should().BeTrue();

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dispatch } from './bridge.mjs';
+import { ExecInterruptedError, RailwayGraphQLError } from 'railway';
 import { loadPreparationFiles } from './preparation-files.mjs';
 
 test('operator preparation resolves the checked-in compiler payload from any working directory', async () => {
@@ -204,4 +205,50 @@ test('Python exports an artifact from a scratchpad with no staged inputs', async
     assert.deepEqual(phases, ['docker pause scratch', 'pack', 'download', 'docker unpause scratch']);
     assert.deepEqual(f.writes, []);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+
+test('reports the scratchpad input upload stage and safe Railway failure details', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'bridge-upload-'));
+  try {
+    const f = fake();
+    const path = join(directory, 'private-file.xlsx');
+    await writeFile(path, 'private workbook contents');
+    f.sandbox.files.write = async () => {
+      throw new RailwayGraphQLError({
+        status: 403, message: request.token, responseBody: { token: request.gatewayToken },
+        errors: [{ message: 'private provider response' }]
+      });
+    };
+    const diagnostics = [];
+    await assert.rejects(dispatch({ ...request, operation: 'scratch-cell', inputFiles: [{ name: 'private-file.xlsx', path }] },
+      f.api, item => diagnostics.push(item)));
+    assert.deepEqual(diagnostics, [{ stage: 'upload-input', reason: 'authentication', code: 403 }]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('an interrupted Python command reports its close code without forwarding partial streams', async () => {
+  const f = fake();
+  f.sandbox.exec = async () => {
+    throw new ExecInterruptedError({ closeCode: 1006, reason: request.token, stdout: request.input, stderr: request.source });
+  };
+  const diagnostics = [];
+  await assert.rejects(dispatch({ ...request, operation: 'scratch-cell' }, f.api, item => diagnostics.push(item)));
+  assert.deepEqual(diagnostics, [{ stage: 'execute-cell', reason: 'exec-interrupted', code: 1006 }]);
+});
+
+test('artifact errors keep both the export and resume failure without logging command stderr', async () => {
+  const f = fake();
+  f.sandbox.exec = async command => {
+    if (command.startsWith('printf') || command === 'docker pause scratch') return { exitCode: 0 };
+    if (command === 'docker unpause scratch') return { exitCode: 1, stderr: 'No such container: private-name' };
+    return { exitCode: 2, stderr: 'No space left on device: private workbook path' };
+  };
+  const diagnostics = [];
+  await assert.rejects(dispatch({ ...request, operation: 'scratch-cell', artifactDestination: 'private-output' },
+    f.api, item => diagnostics.push(item)));
+  assert.deepEqual(diagnostics, [
+    { stage: 'pack-artifacts', reason: 'disk-full', code: 2 },
+    { stage: 'resume-scratchpad', reason: 'container-not-found', code: 1 }
+  ]);
 });
