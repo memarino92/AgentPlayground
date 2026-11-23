@@ -24,6 +24,10 @@ public partial class MainPage : ContentPage
     private bool _chatBusy;
     private readonly ChatComposer _composer = new();
     private Guid? _run;
+    private bool _runStarted;
+    private bool _steering;
+    private bool _uploadingAttachment;
+    private TaskCompletionSource<bool>? _chatIdle;
     private async void OnStopClicked(object? sender, EventArgs e)
     {
         if (_conversation is not { } session || _run is not { } run) return;
@@ -99,7 +103,76 @@ public partial class MainPage : ContentPage
 
     private async void OnSendClicked(object? sender, EventArgs e)
     {
-        if (_conversation.HasValue && !string.IsNullOrWhiteSpace(Draft.Text)) await LoadChatAsync(message: Draft.Text.Trim());
+        if (_conversation is not { } session || string.IsNullOrWhiteSpace(Draft.Text) || _uploadingAttachment || _steering) return;
+        if (!_chatBusy)
+        {
+            await LoadChatAsync(message: Draft.Text.Trim());
+            return;
+        }
+        if (!_runStarted || _run is not { } run || _chatIdle is not { } idle) return;
+
+        var direction = Draft.Text.Trim();
+        _steering = true;
+        Draft.Text = string.Empty;
+        UpdateComposer();
+        try
+        {
+            await _chat.StopAsync(session, run);
+            if (!await idle.Task) throw new InvalidOperationException("The interrupted turn could not be confirmed.");
+        }
+        catch (Exception)
+        {
+            if (_conversation == session) RestoreDirection(direction);
+            ChatStatus.Text = "Could not confirm the interrupted turn. Refresh before sending again.";
+            return;
+        }
+        finally
+        {
+            _steering = false;
+            UpdateComposer();
+        }
+        if (_conversation == session) await LoadChatAsync(message: direction, steering: true);
+    }
+
+    private void RestoreDirection(string direction) =>
+        Draft.Text = string.IsNullOrWhiteSpace(Draft.Text) ? direction : direction + "\n\n" + Draft.Text;
+
+    private void OnDraftChanged(object? sender, TextChangedEventArgs e) => UpdateComposer();
+
+    private void UpdateComposer()
+    {
+        if (SendMessage is null) return;
+        SendMessage.Text = _run is null && !_steering ? "Send" : "Steer";
+        SendMessage.IsEnabled = !_steering && !_uploadingAttachment && (!_chatBusy || _runStarted)
+            && !string.IsNullOrWhiteSpace(Draft.Text);
+        AddAttachment.IsEnabled = !_uploadingAttachment;
+    }
+
+    private async void OnAddAttachmentClicked(object? sender, EventArgs e)
+    {
+        if (!_chat.IsOwner || _uploadingAttachment || _conversation is not { } session) return;
+        _uploadingAttachment = true;
+        UpdateComposer();
+        try
+        {
+            if (await DisplayActionSheetAsync("Add attachment", "Cancel", null, "Choose file") != "Choose file") return;
+            var file = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Choose a file (up to 16 MB)" });
+            if (file is null) return;
+            await using var stream = await file.OpenReadAsync();
+            var id = await _chat.UploadAttachmentAsync(stream);
+            if (_conversation != session) return;
+            var name = string.Concat(file.FileName.Where(character => !char.IsControl(character)));
+            if (name.Length > 255) name = name[..255];
+            Draft.Text = (Draft.Text + $"\nAttached file {name} (attachment:{id})").TrimStart();
+        }
+        catch (OperationCanceledException) { }
+        catch (InvalidDataException error) { ChatStatus.Text = error.Message; }
+        catch (Exception) { ChatStatus.Text = "Could not upload the attachment."; }
+        finally
+        {
+            _uploadingAttachment = false;
+            UpdateComposer();
+        }
     }
 
     private void SignOut()
@@ -131,6 +204,7 @@ public partial class MainPage : ContentPage
         }
 
         _conversation = conversation?.SessionId;
+        AddAttachment.IsVisible = conversation is not null && _chat.IsOwner;
         Composer.IsVisible = conversation is not null;
         SignIn.IsVisible = conversation is null;
         ChatStatus.Text = conversation is null ? "Sign in to open your conversation." :
@@ -152,6 +226,8 @@ public partial class MainPage : ContentPage
         ClearPendingTurn();
         var run = pendingRun?.Id ?? Guid.NewGuid();
         _run = run;
+        _runStarted = false;
+        UpdateComposer();
         _followTranscript = true;
         StopReply.IsVisible = true;
         PendingMessage.Text = message;
@@ -195,7 +271,12 @@ public partial class MainPage : ContentPage
                 calls[activity.CallId] = activity;
                 activityChanged = true;
                 return Task.CompletedTask;
-            }, run, pendingRun is not null);
+            }, run, pendingRun is not null, () =>
+            {
+                _runStarted = true;
+                UpdateComposer();
+                return Task.CompletedTask;
+            });
         }
         finally
         {
@@ -207,11 +288,13 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async Task LoadChatAsync(bool signIn = false, string? message = null)
+    private async Task LoadChatAsync(bool signIn = false, string? message = null, bool steering = false)
     {
         if (_chatBusy) return;
         _chatBusy = true;
-        if (message is not null) Draft.Unfocus();
+        var idle = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _chatIdle = idle;
+        var completed = false;
         SignIn.IsEnabled = SendMessage.IsEnabled = WorkspaceAction.IsEnabled = false;
         ChatStatus.Text = message is null ? "Opening conversation…" : WaitingForReply;
         try
@@ -231,12 +314,13 @@ public partial class MainPage : ContentPage
             }
             if (message is not null && _conversation is Guid id)
             {
-                if (pendingRun is not null) conversation = await StreamReplyAsync(id, message, pendingRun);
+                if (pendingRun is not null || steering) conversation = await StreamReplyAsync(id, message, pendingRun);
                 else await _composer.SendAsync(() => Draft.Text, Text => Draft.Text = Text,
                     async Text => { conversation = await StreamReplyAsync(id, Text, null); });
             }
 
             ShowConversation(conversation, preservePosition: message is not null);
+            completed = true;
         }
         catch (TaskCanceledException) { ChatStatus.Text = "Request interrupted. Refresh to check the conversation."; }
         catch (OperationCanceledException) { ChatStatus.Text = "Sign-in canceled."; }
@@ -247,9 +331,13 @@ public partial class MainPage : ContentPage
         finally
         {
             _run = null;
+            _runStarted = false;
             StopReply.IsVisible = false;
             _chatBusy = false;
-            SignIn.IsEnabled = SendMessage.IsEnabled = WorkspaceAction.IsEnabled = true;
+            SignIn.IsEnabled = WorkspaceAction.IsEnabled = true;
+            if (!completed && steering && message is not null) RestoreDirection(message);
+            UpdateComposer();
+            idle.TrySetResult(completed);
         }
         await OpenRequestedCodingQuestionsAsync();
     }

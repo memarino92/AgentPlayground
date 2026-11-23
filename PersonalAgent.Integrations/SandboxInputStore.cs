@@ -20,6 +20,16 @@ public sealed class SandboxInputStore(IntegrationDatabase Database)
         return Id;
     }
 
+    public async Task<byte[]?> ReadUploadAsync(string Actor, string Profile, Guid Id, CancellationToken Token)
+    {
+        await using var Connection = await Database.OpenAsync(Token);
+        await using var Query = new NpgsqlCommand("SELECT content FROM app.sandbox_uploads WHERE id=$1 AND actor=$2 AND profile=$3", Connection);
+        Query.Parameters.AddWithValue(Id);
+        Query.Parameters.AddWithValue(Actor);
+        Query.Parameters.AddWithValue(Profile);
+        return await Query.ExecuteScalarAsync(Token) as byte[];
+    }
+
     // Derive the recipient identity from the durable run. File references never grant access by themselves.
     public async Task<byte[]> ReadAsync(Guid Recipient, SandboxInputFile File, int Remaining, CancellationToken Token)
     {

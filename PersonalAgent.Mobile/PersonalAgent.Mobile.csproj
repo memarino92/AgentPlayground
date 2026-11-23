@@ -65,6 +65,7 @@
 
   <ItemGroup>
     <Compile Include="..\PersonalAgent.Contracts\ChatCards.cs" Link="Models\ChatCards.cs" />
+    <Compile Include="..\PersonalAgent.Contracts\Automations\SandboxInputFile.cs" Link="Models\SandboxInputFile.cs" />
     <ProjectReference Include="..\PersonalAgent.Presentation\PersonalAgent.Presentation.csproj" />
   </ItemGroup>
 </Project>

@@ -74,8 +74,6 @@
                 {
                 @if (role == "Owner" && profileId is not null)
                 {
-                    <label>Attach file (.m4a for coaching; other files for sandbox) <InputFile OnChange="AttachInputAsync" disabled="@isBusy" /></label>
-                    <small>A .m4a with no accompanying draft is submitted for coaching transcription and processing. With a draft, choose explicitly below.</small>
                     @if (pendingCoachingFile is not null)
                     {
                         <p>Submit @pendingCoachingFile.File.Name to the coaching transcription/processing pipeline?</p>
@@ -88,11 +86,22 @@
                               SelectedModelId="@(selectedModelId ?? string.Empty)"
                               SelectedModelIdChanged="HandleSelectedModelChanged"
                               Models="availableModels"
-                              IsBusy="isBusy"
-                              IsSending="isSendingMessage"
+                              IsBusy="composerBusy"
+                              IsSending="@(isSendingMessage || stoppingForSteer)"
                               OnKeyDown="HandleKeyDown"
                               OnSendMessage="SendMessage"
-                              OnStop="StopResponse" />
+                              CanSteer="canSteer"
+                              OnStop="StopResponse">
+                    <AttachmentPicker>
+                        @if (role == "Owner" && profileId is not null)
+                        {
+                            <details class="composer__settings composer__attachment">
+                                <summary aria-label="Add attachment" title="Add attachment">+</summary>
+                                <label>Attach a file <InputFile OnChange="AttachInputAsync" disabled="@composerBusy" /></label>
+                            </details>
+                        }
+                    </AttachmentPicker>
+                </ChatComposer>
                 }
 
                 <div class="chat-panel__footer">

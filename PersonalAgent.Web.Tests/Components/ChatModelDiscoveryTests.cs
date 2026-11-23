@@ -63,6 +63,40 @@ public sealed class ChatModelDiscoveryTests : TestContext
         Cut.Find("textarea").GetAttribute("value").Should().NotContain("upload reference");
     }
 
+    [Fact]
+    public async Task Steer_StopsTheAcknowledgedRun_AndWaitsForItsSavedTranscript()
+    {
+        var Pipe = new System.IO.Pipelines.Pipe();
+        using var Handler = new CatalogHandler { StreamBody = Pipe.Reader.AsStream() };
+        Configure(Handler);
+        var Cut = RenderComponent<Chat>();
+        Cut.WaitForElement("textarea").Input("Plan a trip");
+        var Send = Cut.FindAll("button").Single(Button => Button.TextContent == "Send")
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        Cut.WaitForAssertion(() => Cut.FindAll("button").Should().Contain(Button => Button.TextContent == "Steer"));
+        await Pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("{\"type\":\"started\"}\n"));
+        Cut.Find("textarea").Input("Keep it under $100");
+        Cut.WaitForAssertion(() => Cut.FindAll("button").Single(Button => Button.TextContent == "Steer")
+            .HasAttribute("disabled").Should().BeFalse());
+        var Steer = Cut.FindAll("button").Single(Button => Button.TextContent == "Steer")
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        Cut.WaitForAssertion(() =>
+        {
+            Handler.StoppedRun.Should().Be(Handler.SubmittedRun);
+            Handler.StoppedRun.Should().NotBeNull();
+        });
+        Handler.SendCount.Should().Be(1);
+        Handler.StreamBody = null;
+        Handler.Conversation.AddRange([new("user", "Plan a trip"), new("assistant", "Partial plan [Response stopped.]")]);
+        var completed = new { type = "completed", conversation = new HistoryResponse(Handler.ConversationId.ToString(),
+            "provider-default", Handler.Conversation) };
+        await Pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(completed, JsonSerializerOptions.Web) + "\n"));
+        await Pipe.Writer.CompleteAsync();
+        await Task.WhenAll(Send, Steer).WaitAsync(TimeSpan.FromSeconds(10));
+        Handler.SendCount.Should().Be(2);
+        Cut.Markup.Should().Contain("Partial plan").And.Contain("Keep it under $100").And.Contain("Synthetic reply");
+    }
+
     private static IBrowserFile CoachingFile()
     {
         var File = new Mock<IBrowserFile>();
@@ -276,6 +310,7 @@ public sealed class ChatModelDiscoveryTests : TestContext
         public TaskCompletionSource? ReleaseSend;
         public PersonalAgent.Contracts.PendingChatRun? PendingRun;
         public Guid? ObservedRun;
+        public Guid? SubmittedRun, StoppedRun;
         public Stream? StreamBody;
         public int SendCount;
         public int CoachingUploads;
@@ -342,10 +377,20 @@ public sealed class ChatModelDiscoveryTests : TestContext
                     (First ? FirstId : SecondId).ToString(), First ? "provider-default" : "newly-available-model",
                     [new("user", First ? "First saved message" : "Second saved message")])) };
             }
+            if (Request.Method == HttpMethod.Post && Request.RequestUri.AbsolutePath.EndsWith("/stop"))
+            {
+                StoppedRun = Guid.Parse(Request.RequestUri.Segments[^2].TrimEnd('/'));
+                return new(HttpStatusCode.NoContent);
+            }
             if (Request.Method == HttpMethod.Post && Request.RequestUri.AbsolutePath.EndsWith("/messages/stream"))
             {
                 SendCount++;
-                if (StreamBody is not null) return new(HttpStatusCode.OK) { Content = new StreamContent(StreamBody) };
+                if (StreamBody is not null)
+                {
+                    var pending = await Request.Content!.ReadFromJsonAsync<JsonElement>(CancellationToken);
+                    SubmittedRun = pending.GetProperty("runId").GetGuid();
+                    return new(HttpStatusCode.OK) { Content = new StreamContent(StreamBody) };
+                }
                 if (ReleaseSend is not null) await ReleaseSend.Task.WaitAsync(CancellationToken);
                 if (FailMessage) return new(HttpStatusCode.InternalServerError);
                 var Payload = await Request.Content!.ReadFromJsonAsync<JsonElement>(CancellationToken);

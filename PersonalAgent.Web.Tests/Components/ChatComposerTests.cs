@@ -69,23 +69,27 @@ public class ChatComposerTests : TestContext
     }
 
     [Fact]
-    public void Composer_ShowsStopActionWhileStreaming()
+    public void Composer_AllowsSteeringAndStopWhileStreaming()
     {
         var Stopped = false;
+        var Steered = false;
         var Cut = RenderComponent<ChatComposer>(Parameters => Parameters
-            .Add(Component => Component.CurrentMessage, string.Empty)
+            .Add(Component => Component.CurrentMessage, "Use a smaller change")
             .Add(Component => Component.SelectedModelId, "model")
             .Add(Component => Component.Models, new List<AvailableChatModelResponse> { new("model", "Model", true) })
-            .Add(Component => Component.IsBusy, true)
+            .Add(Component => Component.IsBusy, false)
             .Add(Component => Component.IsSending, true)
+            .Add(Component => Component.CanSteer, true)
             .Add(Component => Component.CurrentMessageChanged, EventCallback.Factory.Create<string>(this, _ => Task.CompletedTask))
             .Add(Component => Component.SelectedModelIdChanged, EventCallback.Factory.Create<string>(this, _ => Task.CompletedTask))
             .Add(Component => Component.OnKeyDown, EventCallback.Factory.Create<KeyboardEventArgs>(this, _ => Task.CompletedTask))
-            .Add(Component => Component.OnSendMessage, EventCallback.Factory.Create(this, () => Task.CompletedTask))
+            .Add(Component => Component.OnSendMessage, EventCallback.Factory.Create(this, () => Steered = true))
             .Add(Component => Component.OnStop, EventCallback.Factory.Create(this, () => Stopped = true)));
 
-        Cut.Find("button").TextContent.Should().Be("Stop");
-        Cut.Find("button").Click();
+        Cut.Find("textarea").HasAttribute("disabled").Should().BeFalse();
+        Cut.FindAll("button").Single(Button => Button.TextContent == "Steer").Click();
+        Cut.FindAll("button").Single(Button => Button.TextContent == "Stop").Click();
+        Steered.Should().BeTrue();
         Stopped.Should().BeTrue();
     }
 }

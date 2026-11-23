@@ -81,6 +81,26 @@ public sealed class NativeChatClient(HttpClient Http, PersonalAgentApiClient Set
         if (Output is not null) await response.Content.CopyToAsync(Output);
     }
 
+    public async Task<Guid> UploadAttachmentAsync(Stream Source)
+    {
+        const int Limit = PersonalAgent.Contracts.Automations.SandboxInputFile.MaxBytes;
+        using var body = new MemoryStream();
+        var buffer = new byte[64 * 1024];
+        int count;
+        while ((count = await Source.ReadAsync(buffer)) > 0)
+        {
+            if (body.Length + count > Limit) throw new InvalidDataException("Choose a file of 16 MB or less.");
+            body.Write(buffer, 0, count);
+        }
+        if (body.Length == 0) throw new InvalidDataException("Choose a nonempty file.");
+        body.Position = 0;
+        using var request = await CreateAsync("/mobile/chat/attachments") ?? throw new InvalidOperationException("Sign in to continue.");
+        request.Content = new StreamContent(body);
+        using var response = await Http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
     public async Task StopAsync(Guid session, Guid run)
     {
         using var request = await CreateAsync($"/mobile/chat/{session}/runs/{run}/stop") ?? throw new InvalidOperationException("Sign in to continue.");
@@ -90,14 +110,14 @@ public sealed class NativeChatClient(HttpClient Http, PersonalAgentApiClient Set
     }
 
     public async Task<NativeConversation> SendAsync(Guid Id, string Message, Func<string, Task> OnDelta, CancellationToken Token,
-        Func<PersonalAgent.Contracts.ChatToolActivity, Task> OnActivity, Guid RunId, bool ObserveOnly)
+        Func<PersonalAgent.Contracts.ChatToolActivity, Task> OnActivity, Guid RunId, bool ObserveOnly, Func<Task>? OnStarted = null)
     {
         using var request = await CreateAsync($"/mobile/chat/{Id}/stream") ?? throw new InvalidOperationException("Sign in to continue.");
         request.Content = JsonContent.Create(new { ProfileId = Profile, Message, RunId, ObserveOnly });
         using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, Token);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(Token);
-        return await PersonalAgent.Presentation.ConversationStream.ReadAsync<NativeConversation, PersonalAgent.Contracts.ChatToolActivity>(stream, OnDelta, OnActivity, Token);
+        return await PersonalAgent.Presentation.ConversationStream.ReadAsync<NativeConversation, PersonalAgent.Contracts.ChatToolActivity>(stream, OnDelta, OnActivity, Token, OnStarted);
     }
 
     public async Task<NativeConversation?> ReadAsync()

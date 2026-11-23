@@ -29,6 +29,22 @@ internal static class MobileChatEndpoints
             using var response = await client.StopChatRunAsync(id.ToString(), run, profile, context.RequestAborted, user);
             return Results.StatusCode((int)response.StatusCode);
         });
+        App.MapPost("/mobile/chat/attachments", async (HttpContext context, MobileChatGrant grants, PersonalAgentClient client) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            var user = grants.Read(context.Request.Headers.Authorization.ToString());
+            if (user is null) return Results.Unauthorized();
+            if (!user.IsInRole("Owner")) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            var profile = user.FindFirst("urn:github:login")?.Value;
+            if (string.IsNullOrWhiteSpace(profile)) return Results.BadRequest();
+            if (context.Request.ContentLength is not long size || size > PersonalAgent.Contracts.Automations.SandboxInputFile.MaxBytes)
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            if (size == 0) return Results.BadRequest();
+            using var content = new StreamContent(context.Request.Body);
+            content.Headers.ContentLength = size;
+            try { return Results.Ok(await client.UploadSandboxInputAsync(profile, content, user, context.RequestAborted)); }
+            catch (HttpRequestException error) when (error.StatusCode is { } status) { return Results.StatusCode((int)status); }
+        });
         App.MapPost("/mobile/chat/open", (HttpContext Context, MobileChatRequest Request, MobileChatGrant Grants, PersonalAgentClient Client) =>
             OpenAsync(Context, Request, Grants, Client));
     }
