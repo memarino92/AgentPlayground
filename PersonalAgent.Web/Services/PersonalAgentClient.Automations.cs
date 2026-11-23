@@ -8,9 +8,14 @@ internal partial class PersonalAgentClient
     public async Task<Guid> UploadSandboxInputAsync(string Profile, byte[] Bytes)
     {
         using var Content = new ByteArrayContent(Bytes);
-        using var Response = await SendAsync(HttpMethod.Post, $"/api/automations/inputs?profileId={Uri.EscapeDataString(Profile)}", Content);
+        return await UploadSandboxInputAsync(Profile, Content, null, CancellationToken.None);
+    }
+
+    internal async Task<Guid> UploadSandboxInputAsync(string Profile, HttpContent Content, System.Security.Claims.ClaimsPrincipal? User, CancellationToken Token)
+    {
+        using var Response = await SendAsync(HttpMethod.Post, $"/api/automations/inputs?profileId={Uri.EscapeDataString(Profile)}", Content, Token, requestUser: User);
         Response.EnsureSuccessStatusCode();
-        return await Response.Content.ReadFromJsonAsync<Guid>();
+        return await Response.Content.ReadFromJsonAsync<Guid>(Token);
     }
 
     public async Task<IReadOnlyList<AutomationSummary>> GetAutomationsAsync(string Profile, int Offset, CancellationToken Token)

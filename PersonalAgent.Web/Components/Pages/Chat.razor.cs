@@ -58,7 +58,11 @@ public partial class Chat
             await Stream.CopyToAsync(Buffer);
             var Id = await ApiClient.UploadSandboxInputAsync(Profile, Buffer.ToArray());
             if (profileId == Profile && sessionId == Session)
-                currentMessage = (currentMessage + $"\nAttached file {File.Name} (attachment:{Id})").TrimStart();
+            {
+                var Name = string.Concat(File.Name.Where(Character => !char.IsControl(Character)));
+                if (Name.Length > 255) Name = Name[..255];
+                currentMessage = (currentMessage + $"\nAttached file {Name} (attachment:{Id})").TrimStart();
+            }
         }
         catch (Exception) { errorMessage = "File upload could not be confirmed. For coaching audio, check the upload queue before retrying; identical audio is deduplicated."; }
         finally { uploadingInput = false; }
@@ -110,7 +114,10 @@ public partial class Chat
     private readonly CancellationTokenSource CodingUpdatesLifetime = new();
     private Task? CodingUpdates;
 
-    private bool isBusy => uploadingInput || !hasInitialized || isLoadingHistory || isSendingMessage || isCreatingSession || isChangingModel || isUpdatingCard;
+    private bool stoppingForSteer;
+    private bool composerBusy => uploadingInput || !hasInitialized || isLoadingHistory || isCreatingSession || isChangingModel || isUpdatingCard;
+    private bool isBusy => composerBusy || isSendingMessage || stoppingForSteer;
+    private bool canSteer => !stoppingForSteer && activeTurn?.Started == true;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -167,7 +174,7 @@ public partial class Chat
 
     private async Task SendMessage()
     {
-        if (isBusy || string.IsNullOrWhiteSpace(currentMessage) || profileId == null || selectedModelId is null) return;
+        if (composerBusy || stoppingForSteer || (isSendingMessage && !canSteer) || string.IsNullOrWhiteSpace(currentMessage) || profileId == null || selectedModelId is null) return;
         if (currentMessage.Trim().Equals("/clear", StringComparison.OrdinalIgnoreCase)) { await CreateSession(); return; }
         if (!isContinuous || isReadOnly) return;
         if (sessionId is null)
@@ -182,6 +189,29 @@ public partial class Chat
         var sendingProfileId = profileId;
         var userMessage = currentMessage;
         currentMessage = string.Empty;
+        if (activeTurn is { } previous)
+        {
+            stoppingForSteer = true;
+            try
+            {
+                if (!previous.Completion.IsCompleted)
+                {
+                    using var stop = await ApiClient.StopChatRunAsync(sendingSessionId, previous.Id, sendingProfileId, CancellationToken.None);
+                    stop.EnsureSuccessStatusCode();
+                }
+                var history = await previous.Completion;
+                if (disposed || sessionId != sendingSessionId) return;
+                messages = [.. history.Messages];
+            }
+            catch (Exception)
+            {
+                if (disposed || sessionId != sendingSessionId) return;
+                currentMessage = string.IsNullOrWhiteSpace(currentMessage) ? userMessage : userMessage + "\n\n" + currentMessage;
+                errorMessage = "Could not confirm the interrupted turn. Reopen chat before sending again.";
+                return;
+            }
+            finally { stoppingForSteer = false; }
+        }
         var turn = Turns.Start(sendingSessionId, userMessage, ApiClient, sendingProfileId);
         await ObserveTurnAsync(sendingSessionId, turn);
     }
@@ -206,14 +236,17 @@ public partial class Chat
         catch (Exception ex)
         {
             if (activeTurn != turn || sessionId != sendingSessionId) return;
-            if (ex is PersonalAgentApiException && string.IsNullOrEmpty(turn.Reply)) currentMessage = turn.Message;
+            if (ex is PersonalAgentApiException && string.IsNullOrEmpty(turn.Reply) && string.IsNullOrWhiteSpace(currentMessage) && !stoppingForSteer) currentMessage = turn.Message;
             errorMessage = ex is OperationCanceledException ? "Response stopped or timed out. Check Scheduled tasks before repeating a reminder request." : ex.Message;
         }
         finally
         {
             turn.Changed -= RefreshTurnAsync;
-            if (activeTurn == turn) activeTurn = null;
-            isSendingMessage = false;
+            if (activeTurn == turn)
+            {
+                activeTurn = null;
+                isSendingMessage = false;
+            }
         }
     }
 
@@ -325,7 +358,7 @@ public partial class Chat
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter" && !e.ShiftKey && !isBusy && !string.IsNullOrWhiteSpace(currentMessage))
+        if (e.Key == "Enter" && !e.ShiftKey && !e.IsComposing)
         {
             await SendMessage();
         }

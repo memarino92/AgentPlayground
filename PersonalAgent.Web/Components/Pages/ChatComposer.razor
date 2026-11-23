@@ -9,30 +9,33 @@
               rows="2"
               aria-label="Message Garden"
               placeholder="What's on your mind?"></textarea>
+    <div class="composer__tools">
+    @AttachmentPicker
     <details class="composer__settings">
     <summary>Model</summary>
     <select class="composer__model"
             value="@SelectedModelId"
             @onchange="HandleModelChanged"
-            disabled="@(IsBusy || Models.Count == 0)">
+            disabled="@(IsBusy || IsSending || Models.Count == 0)">
         @foreach (var model in Models)
         {
             <option value="@model.Id">@model.DisplayName</option>
         }
     </select>
     </details>
+    </div>
     @if (SelectedModelId.StartsWith("chatgpt:", StringComparison.Ordinal))
     {
         <p>Using ChatGPT plan · <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">Manage usage</a></p>
     }
-    @if (IsSending)
-    {
-        <MudButton Variant="Variant.Outlined" Color="Color.Error" Class="composer__send" OnClick="OnStop">Stop</MudButton>
-    }
-    else
-    {
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="composer__send" OnClick="OnSendMessage" Disabled="@(IsBusy || Models.Count == 0 || string.IsNullOrWhiteSpace(CurrentMessage))">Send</MudButton>
-    }
+    <div class="composer__send">
+        @if (IsSending)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="OnStop">Stop</MudButton>
+        }
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OnSendMessage"
+                   Disabled="@(IsBusy || (IsSending && !CanSteer) || Models.Count == 0 || string.IsNullOrWhiteSpace(CurrentMessage))">@(IsSending ? "Steer" : "Send")</MudButton>
+    </div>
 </div>
 
 @code {
@@ -43,6 +46,8 @@
     [Parameter] public required List<AvailableChatModelResponse> Models { get; set; }
     [Parameter] public required bool IsBusy { get; set; }
     [Parameter] public bool IsSending { get; set; }
+    [Parameter] public bool CanSteer { get; set; }
+    [Parameter] public RenderFragment? AttachmentPicker { get; set; }
     [Parameter] public required EventCallback<string> CurrentMessageChanged { get; set; }
     [Parameter] public required EventCallback<string> SelectedModelIdChanged { get; set; }
     [Parameter] public required EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }

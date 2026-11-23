@@ -71,12 +71,14 @@
             <Button x:Name="SignIn" Text="Sign in" Style="{StaticResource PrimaryButtonStyle}" Clicked="OnSignInClicked" />
             <Border x:Name="Composer" IsVisible="False" StrokeShape="RoundRectangle 20"
                     Stroke="{AppThemeBinding Light=#A8C2BA, Dark=#52746B}" BackgroundColor="{AppThemeBinding Light=White, Dark=#1C302C}" Padding="10,4,4,4">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                    <Editor x:Name="Draft" Placeholder="Message PersonalAgent" MaxLength="4000" MaximumHeightRequest="128"
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                    <Button x:Name="AddAttachment" Text="+" IsVisible="False" MinimumWidthRequest="44"
+                            VerticalOptions="End" SemanticProperties.Description="Add attachment" Clicked="OnAddAttachmentClicked" />
+                    <Editor x:Name="Draft" Grid.Column="1" TextChanged="OnDraftChanged" Placeholder="Message PersonalAgent" MaxLength="4000" MaximumHeightRequest="128"
                             AutoSize="TextChanges" FontSize="16" VerticalOptions="Center" BackgroundColor="Transparent"
                             TextColor="{AppThemeBinding Light=#162C29, Dark=#E9F2EE}"
                             PlaceholderColor="{AppThemeBinding Light=#526A64, Dark=#B5CEC6}" />
-                    <Button x:Name="SendMessage" Grid.Column="1" Text="Send" Style="{StaticResource PrimaryButtonStyle}" CornerRadius="16"
+                    <Button x:Name="SendMessage" Grid.Column="2" Text="Send" Style="{StaticResource PrimaryButtonStyle}" CornerRadius="16"
                             MinimumHeightRequest="48" VerticalOptions="End" Clicked="OnSendClicked" />
                 </Grid>
             </Border>

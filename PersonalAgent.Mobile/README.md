@@ -30,6 +30,8 @@ MAUI Controls is centrally pinned to `11.0.0`. Keep the workload and package rel
 
 ## Native Android experience
 
+While a reply streams, type your new direction and tap **Steer**. Chat stops the current run, waits for its transcript to be saved, and sends your direction. Owners can tap **+ → Choose file** to attach files up to 16 MB, including Excel workbooks. The Android client uses the same sandbox attachment storage as Web.
+
 Tap **Sign in** and authorize Android in the system browser. The native chat opens the same continuous conversation as Web. It supports streamed replies, history search, model changes, fresh starts, interactive cards and recording citations. Use **Menu** for scheduled jobs, automations, recordings and the offline check-in preview. Owners also have coding jobs and all administration sections. Coaches with multiple assigned profiles can switch from Menu. Tap **Refresh** to check an uncertain send before retrying.
 
 Sending immediately clears the submitted text and displays it in the pending turn. You can type the next draft while the reply streams, but Send stays disabled until the current request finishes. If delivery fails, the submitted draft is restored only when the editor is empty; newer text is never replaced. The uncertain turn remains visible until a successful refresh replaces it with server history. Always refresh before retrying an uncertain send, since it may already have reached the server.

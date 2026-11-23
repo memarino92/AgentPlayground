@@ -8,7 +8,7 @@ public static class ConversationStream
         => ReadAsync<T, JsonElement>(Stream, OnDelta, null, Token);
 
     public static async Task<T> ReadAsync<T, TActivity>(Stream Stream, Func<string, Task> OnDelta,
-        Func<TActivity, Task>? OnActivity, CancellationToken Token) where T : class
+        Func<TActivity, Task>? OnActivity, CancellationToken Token, Func<Task>? OnStarted = null) where T : class
     {
         using var reader = new StreamReader(Stream, leaveOpen: true);
         while (await reader.ReadLineAsync(Token) is { } line)
@@ -16,6 +16,7 @@ public static class ConversationStream
             if (string.IsNullOrWhiteSpace(line)) continue;
             var item = JsonSerializer.Deserialize<Event<T, TActivity>>(line, JsonSerializerOptions.Web)
                 ?? throw new InvalidDataException("The chat stream returned an invalid event.");
+            if (item.Type == "started" && OnStarted is not null) await OnStarted();
             if (item.Type == "activity" && item.Activity is { } activity && OnActivity is not null) await OnActivity(activity);
             if (item.Type == "delta" && item.Delta is not null) await OnDelta(item.Delta);
             if (item.Type == "error") throw new InvalidOperationException(item.Error ?? "The chat stream failed.");

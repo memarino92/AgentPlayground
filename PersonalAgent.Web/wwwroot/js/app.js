@@ -57,9 +57,8 @@ window.focusSettingsInput = function() {
 };
 
 document.addEventListener("keydown", function(event) {
-  if (event.key !== "Enter" || event.shiftKey || !event.target.matches("textarea[data-send-on-enter='true']")) return;
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing || !event.target.matches("textarea[data-send-on-enter='true']")) return;
   event.preventDefault();
-  event.target.value = "";
 }, true);
 
 document.addEventListener("click", function(event) {

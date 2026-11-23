@@ -27,7 +27,7 @@ internal sealed class ChatTurnTracker : IDisposable
         {
             try
             {
-                return await client.SendConversationMessageStreamingAsync(sessionId, profileId, message, turn.AppendAsync, turn.Cancellation.Token, turn.UpdateActivityAsync, turn.Id, existingRun.HasValue);
+                return await client.SendConversationMessageStreamingAsync(sessionId, profileId, message, turn.AppendAsync, turn.Cancellation.Token, turn.UpdateActivityAsync, turn.Id, existingRun.HasValue, turn.MarkStartedAsync);
             }
             finally
             {
@@ -44,6 +44,13 @@ internal sealed class ChatTurn(Guid id, string message)
     public Guid Id { get; } = id;
     public string Message { get; } = message;
     public string Reply => reply.ToString();
+    public bool Started { get; private set; }
+
+    public Task MarkStartedAsync()
+    {
+        Started = true;
+        return Changed?.Invoke() ?? Task.CompletedTask;
+    }
     public CancellationTokenSource Cancellation { get; } = new();
     public Task<HistoryResponse> Completion { get; set; } = null!;
     public event Func<Task>? Changed;
