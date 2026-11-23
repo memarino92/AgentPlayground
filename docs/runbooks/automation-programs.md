@@ -83,6 +83,8 @@ Run/step leases are unique. Stored results survive redelivery; an uncertain clai
 
 The dashboard exposes versions/source, scheduled/past runs, source/image hashes, sandbox ID/state/deadline, bounded diagnostics and operation decisions. OTEL spans include `automation.csharp`, `automation.sandbox.create`, `automation.sandbox.cleanup` and `automation.operation`; existing step metrics report outcome/duration. Sentry/log events 4304–4306 cover program/infrastructure/cleanup failures with operation IDs and exception details. Traces exclude source, input/output and tool payloads. Sentry errors can include application details from logged exceptions; credential patterns are masked. Private diagnostics remain in the scoped dashboard. Revise source and run/resume to retry; old revisions remain inspectable.
 
+For a Railway bridge failure, read the Worker runtime log around the run and search for its UUID or `Railway bridge failed`. Event 4307 reports the run ID, step, failed stage, and a fixed reason, with an HTTP status, WebSocket close code, or process exit code when available. An `upload-input: connection-reset` event points to attachment transfer. A `pause-scratchpad: container-not-found` event points to artifact export after execution. Unrecognized failures use `unexpected-error`. Raw SDK messages, response bodies, commands, filenames, and program output are excluded from this event. Program output and errors remain available in the scoped run dashboard.
+
 ## Verification and rollback
 
 ```powershell

@@ -4,12 +4,13 @@ import { readFile } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { pathToFileURL } from 'node:url';
 import { codingDispatch } from './coding.mjs';
+import { BridgeError, checkCommand, failureDetails } from './bridge-diagnostics.mjs';
 
 const imagePattern = /^sha256:[a-f0-9]{64}$/;
 const packagePattern = /^([A-Za-z0-9_.-]{1,100})@([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?)$/;
 
 // Run after the candidate exits. The host chooses both archive paths. Never follow candidate links.
-async function collectArtifacts(sandbox, destination, checkpointImage) {
+async function collectArtifacts(sandbox, destination, checkpointImage, run) {
   const command = `set -eu
 mkdir -p /job
 ulimit -f 147456
@@ -21,69 +22,91 @@ special=$(find . ! -type d ! -type f -print -quit)
 [ -z "$special" ] || exit 2
 exec tar --format=posix --hard-dereference -cf - .' > /job/export.tar
 wc -c < /job/export.tar`;
-  const packed = await sandbox.exec(command, { timeoutSec: 40 });
-  const size = Number(packed.stdout.trim());
-  const limit = 72 * 1024 * 1024;
-  if (packed.exitCode !== 0 || packed.timedOut || !Number.isSafeInteger(size) || size < 0 || size > limit)
-    throw new Error('Artifact export failed');
+  const size = await run('pack-artifacts', async () => {
+    const packed = await sandbox.exec(command, { timeoutSec: 40 });
+    checkCommand(packed);
+    const size = Number(packed.stdout.trim());
+    if (!Number.isSafeInteger(size) || size < 0 || size > 72 * 1024 * 1024)
+      throw new BridgeError('invalid-artifact-length');
+    return size;
+  });
   if (size === 0) return false;
-  const stream = await sandbox.files.read('/job/export.tar', { format: 'stream' });
+  const stream = await run('download-artifacts', () => sandbox.files.read('/job/export.tar', { format: 'stream' }));
   let received = 0;
-  await pipeline(stream, async function* (chunks) {
+  await run('store-artifacts', () => pipeline(stream, async function* (chunks) {
     for await (const chunk of chunks) {
       received += chunk.length;
-      if (received > size) throw new Error('Invalid artifact length');
+      if (received > size) throw new BridgeError('invalid-artifact-length');
       yield chunk;
     }
-    if (received !== size) throw new Error('Incomplete artifact');
-  }, createWriteStream(destination, { flags: 'wx', mode: 0o600 }));
+    if (received !== size) throw new BridgeError('incomplete-artifact');
+  }, createWriteStream(destination, { flags: 'wx', mode: 0o600 })));
   return true;
 }
 
-async function stageInputs(vm, files = []) {
+async function stageInputs(vm, run, files = []) {
   for (const { name, path } of files) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$/.test(name)) throw new Error('Invalid input filename');
-    await vm.files.write('/job/incoming', await readFile(path));
+    const contents = await run('read-input', () => readFile(path));
+    await run('upload-input', () => vm.files.write('/job/incoming', contents));
     // Publish a complete file atomically. Only the VM controller can write this directory.
-    const result = await vm.exec(`mkdir -p /sandbox-inputs && chmod 0755 /sandbox-inputs && chmod 0444 /job/incoming && mv -f /job/incoming /sandbox-inputs/${name}`, { timeoutSec: 15 });
-    if (result.exitCode !== 0) throw new Error('Input transfer failed');
+    await run('publish-input', async () => {
+      checkCommand(await vm.exec(`mkdir -p /sandbox-inputs && chmod 0755 /sandbox-inputs && chmod 0444 /job/incoming && mv -f /job/incoming /sandbox-inputs/${name}`, { timeoutSec: 15 }));
+    });
   }
 }
 
 // The bridge is trusted controller code. Agent text is only ever written as file content.
-export async function dispatch(request, api = Sandbox) {
-  if (request.operation?.startsWith('coding-')) return codingDispatch(request, api);
+export async function dispatch(request, api = Sandbox, report = () => {}) {
+  const run = async (stage, action) => {
+    try { return await action(); }
+    catch (error) {
+      report({ stage, ...failureDetails(error) });
+      throw error;
+    }
+  };
+
+  if (request.operation?.startsWith('coding-')) return run('coding', () => codingDispatch(request, api));
   const options = { token: request.token, environmentId: request.environmentId, authType: 'bearer', verbose: false };
   if (request.operation === 'scratch-open') {
     if (!imagePattern.test(request.imageId)) throw new Error('Invalid checkpoint image');
     if (request.previousId) {
-      try {
-        const prior = await api.connect(request.previousId, options);
-        if (prior.status === 'RUNNING' && prior.networkIsolation === 'ISOLATED')
-          return { id: prior.id, fresh: false };
-      } catch (error) { if (!(error instanceof SandboxNotFoundError)) throw error; }
+      const prior = await run('connect-scratchpad', async () => {
+        try { return await api.connect(request.previousId, options); }
+        catch (error) { if (!(error instanceof SandboxNotFoundError)) throw error; }
+      });
+      if (prior?.status === 'RUNNING' && prior.networkIsolation === 'ISOLATED')
+        return { id: prior.id, fresh: false };
     }
-    const vm = await api.create(request.checkpoint, { ...options, networkIsolation: 'ISOLATED', idleTimeoutMinutes: 10 });
+    const vm = await run('create-sandbox', () => api.create(request.checkpoint, { ...options, networkIsolation: 'ISOLATED', idleTimeoutMinutes: 10 }));
     try {
-      if (vm.networkIsolation !== 'ISOLATED') throw new Error('Unexpected scratch network');
-      const startup = await vm.exec(`docker volume create automation-artifacts >/dev/null && docker run --rm --network=none --cap-drop=ALL --cap-add=CHOWN --user=0 --mount type=volume,src=automation-artifacts,dst=/artifacts --entrypoint /bin/chown ${request.imageId} 65532:65532 /artifacts && docker run -d --name scratch -v /sandbox-inputs:/inputs:ro --pull=never --read-only --user=65532:65532 --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --memory-swap=512m --cpus=1 --pids-limit=128 --log-driver=none --tmpfs /tmp:rw,nosuid,size=64m,mode=1777 --tmpfs /work:rw,nosuid,size=256m,mode=1777 --mount type=volume,src=automation-artifacts,dst=/artifacts --entrypoint python3 ${request.imageId} /template/scratchpad.py serve`, { timeoutSec: 20 });
-      if (startup.exitCode !== 0) throw new Error('Python checkpoint unavailable');
+      await run('start-scratchpad', async () => {
+        if (vm.networkIsolation !== 'ISOLATED') throw new BridgeError('invalid-sandbox-network');
+        checkCommand(await vm.exec(`docker volume create automation-artifacts >/dev/null && docker run --rm --network=none --cap-drop=ALL --cap-add=CHOWN --user=0 --mount type=volume,src=automation-artifacts,dst=/artifacts --entrypoint /bin/chown ${request.imageId} 65532:65532 /artifacts && docker run -d --name scratch -v /sandbox-inputs:/inputs:ro --pull=never --read-only --user=65532:65532 --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --memory-swap=512m --cpus=1 --pids-limit=128 --log-driver=none --tmpfs /tmp:rw,nosuid,size=64m,mode=1777 --tmpfs /work:rw,nosuid,size=256m,mode=1777 --mount type=volume,src=automation-artifacts,dst=/artifacts --entrypoint python3 ${request.imageId} /template/scratchpad.py serve`, { timeoutSec: 20 }));
+      });
       return { id: vm.id, fresh: true };
-    } catch (error) { await vm.destroy(); throw error; }
+    } catch (error) {
+      // Report cleanup separately and keep the original startup failure.
+      try { await run('destroy-sandbox', () => vm.destroy()); } catch {}
+      throw error;
+    }
   }
   if (request.operation === 'scratch-cell') {
     if (!imagePattern.test(request.imageId)) throw new Error('Invalid image');
-    const vm = await api.connect(request.id, options);
-    if (vm.networkIsolation !== 'ISOLATED') throw new Error('Unexpected scratch network');
-    await stageInputs(vm, request.inputFiles);
+    const vm = await run('connect-scratchpad', async () => {
+      const vm = await api.connect(request.id, options);
+      if (vm.networkIsolation !== 'ISOLATED') throw new BridgeError('invalid-sandbox-network');
+      return vm;
+    });
+    await stageInputs(vm, run, request.inputFiles);
     let bytes = 0;
     const count = chunk => {
       bytes += Buffer.byteLength(chunk);
-      if (bytes > 32768) throw new Error('Cell output limit exceeded');
+      if (bytes > 32768) throw new BridgeError('output-limit');
       if (request.progressPath) appendFileSync(request.progressPath, chunk, { mode: 0o600 });
     };
-    const result = await vm.exec('printf %s "$SCRATCH_SOURCE" | base64 -d | docker exec -i -e SCRATCH_SKIP_EMPTY=1 scratch python3 /template/scratchpad.py submit',
-      { env: { SCRATCH_SOURCE: Buffer.from(request.source).toString('base64') }, timeoutSec: 30, onStdout: count, onStderr: count });
+    const result = await run('execute-cell', () => vm.exec('printf %s "$SCRATCH_SOURCE" | base64 -d | docker exec -i -e SCRATCH_SKIP_EMPTY=1 scratch python3 /template/scratchpad.py submit',
+      { env: { SCRATCH_SOURCE: Buffer.from(request.source).toString('base64') }, timeoutSec: 30, onStdout: count, onStderr: count }));
     if (!result.timedOut && !result.truncated && result.exitCode === 3)
       return { ...result, exitCode: 0, status: 'Completed', hasArtifacts: false };
     if (!result.timedOut && !result.truncated && result.exitCode === 42)
@@ -93,33 +116,36 @@ export async function dispatch(request, api = Sandbox) {
     let hasArtifacts = false;
     if (request.artifactDestination) {
       // Freeze all candidate processes while the trusted exporter walks the volume.
-      if ((await vm.exec('docker pause scratch', { timeoutSec: 5 })).exitCode !== 0) throw new Error('Freeze failed');
-      try { hasArtifacts = await collectArtifacts(vm, request.artifactDestination, request.imageId); }
+      await run('pause-scratchpad', async () => checkCommand(await vm.exec('docker pause scratch', { timeoutSec: 5 })));
+      try { hasArtifacts = await collectArtifacts(vm, request.artifactDestination, request.imageId, run); }
       finally {
-        if ((await vm.exec('docker unpause scratch', { timeoutSec: 5 })).exitCode !== 0) throw new Error('Resume failed');
+        await run('resume-scratchpad', async () => checkCommand(await vm.exec('docker unpause scratch', { timeoutSec: 5 })));
       }
     }
     return { ...result, status: 'Completed', hasArtifacts };
   }
   if (request.operation === 'create') {
-    const sandbox = await api.create(request.checkpoint, {
+    const sandbox = await run('create-sandbox', () => api.create(request.checkpoint, {
       ...options, environmentId: request.environmentId, networkIsolation: 'ISOLATED', idleTimeoutMinutes: request.customImage ? 17 : 5,
-    });
+    }));
     return { id: sandbox.id };
   }
   if (request.operation === 'destroy') {
-    try {
-      const sandbox = await api.connect(request.id, options);
-      if (sandbox.status !== 'DESTROYED') await sandbox.destroy();
-    } catch (error) {
-      if (!(error instanceof SandboxNotFoundError)) throw error;
-    }
+    await run('destroy-sandbox', async () => {
+      try {
+        const sandbox = await api.connect(request.id, options);
+        if (sandbox.status !== 'DESTROYED') await sandbox.destroy();
+      } catch (error) { if (!(error instanceof SandboxNotFoundError)) throw error; }
+    });
     return { destroyed: true };
   }
   if (request.operation !== 'execute' || !imagePattern.test(request.imageId)) throw new Error('Invalid operation');
-  const sandbox = await api.connect(request.id, options);
-  if (sandbox.networkIsolation !== 'ISOLATED') throw new Error('Unexpected sandbox network');
-  await stageInputs(sandbox, request.inputFiles);
+  const sandbox = await run('connect-sandbox', async () => {
+    const sandbox = await api.connect(request.id, options);
+    if (sandbox.networkIsolation !== 'ISOLATED') throw new BridgeError('invalid-sandbox-network');
+    return sandbox;
+  });
+  await stageInputs(sandbox, run, request.inputFiles);
   const language = request.language ?? 'csharp';
   if (!['shell', 'csharp', 'dockerfile', 'python'].includes(language)) throw new Error('Unsupported program language');
   if (language !== 'csharp' && (request.packages?.length || request.packageLock)) throw new Error('Unexpected shell dependencies');
@@ -149,23 +175,32 @@ exec dotnet /work/out/Program.dll < /work/input.txt
     'NuGet.Config': '<configuration><packageSources><clear /><add key="nuget.org" value="https://api.nuget.org/v3/index.json" /></packageSources></configuration>',
   };
   if (references) files['packages.lock.json'] = request.packageLock;
-  for (const [name, value] of Object.entries(files)) await sandbox.files.write(`/job/${name}`, value);
+  for (const [name, value] of Object.entries(files))
+    await run('upload-program', () => sandbox.files.write(`/job/${name}`, value));
   // Only this short-lived capability enters the VM. Railway/database/Jev credentials never do.
   if (!/^https:\/\/[^\r\n]+$/.test(request.gatewayUrl) || !/^[a-f0-9]{64}$/.test(request.gatewayToken)) throw new Error('Invalid gateway');
-  await sandbox.files.write('/job/runtime.env', `AUTOMATION_GATEWAY_URL=${request.gatewayUrl}\nAUTOMATION_GATEWAY_TOKEN=${request.gatewayToken}\n`);
-  const host = await sandbox.exec('docker info --format "{{json .}}"', { timeoutSec: 15 });
-  const info = JSON.parse(host.stdout);
-  if (host.exitCode !== 0 || info.OSType !== 'linux' || !['MemoryLimit', 'SwapLimit', 'CpuCfsQuota', 'PidsLimit'].every(k => info[k])
-    || !info.SecurityOptions?.some(v => /^name=seccomp,profile=(builtin|default)$/.test(v))) throw new Error('Resource limits unavailable');
+  await run('upload-gateway-settings', () => sandbox.files.write('/job/runtime.env', `AUTOMATION_GATEWAY_URL=${request.gatewayUrl}\nAUTOMATION_GATEWAY_TOKEN=${request.gatewayToken}\n`));
+  await run('check-docker', async () => {
+    const host = await sandbox.exec('docker info --format "{{json .}}"', { timeoutSec: 15 });
+    checkCommand(host);
+    const info = JSON.parse(host.stdout);
+    if (info.OSType !== 'linux' || !['MemoryLimit', 'SwapLimit', 'CpuCfsQuota', 'PidsLimit'].every(k => info[k])
+      || !info.SecurityOptions?.some(v => /^name=seccomp,profile=(builtin|default)$/.test(v)))
+      throw new BridgeError('resource-limits-unavailable');
+  });
   let imageId = request.imageId;
   if (customImage) {
     // Dockerfile on stdin creates an empty build context. No job inputs or gateway credentials enter the build.
-    const build = await sandbox.exec('timeout -s KILL 480 docker build --iidfile /job/image.id - < /job/Dockerfile > /job/build.log 2>&1 || { status=$?; tail -c 16000 /job/build.log >&2; exit "$status"; }', { timeoutSec: 485 });
+    const build = await run('build-image', () => sandbox.exec('timeout -s KILL 480 docker build --iidfile /job/image.id - < /job/Dockerfile > /job/build.log 2>&1 || { status=$?; tail -c 16000 /job/build.log >&2; exit "$status"; }', { timeoutSec: 485 }));
     if (build.exitCode !== 0 || build.timedOut)
       return { status: build.timedOut || [124, 137].includes(build.exitCode) ? 'TimedOut' : 'BuildFailed', exitCode: build.exitCode, stdout: '', stderr: (build.stderr ?? '').slice(-16000) };
-    const identity = await sandbox.exec('cat /job/image.id', { timeoutSec: 10 });
-    imageId = identity.stdout.trim();
-    if (identity.exitCode !== 0 || !imagePattern.test(imageId)) throw new Error('Invalid built image identity');
+    imageId = await run('read-image-id', async () => {
+      const identity = await sandbox.exec('cat /job/image.id', { timeoutSec: 10 });
+      checkCommand(identity);
+      const id = identity.stdout.trim();
+      if (!imagePattern.test(id)) throw new BridgeError('invalid-image-id');
+      return id;
+    });
   }
   // Docker copies image-baked /artifacts into the fresh volume when it creates the seed container.
   // The seed is never started. The named volume survives both containers for offline collection.
@@ -175,22 +210,30 @@ exec dotnet /work/out/Program.dll < /work/input.txt
     ? `timeout -s KILL 300 ${runner} ${imageId} < /job/input.txt`
     : `tar -C /job -cf - ${Object.keys(files).join(' ')} | ${runner} --entrypoint timeout ${imageId} --signal=KILL 95 /bin/sh -c 'cd /work && tar --no-same-owner -xf - && /bin/sh /work/run.sh'`;
   let bytes = 0;
-  const count = chunk => { if ((bytes += Buffer.byteLength(chunk)) > 32768) throw new Error('OutputLimitExceeded'); };
+  const count = chunk => { if ((bytes += Buffer.byteLength(chunk)) > 32768) throw new BridgeError('output-limit'); };
   try {
-    const result = await sandbox.exec(prepare + ' && ' + command, { timeoutSec: customImage ? 305 : 100, onStdout: count, onStderr: count });
+    const result = await run('execute-program', () => sandbox.exec(prepare + ' && ' + command, { timeoutSec: customImage ? 305 : 100, onStdout: count, onStderr: count }));
     let hasArtifacts = false;
     if (request.artifactDestination && !result.truncated && !result.timedOut && result.exitCode === 0) {
-      try { hasArtifacts = await collectArtifacts(sandbox, request.artifactDestination, request.imageId); }
+      try { hasArtifacts = await collectArtifacts(sandbox, request.artifactDestination, request.imageId, run); }
       catch { return { imageId, status: 'ArtifactExportFailed', exitCode: 0, stdout: result.stdout, stderr: 'Could not export /artifacts. Use regular files within the artifact budget.' }; }
     }
     return { ...result, imageId, hasArtifacts, status: result.truncated ? 'OutputLimitExceeded' : (result.timedOut || (customImage && [124, 137].includes(result.exitCode))) ? 'TimedOut' : result.exitCode === 0 ? 'Completed' : language === 'csharp' && result.exitCode === 200 ? 'BuildFailed' : 'ExecutionFailed' };
   } catch (error) {
-    if (error.message === 'OutputLimitExceeded') return { imageId, status: 'OutputLimitExceeded', stdout: '', stderr: '', exitCode: null };
+    if (error instanceof BridgeError && error.reason === 'output-limit') return { imageId, status: 'OutputLimitExceeded', stdout: '', stderr: '', exitCode: null };
     throw error;
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  let stage = 'decode-request';
+  let reported = false;
+  function report(diagnostic) {
+    const { stage, reason, code } = diagnostic;
+    const safeCode = Number.isInteger(code) && code >= -1 && code <= 4999 ? code : null;
+    process.stderr.write('railway-bridge-diagnostic:' + JSON.stringify({ stage, reason, code: safeCode }) + '\n');
+    reported = true;
+  }
   try {
     let input = '';
     for await (const chunk of process.stdin) {
@@ -199,11 +242,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     const request = JSON.parse(input);
     if (input.length > 300_000 && request?.operation !== 'coding-execute') throw new Error('Input limit');
-    const result = await dispatch(request);
+    stage = 'dispatch';
+    const result = await dispatch(request, Sandbox, report);
     process.stdout.write(JSON.stringify(result));
-  } catch {
-    // SDK errors may include request content. Never forward them to process logs or diagnostics.
-    process.stderr.write('Railway sandbox operation failed.');
+  } catch (error) {
+    if (!reported) report({ stage, ...failureDetails(error) });
     process.exitCode = 1;
   }
 }

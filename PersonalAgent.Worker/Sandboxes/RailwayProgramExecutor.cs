@@ -13,14 +13,16 @@ public interface IProgramExecutor
     Task<ProgramResult> ExecuteAsync(ExecuteAutomationProgram Message, CancellationToken Token);
 }
 
+public readonly record struct SandboxRunContext(Guid RunId, int StepIndex);
+
 public interface IRailwaySandboxClient
 {
-    Task<JsonElement> CallAsync(object Request, CancellationToken Token);
+    Task<JsonElement> CallAsync(object Request, CancellationToken Token, SandboxRunContext? Context = null);
 }
 
-public sealed class RailwaySandboxClient : IRailwaySandboxClient
+public sealed class RailwaySandboxClient(ILogger<RailwaySandboxClient> Logger) : IRailwaySandboxClient
 {
-    public async Task<JsonElement> CallAsync(object Request, CancellationToken Token)
+    public async Task<JsonElement> CallAsync(object Request, CancellationToken Token, SandboxRunContext? Context = null)
     {
         using var Process = new Process { StartInfo = new("node") { UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true } };
@@ -47,6 +49,14 @@ public sealed class RailwaySandboxClient : IRailwaySandboxClient
             Process.StandardInput.Close();
             await Process.WaitForExitAsync(Token);
             await Task.WhenAll(Output, Error);
+            using var Diagnostics = new StringReader(await Error);
+            while (Diagnostics.ReadLine() is { } Line)
+            {
+                if (RailwayBridgeDiagnostic.Parse(Line) is not { } Diagnostic) continue;
+                Logger.LogError(new EventId(4307, "RailwayBridgeFailure"),
+                    "Railway bridge failed for run {RunId}/{StepIndex} at {Stage}: {Reason} (code {Code})",
+                    Context?.RunId, Context?.StepIndex, Diagnostic.Stage, Diagnostic.Reason, Diagnostic.Code);
+            }
             if (Process.ExitCode != 0) throw new InvalidOperationException("Railway sandbox operation failed.");
             return JsonSerializer.Deserialize<JsonElement>(await Output);
         }
@@ -82,6 +92,7 @@ public sealed class RailwayProgramExecutor(AutomationRuntimeStore Runtime, Autom
         }
         var Scope = Message.Language == "python" && Scratchpads is not null ? await Scratchpads.ScopeAsync(Message.RunId, Token) : null;
         await using var Guard = Scope is null ? null : await Scratchpads!.LockAsync(Scope, Token);
+        var Context = new SandboxRunContext(Message.RunId, Message.StepIndex);
         string? Id = null;
         ProgramResult Result;
         SandboxArtifactBundle? Bundle = null;
@@ -110,7 +121,7 @@ public sealed class RailwayProgramExecutor(AutomationRuntimeStore Runtime, Autom
             {
                 var Previous = Scope is null ? null : await Scratchpads!.BeginAsync(Message.RunId, Scope, Snapshot.Revision, Deadline.Token);
                 var Created = await Client.CallAsync(new { operation = Scope is null ? "create" : "scratch-open", previousId = Previous,
-                    customImage = CustomImage, token = Snapshot.Token, checkpoint = Settings.Checkpoint, imageId = Settings.ImageId, environmentId = Settings.EnvironmentId }, Deadline.Token);
+                    customImage = CustomImage, token = Snapshot.Token, checkpoint = Settings.Checkpoint, imageId = Settings.ImageId, environmentId = Settings.EnvironmentId }, Deadline.Token, Context);
                 Id = Created.GetProperty("id").GetString() ?? throw new InvalidOperationException("Missing sandbox identity.");
                 // No untrusted code starts before this durable identity exists for the cleanup worker.
                 await Leases.AttachAsync(Message.RunId, Message.StepIndex, Id, Deadline.Token);
@@ -118,7 +129,7 @@ public sealed class RailwayProgramExecutor(AutomationRuntimeStore Runtime, Autom
             var Execution = Client.CallAsync(new { operation = Scope is null ? "execute" : "scratch-cell", progressPath = TransferPath + ".progress", token = Snapshot.Token, environmentId = Settings.EnvironmentId, id = Id, imageId = Settings.ImageId,
                 inputFiles = Staged, artifactDestination = TransferPath, language = Message.Language, source = Message.Source, input = Message.Input, packages = Message.Packages, packageLock = Message.PackageLock,
                 gatewayUrl = Settings.GatewayUrl.TrimEnd('/') + $"/automation-runtime/{Message.RunId}/{Message.StepIndex}/tools",
-                gatewayToken = Capability }, Deadline.Token);
+                gatewayToken = Capability }, Deadline.Token, Context);
             if (Scope is not null)
             {
                 var Last = "";
@@ -177,7 +188,7 @@ public sealed class RailwayProgramExecutor(AutomationRuntimeStore Runtime, Autom
         {
             try
             {
-                await Client.CallAsync(new { operation = "destroy", token = Snapshot.Token, environmentId = Settings.EnvironmentId, id = Id }, Finish.Token);
+                await Client.CallAsync(new { operation = "destroy", token = Snapshot.Token, environmentId = Settings.EnvironmentId, id = Id }, Finish.Token, Context);
                 await Leases.DestroyedAsync(Message.RunId, Message.StepIndex, Finish.Token);
             }
             catch (Exception Exception) { Logger.LogError(new EventId(4306), Exception, "Sandbox cleanup pending for {RunId}/{StepIndex}", Message.RunId, Message.StepIndex); }
@@ -204,7 +215,7 @@ internal sealed class SandboxReconciler(AutomationRuntimeStore Runtime, Automati
                     using var Span = AutomationTelemetry.Start("automation.sandbox.cleanup", Lease.RunId, Lease.Step);
                     try
                     {
-                        if (Lease.SandboxId is not null) await Client.CallAsync(new { operation = "destroy", token = Lease.Credential, environmentId = Lease.EnvironmentId, id = Lease.SandboxId }, Deadline.Token);
+                        if (Lease.SandboxId is not null) await Client.CallAsync(new { operation = "destroy", token = Lease.Credential, environmentId = Lease.EnvironmentId, id = Lease.SandboxId }, Deadline.Token, new(Lease.RunId, Lease.Step));
                         await Leases.DestroyedAsync(Lease.RunId, Lease.Step, Deadline.Token);
                         Logger.LogInformation("Sandbox lease cleaned for {RunId}/{StepIndex}", Lease.RunId, Lease.Step);
                     }
