@@ -66,7 +66,7 @@ internal sealed partial class GitHubCodingPublisher(HttpClient Http, CodingJobSt
         // Stable metadata produces a stable commit SHA on publication retries.
         var NewCommit = await SendAsync(HttpMethod.Post, $"{Root}/git/commits", Credential, new
         {
-            message = Job.RootJobId is null ? $"feat: implement platform improvement {Job.Id:N}" : $"fix: revise platform improvement ({Job.Id:N})",
+            message = CodingCommitSubject.Create(Job),
             tree = Tree.GetProperty("sha").GetString(), parents = new[] { Job.BaseSha },
             author = new { name = "Platform improvements", email = "platform-improvements@users.noreply.github.com", date = Job.CreatedAt },
             committer = new { name = "Platform improvements", email = "platform-improvements@users.noreply.github.com", date = Job.CreatedAt }
