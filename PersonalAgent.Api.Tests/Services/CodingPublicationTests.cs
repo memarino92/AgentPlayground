@@ -80,6 +80,7 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
         Handler.RevisionUpdates.Should().Be(1);
         Handler.PrCreates.Should().Be(0);
         Handler.BranchCreates.Should().Be(0);
+        Handler.CommitSubjects.Should().OnlyContain(Subject => Subject == "fix: Fixes the test");
         Handler.Head = new string('f', 40);
         await FluentActions.Awaiting(() => Publisher.PublishAsync(Revision, default)).Should().ThrowAsync<CodingRevisionConflict>();
         Handler.RevisionUpdates.Should().Be(1);
@@ -115,6 +116,7 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
         (await Publisher.PublishAsync(Job, default)).Should().Be("https://github.com/owner/repo/pull/1");
         Handler.PrCreates.Should().Be(1);
         Handler.BranchCreates.Should().Be(1);
+        Handler.CommitSubjects.Should().Equal("feat: Adds the feature");
         Handler.Paths.Should().NotContain(P => P.Contains("/merge", StringComparison.Ordinal) || P.Contains("/deploy", StringComparison.Ordinal));
         Handler.LastBody!.Should().Contain(Job.Id.ToString());
         Handler.Protected = false;
@@ -153,6 +155,7 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
     private sealed class GitHubHandler : HttpMessageHandler
     {
         public List<string> Paths = [];
+        public List<string> CommitSubjects = [];
         public int PrCreates, BranchCreates;
         public string? LastBody;
         public bool Protected = true;
@@ -204,7 +207,12 @@ public sealed class CodingPublicationTests(PostgresVectorFixture Database) : ICl
             if (Path.EndsWith("/git/ref/heads/main", StringComparison.Ordinal)) return Ok(new { @object = new { sha = new string('b', 40) } });
             if (Path.Contains("/git/commits/", StringComparison.Ordinal)) return Ok(new { tree = new { sha = new string('c', 40) } });
             if (Path.EndsWith("/git/trees", StringComparison.Ordinal)) return Ok(new { sha = new string('d', 40) });
-            if (Path.EndsWith("/git/commits", StringComparison.Ordinal)) return Ok(new { sha = new string('e', 40) });
+            if (Path.EndsWith("/git/commits", StringComparison.Ordinal))
+            {
+                var Body = await Request.Content!.ReadFromJsonAsync<JsonElement>(Token);
+                CommitSubjects.Add(Body.GetProperty("message").GetString()!);
+                return Ok(new { sha = new string('e', 40) });
+            }
             if (Path.EndsWith("/git/refs", StringComparison.Ordinal)) { BranchCreates++; return Ok(new { }); }
             if (Path.EndsWith("/pulls", StringComparison.Ordinal) && Request.Method == HttpMethod.Get)
                 return Ok(PrCreates == 0 ? Array.Empty<object>() : [new { body = LastBody, @base = new { @ref = "main" }, html_url = "https://github.com/owner/repo/pull/1" }]);

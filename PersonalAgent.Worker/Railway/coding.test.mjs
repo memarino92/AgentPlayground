@@ -12,6 +12,10 @@ test('coding preparation loads the repository Dockerfile and immutable workload 
   assert.ok(files.has('PersonalAgent.Worker/Railway/coding-supervision.mjs'));
   assert.ok(files.has('PersonalAgent.Worker/Railway/coding-rebase.mjs'));
   assert.ok(files.get('PersonalAgent.Worker/Railway/workload.mjs').includes("phase === 'export'"));
+  const workload = files.get('PersonalAgent.Worker/Railway/workload.mjs');
+  assert.match(workload, /trusted platform publisher, not this sandbox/);
+  assert.match(workload, /Start your final response with a concise Conventional Commit subject/);
+  assert.match(workload, /Do not use task IDs/);
 });
 
 const request = { operation: 'coding-execute', imageId: 'sha256:' + 'a'.repeat(64), repository: 'owner/repo',

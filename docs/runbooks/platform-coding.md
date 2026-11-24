@@ -65,6 +65,8 @@ For OpenRouter jobs, only `openai/gpt-5.4-mini` via OpenRouter's OpenAI provider
 
 Artifacts are limited to 50 UTF-8 text files and 1 MB, matching the pinned base. Symlinks, binary files, traversal, `.git*` paths (including `.github` and `.gitignore`), keys and generated output directories are rejected. Workflow changes therefore need a separate maintainer-controlled path. The publisher never executes candidate code. Test evidence describes the selected gate; candidate tests and source remain subject to maintainer review.
 
+The sandbox implements and tests locally; requests to open a PR are fulfilled by the trusted publisher after validation, not by giving the sandbox GitHub credentials. The coding prompt asks for a concise Conventional Commit subject on the first line of the final implementation summary. Publication uses that bounded description (preserving a supported Conventional Commit prefix), otherwise a usable first line of the request, then a changed-file description. Generic platform-improvement/task-ID subjects are rejected. Subject selection is deterministic for retry reconciliation and is sent as JSON metadata, never as a shell command. Rebases preserve original commit messages. Publisher changes apply to new publications; rebuild the coding checkpoint to pick up the clarified prompt.
+
 ## Recovery and rollback
 
 A new coding job can use up to three fresh sandboxes. Each attempt uses the existing per-sandbox runtime setting. The overall deadline includes five minutes of queue and cleanup allowance per attempt. The model request limit applies to the whole job. The dashboard shows the attempt number and the last saved artifact. Deploy the updated API, Web and Worker and prepare a new coding checkpoint from the matching image.

@@ -93,7 +93,8 @@ try {
     const prompt = [
       'Implement the request in this repository. Read AGENTS.md and applicable documentation. Make a focused change and appropriate tests.',
       'The checkout starts without restored NuGet assets. Run dotnet test or dotnet build with their normal restore, or explicitly restore the target project before using --no-restore. Build the Android app by targeting PersonalAgent.Mobile/PersonalAgent.Mobile.csproj directly.',
-      'Do not push, open PRs, deploy, change credentials, or modify .github files. Describe the change and validation in your final response.',
+      'Implement and test locally. The trusted platform publisher, not this sandbox, pushes the validated change and opens or updates the draft PR after this run. Even if the request asks for a PR, do not push or open it yourself. Do not deploy, change credentials, or modify .github files.',
+      'Start your final response with a concise Conventional Commit subject describing the actual implemented change (for example, feat: add descriptive coding commit messages). Do not use task IDs or generic platform-improvement descriptions. Then describe the change and validation.',
       r.canAsk ? 'If an owner decision is needed to proceed, call owner_ask. It waits for an answer in the originating chat. Ask one focused question at a time. Never ask for secrets.'
         : 'If blocked, explain in your final response.',
       'Keep a brief work log in ' + progressNote + ' at the repository root. Update it after major milestones with the current plan, work completed, and next step so another sandbox can continue.',
